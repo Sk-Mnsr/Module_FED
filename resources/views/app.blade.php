@@ -58,7 +58,7 @@
             }
         </style>
 
-        <title >FLEXCUBE COLLATERAL MANAGEMENT</title>
+        <title >FED</title>
 
         <link rel="icon" href="/favicon.ico" sizes="any">
         <link rel="icon" href="/favicon.ico">

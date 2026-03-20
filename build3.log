@@ -1,0 +1,30 @@
+
+> build
+> vite build
+
+vite v7.1.12 building for production...
+[plugin @laravel/vite-plugin-wayfinder] Types generated for actions, routes, form variants
+transforming...
+✓ 3214 modules transformed.
+✗ Build failed in 8.20s
+error during build:
+resources/js/components/TwoFactorSetupModal.vue?vue&type=script&setup=true&lang.ts (48:9): "confirm" is not exported by "resources/js/routes/two-factor/index.ts", imported by "resources/js/components/TwoFactorSetupModal.vue?vue&type=script&setup=true&lang.ts".
+file: /home/mansour-seck/Module_FED/resources/js/components/TwoFactorSetupModal.vue?vue&type=script&setup=true&lang.ts:48:9
+
+46: } from '@/components/ui/pin-input';
+47: import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
+48: import { confirm } from '@/routes/two-factor';
+             ^
+49: import { Form } from '@inertiajs/vue3';
+50: import { useClipboard } from '@vueuse/core';
+
+    at getRollupError (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+    at error (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+    at Module.error (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:16939:16)
+    at Module.traceVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:17391:29)
+    at ModuleScope.findVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:15061:39)
+    at ChildScope.findVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at FunctionScope.findVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at FunctionBodyScope.findVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at ReturnValueScope.findVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)
+    at FunctionBodyScope.findVariable (file:///home/mansour-seck/Module_FED/node_modules/rollup/dist/es/shared/node-entry.js:5642:38)

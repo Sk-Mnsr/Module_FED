@@ -41,6 +41,25 @@ class ProfileController extends Controller
     }
 
     /**
+     * Update the user's signature.
+     */
+    public function updateSignature(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'signature' => 'required|string',
+        ]);
+
+        $signature = $validated['signature'];
+        if (!str_starts_with($signature, 'data:image/')) {
+            return back()->withErrors(['signature' => 'Format de signature invalide.']);
+        }
+
+        $request->user()->update(['signature' => $signature]);
+
+        return back()->with('status', 'signature-saved');
+    }
+
+    /**
      * Delete the user's profile.
      */
     public function destroy(Request $request): RedirectResponse

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,25 +16,21 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
-
-        // Seed des rôles par défaut
         $this->call([
             RoleSeeder::class,
+            DepartmentSeeder::class,
+            TypologieDepenseSeeder::class,
+            CategorieDepenseSeeder::class,
+            SousCategorieDepenseSeeder::class,
         ]);
 
-        // Seed des types de garanties
-        $this->call([
-            TypeGarantieSeeder::class,
+        $user = User::factory()->create([
+            'name' => 'Mansour SECK',
+            'email' => 'mansour.seck@cofinacorp.com',
+            'fonction' => 'Agent IT',
+            'password' => Hash::make('Cofina@123'),
+            'profile' => 'admin',
         ]);
-
-        // Seed des clients et contrats de prêts (données de test)
-        $this->call([
-            ClientSeeder::class,
-            ContratPretSeeder::class,
-        ]);
+        $user->roles()->attach(\App\Models\Role::where('slug', 'it')->first()->id);
     }
 }

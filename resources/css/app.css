@@ -186,3 +186,14 @@
 
 .border-gray-200 {
 }
+
+/* Masquer la barre latérale et le fil d'Ariane (chemin) lors de l'impression */
+@media print {
+    /* Barre latérale */
+    [data-slot="sidebar-wrapper"] > div:first-child,
+    [data-sidebar="sidebar"],
+    /* En-tête avec fil d'Ariane (Bons de commande > N°) */
+    [data-slot="sidebar-inset"] > header {
+        display: none !important;
+    }
+}

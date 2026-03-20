@@ -57,10 +57,7 @@ class HandleInertiaRequests extends Middleware
                 'profil' => $profil,
                 'roles' => $roles,
                 'isSuperAdmin' => $user ? $user->isSuperAdmin() : false,
-                'isAdmin' => $user ? $user->isAdmin() : false,
-                'isIt' => $user ? $user->isIt() : false, // Alias pour compatibilité
-                'isChargeAffaires' => $user ? $user->isChargeAffaires() : false,
-                'isJuridique' => $user ? $user->isJuridique() : false,
+                
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

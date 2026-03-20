@@ -20,11 +20,13 @@ class User extends AuthenticatableBase
      */
     protected $fillable = [
         'name',
+        'fonction',
         'email',
         'password',
         'profile',
         'activated',
         'password_change_required',
+        'signature',
     ];
 
     /**
@@ -35,6 +37,7 @@ class User extends AuthenticatableBase
     protected $hidden = [
         'password',
         'remember_token',
+        'signature',
     ];
 
     /**
@@ -43,7 +46,7 @@ class User extends AuthenticatableBase
      * @var array
      */
     public $appends = [
-        
+        'has_signature',
     ];
 
     /**
@@ -113,6 +116,14 @@ class User extends AuthenticatableBase
     }
 
     /**
+     * Indique si l'utilisateur a une signature enregistrée.
+     */
+    public function getHasSignatureAttribute(): bool
+    {
+        return !empty($this->attributes['signature'] ?? null);
+    }
+
+    /**
      * Relation avec le profil (via email)
      */
     public function profil()
@@ -153,59 +164,15 @@ class User extends AuthenticatableBase
     }
 
     /**
-     * Vérifie si l'utilisateur est IT (alias pour compatibilité)
-     * @deprecated Utiliser isSuperAdmin() à la place
-     */
-    public function isIt(): bool
-    {
-        return $this->isSuperAdmin();
-    }
-
-    /**
-     * Vérifie si l'utilisateur est Admin (Admin crédit)
-     */
-    public function isAdmin(): bool
-    {
-        return $this->hasRole('admin');
-    }
-
-    /**
-     * Vérifie si l'utilisateur est Chargé d'Affaires
-     */
-    public function isChargeAffaires(): bool
-    {
-        return $this->hasRole('charge-affaires');
-    }
-
-    /**
-     * Vérifie si l'utilisateur est Juridique
-     */
-    public function isJuridique(): bool
-    {
-        return $this->hasRole('juridique');
-    }
-
-    /**
-     * Vérifie si l'utilisateur est métier (ancien rôle, gardé pour compatibilité)
-     */
-    public function isMetier(): bool
-    {
-        return $this->hasRole('metier');
-    }
-
-    /**
-     * Vérifie si l'utilisateur est contrôle (ancien rôle, gardé pour compatibilité)
-     */
-    public function isControle(): bool
-    {
-        return $this->hasRole('controle');
-    }
-
-    /**
      * Récupère tous les rôles de l'utilisateur
      */
     public function getRoles(): \Illuminate\Support\Collection
     {
         return $this->roles;
+    }
+
+    public function feds()
+    {
+        return $this->hasMany(Fed::class, 'requester_id');
     }
 }

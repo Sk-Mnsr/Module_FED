@@ -59,7 +59,7 @@ const getStoredAppearance = () => {
     // Si pas dans localStorage, vérifier le cookie
     if (typeof document !== 'undefined') {
         const cookies = document.cookie.split(';');
-        for (let cookie of cookies) {
+        for (const cookie of cookies) {
             const [name, value] = cookie.trim().split('=');
             if (name === 'appearance' && value) {
                 return value as Appearance;

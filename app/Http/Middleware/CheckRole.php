@@ -21,6 +21,10 @@ class CheckRole
             return redirect()->route('login');
         }
 
+        if ($user->profile === 'admin') {
+            return $next($request);
+        }
+
         // Vérifier si l'utilisateur a au moins un des rôles requis
         if (!$user->hasAnyRole($roles)) {
             abort(403, 'Accès non autorisé. Vous n\'avez pas les permissions nécessaires.');

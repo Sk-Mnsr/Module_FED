@@ -17,6 +17,7 @@ class Profil extends Model
         'nom',
         'fonction',
         'departement',
+        'department_id',
         'email',
         'telephone',
         'site',
@@ -40,6 +41,23 @@ class Profil extends Model
     public function subordonnes()
     {
         return $this->hasMany(Profil::class, 'n_plus_1_id');
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Retourne le N+1 direct ou le manager du département.
+     */
+    public function resolveNPlus1()
+    {
+        if ($this->nPlus1) {
+            return $this->nPlus1;
+        }
+
+        return $this->department?->manager;
     }
 
     // Alias pour compatibilité ascendante

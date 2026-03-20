@@ -17,6 +17,7 @@ interface Role {
 
 interface Props {
     roles: Role[];
+    departments: Array<{ id: number; name: string }>;
 }
 
 const props = defineProps<Props>();
@@ -34,10 +35,12 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const form = useForm({
     name: '',
+    fonction: '',
     email: '',
     password: '',
     password_confirmation: '',
     role_id: null as number | null,
+    department_id: null as number | null,
 });
 
 const submit = () => {
@@ -70,6 +73,19 @@ const submit = () => {
                             placeholder="John"
                         />
                         <InputError :message="form.errors.name" />
+                    </div>
+                    
+                    <div>
+                        <Label for="fonction" class="text-base font-medium text-gray-700">Fonction</Label>
+                        <Input
+                            id="fonction"
+                            v-model="form.fonction"
+                            type="text"
+                            required
+                            class="mt-1.5 border-gray-300 focus-visible:border-gray-400"
+                            placeholder="Responsable"
+                        />
+                        <InputError :message="form.errors.fonction" />
                     </div>
 
                     <div>
@@ -134,6 +150,27 @@ const submit = () => {
                             Aucun rôle disponible. Veuillez contacter un administrateur.
                         </p>
                         <InputError :message="form.errors.role_id" />
+                    </div>
+                </FormSection>
+
+                <FormSection title="Département" :columns="1" :show-code-icon="false">
+                    <div>
+                        <Label for="department_id" class="text-base font-medium text-gray-700">Département</Label>
+                        <select
+                            id="department_id"
+                            v-model="form.department_id"
+                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
+                        >
+                            <option :value="null">Sélectionner un département</option>
+                            <option
+                                v-for="department in props.departments"
+                                :key="department.id"
+                                :value="department.id"
+                            >
+                                {{ department.name }}
+                            </option>
+                        </select>
+                        <InputError :message="form.errors.department_id" />
                     </div>
                 </FormSection>
 

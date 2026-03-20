@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\API\AuthController;
+use App\Http\Controllers\API\FedController;
 use App\Http\Controllers\API\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -23,7 +24,14 @@ Route::controller(AuthController::class)->group(function () {
                 Route::put('/{id}', 'update')->name('update');
                 Route::delete('/{id}', 'destroy')->name('destroy');
             });
-            // Routes supplémentaires sous autorisation
+            Route::prefix('feds')->name('fed.')->controller(FedController::class)->group(function () {
+                Route::get('/', 'index')->name('index');
+                Route::post('/', 'store')->name('store');
+                Route::get('/{id}', 'show')->name('show');
+                Route::put('/{id}', 'update')->name('update');
+                Route::delete('/{id}', 'destroy')->name('destroy');
+                Route::post('/{id}/submit', 'submit')->name('submit');
+            });
         });
     });
 });

@@ -2,11 +2,13 @@
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
-import { Form, Head, Link, usePage } from '@inertiajs/vue3';
+import { Form, Head, Link, router, usePage } from '@inertiajs/vue3';
+import { ref } from 'vue';
 
 import DeleteUser from '@/components/DeleteUser.vue';
 import HeadingSmall from '@/components/HeadingSmall.vue';
 import InputError from '@/components/InputError.vue';
+import SignatureInput from '@/components/SignatureInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +22,25 @@ interface Props {
 }
 
 defineProps<Props>();
+
+const signatureInputRef = ref<InstanceType<typeof SignatureInput> | null>(null);
+const signatureSaving = ref(false);
+const signatureSaved = ref(false);
+
+const saveSignature = () => {
+    const signature = signatureInputRef.value?.getSignature();
+    if (!signature) {
+        alert('Veuillez dessiner ou téléverser votre signature.');
+        return;
+    }
+    signatureSaving.value = true;
+    signatureSaved.value = false;
+    router.patch('/settings/profile/signature', { signature }, {
+        preserveScroll: true,
+        onFinish: () => { signatureSaving.value = false; },
+        onSuccess: () => { signatureSaved.value = true; },
+    });
+};
 
 const breadcrumbItems: BreadcrumbItem[] = [
     {
@@ -120,6 +141,39 @@ const user = page.props.auth.user;
                         </Transition>
                     </div>
                 </Form>
+            </div>
+
+            <HeadingSmall
+                title="Signature"
+                description="Enregistrez votre signature pour l'utiliser automatiquement lors de la soumission ou validation des FED."
+            />
+
+            <div class="space-y-4">
+                <SignatureInput ref="signatureInputRef" />
+                <div class="flex items-center gap-4">
+                    <Button
+                        :disabled="signatureSaving"
+                        @click="saveSignature"
+                    >
+                        {{ signatureSaving ? 'Enregistrement...' : 'Enregistrer ma signature' }}
+                    </Button>
+                    <Transition
+                        enter-active-class="transition ease-in-out"
+                        enter-from-class="opacity-0"
+                        leave-active-class="transition ease-in-out"
+                        leave-to-class="opacity-0"
+                    >
+                        <p
+                            v-show="signatureSaved"
+                            class="text-sm text-neutral-600"
+                        >
+                            Signature enregistrée.
+                        </p>
+                    </Transition>
+                </div>
+                <p v-if="user?.has_signature" class="text-sm text-muted-foreground">
+                    Vous avez déjà une signature enregistrée. Dessinez ou téléversez une nouvelle pour la remplacer.
+                </p>
             </div>
 
             <DeleteUser />

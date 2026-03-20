@@ -14,7 +14,7 @@ import {
 import { dashboard } from '@/routes';
 import { type NavItem } from '@/types';
 import { Link, router, usePage } from '@inertiajs/vue3';
-import { LayoutGrid, UserCog, Shield, User, Settings, FileText, Users, CreditCard, Link2 } from 'lucide-vue-next';
+import { LayoutGrid, UserCog, Shield, User, Settings, FileText, Users, CreditCard, Link2, ShoppingCart, Table2, Calculator } from 'lucide-vue-next';
 import { computed } from 'vue';
 import AppLogo from './AppLogo.vue';
 
@@ -28,156 +28,135 @@ const mainNavItems = computed<NavItem[]>(() => {
             href: dashboard(),
             icon: LayoutGrid,
         },
+        {
+            title: 'Fiches de dépense',
+            icon: FileText,
+            items: [
+                {
+                    title: 'Nouvelle demande',
+                    href: '/feds/create',
+                },
+                {
+                    title: 'Mes demandes',
+                    href: '/feds',
+                },
+            ],
+        },
     ];
 
-    // SuperAdmin et Admin voient les mêmes onglets (sauf Configuration réservé à SuperAdmin)
-    if (auth.value?.isSuperAdmin || auth.value?.isAdmin) {
-        items.push(
-            {
-                title: 'Garants',
-                icon: User,
-                items: [
-                    {
-                        title: 'Nouveau',
-                        href: '/garants/create',
-                    },
-                    {
-                        title: 'Historique',
-                        href: '/garants',
-                    },
-                ],
-            },
-            {
-                title: 'Garanties',
-                icon: Shield,
-                items: [
-                    {
-                        title: 'Nouveau',
-                        href: '/garanties/create',
-                    },
-                    {
-                        title: 'Historique',
-                        href: '/garanties',
-                    },
-                ],
-            },
-            {
-                title: 'Contrats de prêts',
-                href: '/contrats-prets',
-                icon: FileText,
-            },
-            {
-                title: 'Clients',
-                href: '/clients',
-                icon: Users,
-            },
-            {
-                title: 'Liaison',
-                href: '/liaisons',
-                icon: Link2,
-            }
-        );
-        
-        // Admin voit "Types de garanties" dans la liste principale (lecture seule)
-        if (auth.value?.isAdmin) {
-            items.push(
-                {
-                    title: 'Types de garanties',
-                    href: '/types-garanties',
-                    icon: Settings,
-                }
-            );
-        }
-        
-        // Seul SuperAdmin a accès à l'onglet Configuration
-        if (auth.value?.isSuperAdmin) {
-            items.push(
-                {
-                    title: 'Configuration',
-                    icon: Settings,
-                    separator: true,
-                    items: [
-                        {
-                            title: 'Utilisateurs',
-                            items: [
-                                {
-                                    title: 'Créer un nouvel utilisateur',
-                                    href: '/users/create',
-                                },
-                                {
-                                    title: 'Liste des utilisateurs',
-                                    href: '/users',
-                                },
-                            ],
-                        },
-                        {
-                            title: 'Types de garanties',
-                            href: '/types-garanties',
-                        },
-                    ],
-                }
-            );
-        }
+    const roleSlugs: string[] = auth.value?.roles || [];
+    const profileType = auth.value?.user?.profile;
+    const hasConfigAccess = auth.value?.isSuperAdmin
+        || auth.value?.isIt
+        || auth.value?.isAdmin
+        || roleSlugs.includes('it')
+        || roleSlugs.includes('admin')
+        || profileType === 'admin';
+
+    if (hasConfigAccess) {
+        items.push({
+            title: 'Configuration',
+            icon: Settings,
+            items: [
+                { title: 'Départements', href: '/departments' },
+                { title: 'Budgets', href: '/budgets' },
+                { title: 'Typologies de dépenses', href: '/typologies' },
+                { title: 'Catégories de dépenses', href: '/categories' },
+                { title: 'Banques', href: '/banques' },
+                { title: 'Fournisseurs', href: '/fournisseurs' },
+                { title: 'Comptes de charges', href: '/comptes-charges' },
+                { title: 'Fiches d\'Intégration', href: '/fiche-integrations' },
+                { title: 'Utilisateurs', href: '/users' },
+                { title: 'Paramètres applicatifs', href: '/settings/app' },
+            ],
+        });
     }
-    // Chargé d'Affaires : lecture seule
-    else if (auth.value?.isChargeAffaires) {
-        items.push(
-            {
-                title: 'Garants',
-                icon: User,
-                href: '/garants',
-            },
-            {
-                title: 'Garanties',
-                icon: Shield,
-                href: '/garanties',
-            },
-            {
-                title: 'Types de garanties',
-                href: '/types-garanties',
-                icon: Settings,
-            },
-            {
-                title: 'Contrats de prêts',
-                href: '/contrats-prets',
-                icon: FileText,
-            },
-            {
-                title: 'Liaison',
-                href: '/liaisons',
-                icon: Link2,
-            }
-        );
+
+    if (roleSlugs.includes('n_plus_1')) {
+        items.push({
+            title: 'Validations',
+            href: '/feds/n1',
+            icon: Shield,
+        });
     }
-    // Juridique : lecture seule + changement de statut
-    else if (auth.value?.isJuridique) {
-        items.push(
-            {
-                title: 'Garants',
-                icon: User,
-                href: '/garants',
-            },
-            {
-                title: 'Garanties',
-                icon: Shield,
-                href: '/garanties',
-            },
-            {
-                title: 'Types de garanties',
-                href: '/types-garanties',
-                icon: Settings,
-            },
-            {
-                title: 'Contrats de prêts',
-                href: '/contrats-prets',
-                icon: FileText,
-            },
-            {
-                title: 'Liaison',
-                href: '/liaisons',
-                icon: Link2,
-            }
-        );
+
+    if (roleSlugs.includes('responsable_achats')) {
+        items.push({
+            title: 'Demandes en cours',
+            href: '/feds/achats',
+            icon: ShoppingCart,
+        });
+        items.push({
+            title: 'TDR',
+            href: '/achats/tdr',
+            icon: FileText,
+        });
+        items.push({
+            title: 'Comité',
+            href: '/achats/comite',
+            icon: Users,
+        });
+        items.push({
+            title: 'Tableaux comparatifs',
+            href: '/achats/tableaux-comparatifs',
+            icon: Table2,
+        });
+        items.push({
+            title: 'Fournisseurs',
+            href: '/fournisseurs',
+            icon: Users,
+        });
+        items.push({
+            title: 'Bons de commande',
+            href: '/bons-de-commande',
+            icon: FileText,
+        });
+    }
+
+    if (roleSlugs.includes('responsable_facilities')) {
+        items.push({
+            title: 'Facilities',
+            href: '/feds/facilities',
+            icon: Link2,
+        });
+    }
+
+    if (roleSlugs.includes('controle_de_gestion')) {
+        items.push({
+            title: 'Contrôle de Gestion',
+            href: '/feds/cg',
+            icon: Calculator,
+        });
+    }
+
+    if (roleSlugs.includes('daf')) {
+        items.push({
+            title: 'Validations DAF',
+            href: '/feds/daf',
+            icon: Shield,
+        });
+    }
+
+    if (roleSlugs.includes('dga')) {
+        items.push({
+            title: 'Validations DGA',
+            href: '/feds/dga',
+            icon: Shield,
+        });
+        items.push({
+            title: 'Bons de commande',
+            href: '/bons-de-commande',
+            icon: FileText,
+        });
+    }
+
+    // Budgets : IT/Admin dans Configuration, N+1 vers /budgets/n1, les autres vers /budgets (lecture seule)
+    if (!hasConfigAccess) {
+        items.push({
+            title: 'Budgets',
+            href: roleSlugs.includes('n_plus_1') ? '/budgets/n1' : '/budgets',
+            icon: CreditCard,
+        });
     }
 
     return items;
