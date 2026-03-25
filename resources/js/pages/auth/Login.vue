@@ -20,11 +20,14 @@ defineProps<{
 <template>
     <Head title="Connexion" />
 
-    <div class="relative min-h-svh bg-slate-500" style="background-image:url('/bg2.png')"; >
-        <div class="absolute left-0 top-0 h-full w-1/3 rounded-br-[120px] bg-red-500"></div>
+    <div class="relative h-screen w-full bg-slate-50 overflow-hidden" >
+    <!-- style="background-image:url('/bg2.png')"; -->
+        <!-- Panneau rouge à gauche -->
+        <div class="absolute left-0 top-0 h-full w-1/2 md:w-[45%] lg:w-[45%] rounded-br-[100px] md:rounded-br-[150px] bg-red-500 z-0 transition-all duration-300"></div>
 
-        <div class="relative z-10 flex min-h-svh items-center justify-center p-6">
-            <div class="w-full max-w-2xl rounded-3xl bg-white p-10 shadow-xl">
+        <!-- Conteneur du formulaire, centré sur tout l'écran pour chevaucher le panneau -->
+        <div class="absolute inset-0 z-10 flex h-full w-full items-center justify-center p-6 overflow-y-auto">
+            <div class="w-full max-w-2xl rounded-3xl bg-white p-10 shadow-2xl m-auto">
                 <div class="mb-6 flex flex-col items-start gap-4">
                     <img src="/logo_Cofina.png" alt="Cofina" class="h-16 object-contain" />
                     <div>

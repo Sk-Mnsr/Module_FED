@@ -299,7 +299,7 @@ const onRowDoubleClick = (line: BudgetLine) => {
                                 <td class="px-4 py-3 text-sm text-gray-900">{{ formatAmount(line.montant_consomme, { showZeroAsDash: true }) }}</td>
                                 <td class="px-4 py-3 text-sm text-gray-900">{{ formatAmount(line.montant_stock, { showZeroAsDash: true }) }}</td>
                                 <td class="px-4 py-3 text-sm text-gray-900">{{ line.date_souhaitee_execution || '-' }}</td>
-                                <td class="px-4 py-3 text-sm text-gray-900">{{ line.justification || '-' }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-900 max-w-[200px] truncate" :title="line.justification || undefined">{{ line.justification || '-' }}</td>
                                 <td class="px-4 py-3 text-sm text-gray-900">{{ line.compte_gl || '-' }}</td>
                             </tr>
                         </tbody>

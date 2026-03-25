@@ -174,73 +174,73 @@ const printDocument = () => {
     <Head :title="`FED ${props.fed.code}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto max-w-4xl p-6">
+        <div class="mx-auto max-w-7xl 2xl:max-w-none p-6 2xl:px-12">
             <!-- Actions (hidden when printing) -->
             <div class="mb-6 flex justify-end gap-2 print:hidden">
                 <Link :href="`/feds/${props.fed.id}/edit`">
-                    <Button variant="outline">Modifier</Button>
+                    <Button variant="outline" class="2xl:h-12 2xl:px-8 2xl:text-base">Modifier</Button>
                 </Link>
                 <!-- <Button variant="outline" @click="printDocument">
                     <Printer class="mr-2 h-4 w-4" /> Imprimer
                 </Button> -->
                 <Link href="/feds">
-                    <Button variant="outline">Retour</Button>
+                    <Button variant="outline" class="2xl:h-12 2xl:px-8 2xl:text-base">Retour</Button>
                 </Link>
             </div>
 
             <!-- Document format -->
-            <div class="rounded-lg border-2 border-gray-900 bg-white p-6 shadow-sm print:border print:shadow-none">
+            <div class="rounded-lg border-2 border-gray-900 bg-white p-6 shadow-sm print:border print:shadow-none 2xl:p-12">
                 <!-- Header -->
                 <div class="mb-8 flex items-start justify-between border-b border-gray-300 pb-4">
                     <div class="flex items-center gap-3">
-                        <img src="/logo_Cofina.png" alt="Cofina" class="h-14 object-contain" />
+                        <img src="/logo_Cofina.png" alt="Cofina" class="h-14 2xl:h-24 object-contain" />
                     </div>
                     <div class="text-right">
-                        <h1 class="text-xl font-bold uppercase text-gray-900">Fiche d'Engagement de dépense</h1>
-                        <p class="mt-1 text-sm font-medium">
+                        <h1 class="text-xl 2xl:text-3xl font-bold uppercase text-gray-900">Fiche d'Engagement de dépense</h1>
+                        <p class="mt-1 text-sm 2xl:text-lg font-medium">
                             Réf. : FED n°
-                            <span class="inline-block min-w-[120px] border-b border-gray-400 font-semibold">{{ props.fed.code }}</span>
+                            <span class="inline-block min-w-[120px] 2xl:min-w-[200px] border-b border-gray-400 font-semibold">{{ props.fed.code }}</span>
                         </p>
                     </div>
                 </div>
 
                 <!-- DEMANDE section -->
-                <div class="mb-6 border-2 border-gray-900 p-4">
-                    <h2 class="mb-4 text-base font-bold uppercase">Demande</h2>
-                    <div class="grid gap-3 text-sm">
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                <div class="mb-6 border-2 border-gray-900 p-4 2xl:p-8">
+                    <h2 class="mb-4 text-base 2xl:text-xl font-bold uppercase">Demande</h2>
+                    <div class="grid gap-3 text-sm 2xl:text-lg">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Date :</span>
                             <span>{{ formatDate(props.fed.date) }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Demandeur :</span>
-                            <span class="uppercase">{{ props.fed.demandeur || '—' }}</span>
+                            <span class="uppercase font-bold">{{ props.fed.demandeur || '—' }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Fonction :</span>
                             <span class="uppercase">{{ props.fed.fonction || '—' }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Département :</span>
                             <span>{{ props.fed.department || '—' }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2 rounded bg-red-50/80 border-l-4 border-red-500 px-2 py-1.5">
-                            <span class="font-medium text-red-800">Ligne(s) budgétaire(s) :</span>
-                            <span class="font-medium text-red-900 uppercase">{{ formatBudgetLines(props.fed) }}</span>
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2 rounded bg-red-50/80 border-l-4 border-red-500 px-2 py-1.5 2xl:py-3 shadow-sm">
+                            <span class="font-bold text-red-800">Ligne(s) budgétaire(s) :</span>
+                            <span class="font-bold text-red-900 uppercase text-lg">{{ formatBudgetLines(props.fed) }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Motif de la dépense :</span>
                             <span class="uppercase">{{ props.fed.motive || '—' }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Bénéficiaire(s) :</span>
                             <span>{{ props.fed.beneficiaire || '—' }}</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Fournisseur :</span>
                             <span>—</span>
                         </div>
-                        <div class="grid grid-cols-[140px_1fr] gap-2">
+                        <div class="grid grid-cols-[140px_1fr] 2xl:grid-cols-[200px_1fr] gap-2">
                             <span class="font-medium">Pro-forma :</span>
                             <span>☐ oui Réf n° .................... ☐ non</span>
                         </div>
@@ -248,7 +248,7 @@ const printDocument = () => {
                         <!-- Signatures row - égales de part et d'autre -->
                         <div class="mt-6 grid grid-cols-2 gap-8 border-t border-gray-300 pt-6">
                             <div class="flex flex-col items-center justify-center">
-                                <div class="mb-2 flex h-24 w-full max-w-[250px] items-center justify-center border-2 border-gray-500 bg-gray-50 p-2">
+                                <div class="mb-2 flex h-24 2xl:h-40 w-full max-w-[250px] 2xl:max-w-[400px] items-center justify-center border-2 border-gray-500 bg-gray-50 p-2">
                                     <img
                                         v-if="props.fed.requester_signature"
                                         :src="props.fed.requester_signature"
@@ -256,10 +256,10 @@ const printDocument = () => {
                                         class="max-h-full max-w-full object-contain"
                                     />
                                 </div>
-                                <span class="text-xs font-medium">Signature demandeur</span>
+                                <span class="text-xs 2xl:text-base font-medium">Signature demandeur</span>
                             </div>
                             <div class="flex flex-col items-center justify-center">
-                                <div class="mb-2 flex h-24 w-full max-w-[250px] items-center justify-center border-2 border-gray-500 bg-gray-50 p-2">
+                                <div class="mb-2 flex h-24 2xl:h-40 w-full max-w-[250px] 2xl:max-w-[400px] items-center justify-center border-2 border-gray-500 bg-gray-50 p-2">
                                     <img
                                         v-if="props.fed.n1_signature"
                                         :src="props.fed.n1_signature"
@@ -267,30 +267,30 @@ const printDocument = () => {
                                         class="max-h-full max-w-full object-contain"
                                     />
                                 </div>
-                                <span class="text-xs font-medium">Nom & Signature Manager</span>
+                                <span class="text-xs 2xl:text-base font-medium">Nom & Signature Manager</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Articles / Services -->
-                <div v-if="props.fed.items?.length" class="mb-6 border border-gray-400 p-4">
-                    <h2 class="mb-3 text-sm font-bold uppercase">Articles / Services</h2>
-                    <table class="w-full text-sm">
+                <div v-if="props.fed.items?.length" class="mb-6 border border-gray-400 p-4 2xl:p-8">
+                    <h2 class="mb-4 text-sm 2xl:text-xl font-bold uppercase">Articles / Services</h2>
+                    <table class="w-full text-sm 2xl:text-lg">
                         <thead>
-                            <tr class="border-b border-gray-400 bg-gray-100 uppercase text-[11px] text-gray-700">
-                                <th class="px-2 py-2 text-left font-bold">Ligne(s) Budgétaire(s)</th>
-                                <th class="px-2 py-2 text-left font-bold">Intitulé</th>
-                                <th class="px-2 py-2 text-center font-bold">Quantité</th>
-                                <th class="px-2 py-2 text-center font-bold">Description</th>
+                            <tr class="border-b border-gray-400 bg-gray-100 uppercase text-[11px] 2xl:text-sm text-gray-700">
+                                <th class="px-2 py-2 2xl:py-4 text-left font-bold">Ligne(s) Budgétaire(s)</th>
+                                <th class="px-2 py-2 2xl:py-4 text-left font-bold">Intitulé</th>
+                                <th class="px-2 py-2 2xl:py-4 text-center font-bold">Quantité</th>
+                                <th class="px-2 py-2 2xl:py-4 text-center font-bold">Description</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr v-for="item in props.fed.items" :key="item.id" class="border-b border-gray-200">
-                                <td class="px-2 py-2 font-medium text-red-700 uppercase">{{ item.budget_line?.code || '—' }}</td>
-                                <td class="px-2 py-2 uppercase">{{ item.label }}</td>
-                                <td class="px-2 py-2 text-center">{{ formatQuantity(item.quantity) }}</td>
-                                <td class="px-2 py-2 text-xs text-gray-600 italic">{{ item.description || '—' }}</td>
+                                <td class="px-2 py-2 2xl:py-4 font-bold text-red-700 uppercase">{{ item.budget_line?.code || '—' }}</td>
+                                <td class="px-2 py-2 2xl:py-4 uppercase font-medium">{{ item.label }}</td>
+                                <td class="px-2 py-2 2xl:py-4 text-center font-bold">{{ formatQuantity(item.quantity) }}</td>
+                                <td class="px-2 py-2 2xl:py-4 text-xs 2xl:text-base text-gray-600 italic leading-relaxed">{{ item.description || '—' }}</td>
                             </tr>
                         </tbody>
                     </table>

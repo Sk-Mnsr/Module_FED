@@ -88,13 +88,8 @@ const mainNavItems = computed<NavItem[]>(() => {
         });
         items.push({
             title: 'TDR',
-            href: '/achats/tdr',
+            href: '/appel-offres',
             icon: FileText,
-        });
-        items.push({
-            title: 'Comité',
-            href: '/achats/comite',
-            icon: Users,
         });
         items.push({
             title: 'Tableaux comparatifs',
@@ -127,6 +122,11 @@ const mainNavItems = computed<NavItem[]>(() => {
             href: '/feds/cg',
             icon: Calculator,
         });
+        items.push({
+            title: 'Écritures Comptables',
+            href: '/ecritures-comptables',
+            icon: FileText,
+        });
     }
 
     if (roleSlugs.includes('daf')) {
@@ -134,6 +134,11 @@ const mainNavItems = computed<NavItem[]>(() => {
             title: 'Validations DAF',
             href: '/feds/daf',
             icon: Shield,
+        });
+        items.push({
+            title: 'Écritures Comptables',
+            href: '/ecritures-comptables',
+            icon: FileText,
         });
     }
 
@@ -147,6 +152,15 @@ const mainNavItems = computed<NavItem[]>(() => {
             title: 'Bons de commande',
             href: '/bons-de-commande',
             icon: FileText,
+        });
+    }
+
+    // Afficher l'onglet Comité si l'utilisateur est acheteur OU s'il fait partie d'un comité
+    if (roleSlugs.includes('responsable_achats') || auth.value?.isInCommittee) {
+        items.push({
+            title: 'Comité',
+            href: '/comites',
+            icon: Users,
         });
     }
 

@@ -57,7 +57,7 @@ class HandleInertiaRequests extends Middleware
                 'profil' => $profil,
                 'roles' => $roles,
                 'isSuperAdmin' => $user ? $user->isSuperAdmin() : false,
-                
+                'isInCommittee' => $user ? \Illuminate\Support\Facades\DB::table('comite_user')->where('user_id', $user->id)->exists() : false,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

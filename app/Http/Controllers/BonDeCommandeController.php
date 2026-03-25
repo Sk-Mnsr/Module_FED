@@ -99,5 +99,79 @@ class BonDeCommandeController extends Controller
             'date_bon_commande' => $fed->date_bon_commande ?? now(),
         ]);
         $fed->refresh();
+
+        $this->generateEcritures($fed);
+    }
+
+    private function generateEcritures(Fed $fed): void
+    {
+        $offreChoisie = $fed->offreChoisie;
+        if (!$offreChoisie || !$offreChoisie->fournisseur_id) {
+            return;
+        }
+
+        $fournisseur = \App\Models\Fournisseur::find($offreChoisie->fournisseur_id);
+        if (!$fournisseur) {
+            return;
+        }
+
+        $supplierOffers = $fed->fournisseurOffres()
+            ->where('fournisseur_id', $offreChoisie->fournisseur_id)
+            ->get()
+            ->keyBy('fed_item_id');
+
+        $totalDepense = 0;
+        // Batch auto-généré de 4 caractères alpha-numériques commençant par Z (Z + 3 char)
+        $randomChars = strtoupper(substr(str_shuffle('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 3));
+        $batch = 'Z' . $randomChars;
+        
+        $annee = 'FY' . now()->year;
+        $mois = 'M' . str_pad(now()->month, 2, '0', STR_PAD_LEFT);
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($fed, $supplierOffers, $fournisseur, $totalDepense, $batch, $annee, $mois) {
+            foreach ($fed->items as $item) {
+                $itemOffer = $supplierOffers->get($item->id);
+                if ($itemOffer) {
+                    $montantLigne = $itemOffer->prix_unitaire * $item->quantity;
+                    if ($montantLigne > 0) {
+                        $totalDepense += $montantLigne;
+                        
+                        if ($item->budgetLine && $item->budgetLine->compte_gl) {
+                            \App\Models\EcritureComptable::create([
+                                'numero' => $fed->numero_bon_commande,
+                                'no_batch' => $batch,
+                                'no_compte' => $item->budgetLine->compte_gl,
+                                'sens' => 'D',
+                                'montant' => $montantLigne,
+                                'code_operation' => 'DEPENSE_FED',
+                                'date_de_valeur' => now(),
+                                'code_agence' => '500',
+                                'libelle_ecriture' => 'Dépense pr ' . substr($item->label, 0, 50) . ' (FED ' . $fed->id . ')',
+                                'user_id' => auth()->id() ?? $fed->requester_id,
+                                'annee_comptable' => $annee,
+                                'mois_comptable' => $mois,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            if ($totalDepense > 0 && $fournisseur->compte_transit_paiement) {
+                \App\Models\EcritureComptable::create([
+                    'numero' => $fed->numero_bon_commande,
+                    'no_batch' => $batch,
+                    'no_compte' => $fournisseur->compte_transit_paiement,
+                    'sens' => 'C',
+                    'montant' => $totalDepense,
+                    'code_operation' => 'DEPENSE_FED',
+                    'date_de_valeur' => now(),
+                    'code_agence' => '500',
+                    'libelle_ecriture' => 'Transit Frs ' . substr($fournisseur->nom, 0, 50) . ' (FED ' . $fed->id . ')',
+                    'user_id' => auth()->id() ?? $fed->requester_id,
+                    'annee_comptable' => $annee,
+                    'mois_comptable' => $mois,
+                ]);
+            }
+        });
     }
 }

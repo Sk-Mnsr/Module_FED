@@ -31,8 +31,12 @@ use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\TypologieDepenseController;
 use App\Http\Controllers\CategorieDepenseController;
 use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\EcritureComptableController;
 
-
+use App\Http\Controllers\AppelOffreController;
+use App\Http\Controllers\OffreController;
+use App\Http\Controllers\ComiteController;
+use App\Http\Controllers\EvaluationController;
     // Routes pour les utilisateurs
     // - SuperAdmin uniquement : toutes les opérations (fait partie de Configuration)
     Route::middleware(['auth'])->group(function () {
@@ -100,10 +104,6 @@ use App\Http\Controllers\AppSettingController;
     Route::post('feds/n1/{fed}/expert-opinion', [N1FedController::class, 'expertOpinion'])->name('feds.n1.expert_opinion')->middleware('role:n_plus_1');
 
     // Routes pour le responsable Achats
-    Route::get('achats/tdr', fn () => Inertia::render('achats/Tdr', ['title' => 'TDR / Cahiers des charges']))
-        ->name('achats.tdr')->middleware(['auth', 'role:responsable_achats']);
-    Route::get('achats/comite', fn () => Inertia::render('achats/Comite'))
-        ->name('achats.comite')->middleware(['auth', 'role:responsable_achats']);
     Route::get('achats/tableaux-comparatifs', fn () => Inertia::render('achats/TableauxComparatifs'))
         ->name('achats.tableaux-comparatifs')->middleware(['auth', 'role:responsable_achats']);
     Route::get('feds/achats', [AchatsFedController::class, 'index'])->name('feds.achats.index')->middleware('role:responsable_achats');
@@ -150,9 +150,42 @@ use App\Http\Controllers\AppSettingController;
     Route::get('bons-de-commande', [BonDeCommandeController::class, 'index'])->name('bons-de-commande.index');
     Route::get('bons-de-commande/{fed}', [BonDeCommandeController::class, 'show'])->name('bons-de-commande.show');
 
+    // Routes pour les écritures comptables
+    Route::get('ecritures-comptables/export', [EcritureComptableController::class, 'export'])->name('ecritures-comptables.export');
+    Route::get('ecritures-comptables', [EcritureComptableController::class, 'index'])->name('ecritures-comptables.index');
+
     // Routes pour les FED (demandeur)
     Route::resource('feds', FedController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
     Route::post('feds/{fed}/submit', [FedController::class, 'submit'])->name('feds.submit');
 
+    // Routes pour les Appels d'Offres (TDR)
+    Route::resource('appel-offres', AppelOffreController::class);
+    Route::post('appel-offres/{appelOffre}/publish', [AppelOffreController::class, 'publish'])->name('appel-offres.publish');
+    Route::get('appel-offres/{appelOffre}/opening-session', [AppelOffreController::class, 'openingSession'])->name('appel-offres.opening-session');
+    Route::post('appel-offres/{appelOffre}/start-evaluation', [AppelOffreController::class, 'startEvaluation'])->name('appel-offres.start-evaluation');
+    Route::get('appel-offres/{appelOffre}/pv-ouverture', [AppelOffreController::class, 'pvOuverture'])->name('appel-offres.pv-ouverture');
+    Route::get('appel-offres/{appelOffre}/compare', [EvaluationController::class, 'compare'])->name('evaluations.compare');
+    Route::get('appel-offres/{appelOffre}/pv-evaluation', [EvaluationController::class, 'pvEvaluation'])->name('evaluations.pv_evaluation');
     
+    // Routes pour le Comité
+    Route::get('comites', [ComiteController::class, 'index'])->name('comites.index');
+    Route::get('appel-offres/{appelOffre}/comites/create', [ComiteController::class, 'create'])->name('comites.create');
+    Route::post('appel-offres/{appelOffre}/comites', [ComiteController::class, 'store'])->name('comites.store');
+    Route::get('comites/{comite}/edit', [ComiteController::class, 'edit'])->name('comites.edit');
+    Route::put('comites/{comite}', [ComiteController::class, 'update'])->name('comites.update');
+
+    // Routes pour les Offres
+    Route::get('appel-offres/{appelOffre}/offres/create', [OffreController::class, 'create'])->name('offres.create');
+    Route::post('appel-offres/{appelOffre}/offres', [OffreController::class, 'store'])->name('offres.store');
+
+    // Routes pour les Évaluations
+    Route::get('offres/{offre}/evaluations/create', [EvaluationController::class, 'create'])->name('evaluations.create');
+    Route::post('offres/{offre}/evaluations', [EvaluationController::class, 'store'])->name('evaluations.store');
+
+});
+
+// Routes publiques pour les Fournisseurs (Soumission via URL signée)
+Route::middleware(['signed'])->group(function () {
+    Route::get('fournisseur/soumission/{appelOffre}/{fournisseur}', [\App\Http\Controllers\PublicSoumissionController::class, 'create'])->name('public.soumission.create');
+    Route::post('fournisseur/soumission/{appelOffre}/{fournisseur}', [\App\Http\Controllers\PublicSoumissionController::class, 'store'])->name('public.soumission.store');
 });

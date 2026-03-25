@@ -107,7 +107,7 @@ const splitBeneficiaires = (value?: string | null) => {
 };
 
 const form = useForm({
-    date: props.fed.date || '',
+    date: props.fed.date ? String(props.fed.date).substring(0, 10) : '',
     demandeur: props.fed.demandeur || '',
     department: props.fed.department || '',
     fonction: props.fed.fonction || '',
@@ -316,7 +316,6 @@ const submitRequest = () => {
                         </select>
                         <InputError :message="form.errors.department" />
                     </div>
-                    // Lignes budgétaires supprimées du niveau global
                     <div>
                         <Label for="fonction" class="text-base font-medium text-gray-700">Fonction</Label>
                         <Input
