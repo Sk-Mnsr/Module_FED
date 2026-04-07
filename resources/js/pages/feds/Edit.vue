@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import FormSection from '@/components/FormSection.vue';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 import { Plus, Trash2, Send, Minus } from 'lucide-vue-next';
 import {
     Dialog,
@@ -19,11 +19,18 @@ import {
 } from '@/components/ui/dialog';
 import SignatureInput from '@/components/SignatureInput.vue';
 
+interface FedItemEntityForm {
+    budget_line_id: number;
+    quantity: number;
+    label?: string;
+}
+
 interface FedItemForm {
     label: string;
     budget_line_id?: number | '';
     quantity: number | '';
     description: string;
+    entities: FedItemEntityForm[];
 }
 
 interface FedAttachment {
@@ -40,8 +47,6 @@ interface Fed {
     budget_line_ids?: number[];
     budget_lines?: Array<{ id: number; code: string; label: string }>;
     fonction?: string | null;
-    category?: string | null;
-    subcategory?: string | null;
     beneficiaire?: string | null;
     motive?: string | null;
     estimated_total?: number | null;
@@ -54,11 +59,6 @@ interface Fed {
     attachments: FedAttachment[];
 }
 
-interface Category {
-    id: number;
-    categorie: string;
-    code: string;
-}
 
 interface Props {
     fed: Fed;
@@ -72,8 +72,10 @@ interface Props {
         montant_estime?: number | null;
         year?: number | null;
         department_name?: string | null;
+        is_global: boolean;
+        global_line_id?: number | null;
+        agence_name?: string | null;
     }>;
-    categories: Category[];
 }
 
 const props = defineProps<Props>();
@@ -96,6 +98,7 @@ const makeItem = (): FedItemForm => ({
     budget_line_id: '',
     quantity: 1,
     description: '',
+    entities: [],
 });
 
 const splitBeneficiaires = (value?: string | null) => {
@@ -106,17 +109,37 @@ const splitBeneficiaires = (value?: string | null) => {
     return parts.length > 0 ? parts : [''];
 };
 
+const prepareItems = () => {
+    if (!props.fed.items || props.fed.items.length === 0) {
+        return [makeItem()];
+    }
+
+    return props.fed.items.map(item => {
+        // S'assurer que chaque entité a son libellé
+        const entities = (item.entities || []).map(e => {
+            const line = props.budgetLines.find(bl => bl.id === e.budget_line_id);
+            return {
+                ...e,
+                label: line?.agence_name || line?.label || 'Inconnue'
+            };
+        });
+
+        return {
+            ...item,
+            entities
+        };
+    });
+};
+
 const form = useForm({
     date: props.fed.date ? String(props.fed.date).substring(0, 10) : '',
     demandeur: props.fed.demandeur || '',
     department: props.fed.department || '',
     fonction: props.fed.fonction || '',
-    category: props.fed.category || '',
-    subcategory: props.fed.subcategory || '',
     beneficiaire: splitBeneficiaires(props.fed.beneficiaire),
     motive: props.fed.motive || '',
     priority: props.fed.priority || 'normal',
-    items: props.fed.items && props.fed.items.length > 0 ? props.fed.items : [makeItem()],
+    items: prepareItems(),
     attachments: [] as File[],
     removed_attachment_ids: [] as number[],
 });
@@ -190,9 +213,40 @@ const selectedYear = computed(() => {
     return new Date().getFullYear();
 });
 
+const handleBudgetLineChange = (index: number) => {
+    const item = form.items[index];
+    if (!item.budget_line_id) {
+        item.entities = [];
+        return;
+    }
+
+    const subLines = props.budgetLines.filter(line => line.global_line_id === item.budget_line_id);
+    item.entities = subLines.map(line => ({
+        budget_line_id: line.id,
+        quantity: 0,
+        label: line.agence_name || line.label,
+    }));
+    item.quantity = 0;
+};
+
+watch(
+    () => form.items,
+    (newItems: FedItemForm[]) => {
+        newItems.forEach((item: FedItemForm) => {
+            if (item.entities && item.entities.length > 0) {
+                const total = item.entities.reduce((sum: number, entity: FedItemEntityForm) => sum + (Number(entity.quantity) || 0), 0);
+                if (item.quantity !== total) {
+                    item.quantity = total;
+                }
+            }
+        });
+    },
+    { deep: true }
+);
+
 const availableBudgetLines = computed(() => {
     return props.budgetLines.filter(line => {
-        if (!line.department_name || !line.year) {
+        if (!line.department_name || !line.year || !line.is_global) {
             return false;
         }
         return line.department_name === form.department && line.year === selectedYear.value;
@@ -328,25 +382,6 @@ const submitRequest = () => {
                         <InputError :message="form.errors.fonction" />
                     </div>
                     <div>
-                        <Label for="category" class="text-base font-medium text-gray-700">Catégorie des dépenses</Label>
-                        <select
-                            id="category"
-                            v-model="form.category"
-                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900"
-                        >
-                            <option value="">-- Sélectionner --</option>
-                            <option v-for="cat in props.categories" :key="cat.id" :value="cat.code">
-                                {{ cat.categorie }} ({{ cat.code }})
-                            </option>
-                        </select>
-                        <InputError :message="form.errors.category" />
-                    </div>
-                    <div>
-                        <Label for="subcategory" class="text-base font-medium text-gray-700">Sous-catégorie</Label>
-                        <Input id="subcategory" v-model="form.subcategory" type="text" class="mt-1.5 border-gray-300" />
-                        <InputError :message="form.errors.subcategory" />
-                    </div>
-                    <div>
                         <div class="flex items-center justify-between">
                             <Label class="text-base font-medium text-gray-700">Bénéficiaire(s)</Label>
                             <Button v-if="canEdit" type="button" variant="outline" size="sm" @click="addBeneficiaire" class="p-2 h-8 w-8">
@@ -427,6 +462,7 @@ const submitRequest = () => {
                                 <select
                                     :id="`budget-line-${index}`"
                                     v-model="item.budget_line_id"
+                                    @change="handleBudgetLineChange(index)"
                                     class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
                                 >
                                     <option value="">-- Sélectionner --</option>
@@ -448,9 +484,45 @@ const submitRequest = () => {
                                     v-model.number="item.quantity"
                                     type="number"
                                     step="1"
-                                    class="mt-1.5 border-gray-300"
+                                    :readonly="item.entities && item.entities.length > 0"
+                                    :class="['mt-1.5 border-gray-300', (item.entities && item.entities.length > 0) ? 'bg-gray-50' : '']"
                                 />
                                 <InputError :message="form.errors[`items.${index}.quantity` as keyof typeof form.errors]" />
+                            </div>
+
+                            <div v-if="item.entities && item.entities.length > 0" class="md:col-span-2 space-y-3 rounded-md border border-gray-100 bg-gray-50/50 p-4">
+                                <div class="flex items-center justify-between">
+                                    <Label class="text-sm font-semibold text-gray-600 uppercase tracking-wider">Quantités par entité ({{ item.entities.length }})</Label>
+                                    <span class="text-xs text-gray-400 italic">Détail par agence/entité</span>
+                                </div>
+                                <div class="max-h-[300px] overflow-y-auto rounded border border-gray-200 bg-white">
+                                    <table class="w-full text-sm">
+                                        <thead class="sticky top-0 bg-gray-100 text-xs font-medium text-gray-500 uppercase">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left">Entité / Agence</th>
+                                                <th class="px-3 py-2 text-right w-32">Quantité</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <tr v-for="(entity, eIndex) in item.entities" :key="eIndex" class="hover:bg-gray-50/50">
+                                                <td class="px-3 py-3 font-medium text-gray-700">
+                                                    {{ entity.label }}
+                                                </td>
+                                                <td class="px-3 py-2">
+                                                    <Input
+                                                        :id="`entity-${index}-${eIndex}`"
+                                                        v-model.number="entity.quantity"
+                                                        type="number"
+                                                        step="1"
+                                                        min="0"
+                                                        class="h-9 border-gray-300 text-right font-medium"
+                                                        placeholder="0"
+                                                    />
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                             <div class="md:col-span-2">
                                 <Label :for="`desc-${index}`" class="text-base font-medium text-gray-700">Description</Label>

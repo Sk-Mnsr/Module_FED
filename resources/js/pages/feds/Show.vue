@@ -15,6 +15,14 @@ interface FedItem {
     unit_price?: number | null;
     total_price?: number | null;
     budget_line?: BudgetLine | null;
+    entities?: FedItemEntity[];
+}
+
+interface FedItemEntity {
+    id: number;
+    budget_line_id: number;
+    quantity: number;
+    budget_line?: BudgetLine | null;
 }
 
 interface FedAttachment {
@@ -26,6 +34,10 @@ interface FedAttachment {
 interface BudgetLine {
     code?: string | null;
     label?: string | null;
+    agence?: {
+        nom: string;
+        code: string;
+    } | null;
 }
 
 interface Fed {
@@ -38,8 +50,6 @@ interface Fed {
     n1_action_at?: string | null;
     department?: string | null;
     fonction?: string | null;
-    category?: string | null;
-    subcategory?: string | null;
     beneficiaire?: string | null;
     motive?: string | null;
     estimated_total?: number | null;
@@ -286,12 +296,32 @@ const printDocument = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="item in props.fed.items" :key="item.id" class="border-b border-gray-200">
-                                <td class="px-2 py-2 2xl:py-4 font-bold text-red-700 uppercase">{{ item.budget_line?.code || '—' }}</td>
-                                <td class="px-2 py-2 2xl:py-4 uppercase font-medium">{{ item.label }}</td>
-                                <td class="px-2 py-2 2xl:py-4 text-center font-bold">{{ formatQuantity(item.quantity) }}</td>
-                                <td class="px-2 py-2 2xl:py-4 text-xs 2xl:text-base text-gray-600 italic leading-relaxed">{{ item.description || '—' }}</td>
-                            </tr>
+                            <template v-for="item in props.fed.items" :key="item.id">
+                                <tr class="border-b border-gray-200">
+                                    <td class="px-2 py-2 2xl:py-4 font-bold text-red-700 uppercase">
+                                        {{ item.budget_line?.code || '—' }}
+                                        <div v-if="item.entities?.length" class="mt-1 text-[10px] lowercase font-normal text-gray-400 italic"> Ventilation par entité (agence) activée </div>
+                                    </td>
+                                    <td class="px-2 py-2 2xl:py-4 uppercase font-medium">{{ item.label }}</td>
+                                    <td class="px-2 py-2 2xl:py-4 text-center font-bold">{{ formatQuantity(item.quantity) }}</td>
+                                    <td class="px-2 py-2 2xl:py-4 text-xs 2xl:text-base text-gray-600 italic leading-relaxed">{{ item.description || '—' }}</td>
+                                </tr>
+                                <tr v-if="item.entities?.length" class="border-b border-gray-100 bg-gray-50/20">
+                                    <td colspan="4" class="px-6 py-4">
+                                        <div class="mb-2 text-[11px] font-bold uppercase text-gray-500 tracking-wider">Répartition par Agence / Entité</div>
+                                        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-8 gap-y-3">
+                                            <div v-for="entity in item.entities" :key="entity.id" class="flex flex-col border-l-2 border-gray-200 pl-2">
+                                                <span class="text-[10px] font-medium text-gray-400 uppercase truncate" :title="entity.budget_line?.agence?.nom || entity.budget_line?.label || ''">
+                                                    {{ entity.budget_line?.agence?.nom || entity.budget_line?.label || 'Entité' }}
+                                                </span>
+                                                <span class="text-xs font-bold text-gray-900">
+                                                    {{ formatQuantity(entity.quantity) }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
                         </tbody>
                     </table>
                 </div>
@@ -432,38 +462,6 @@ const printDocument = () => {
                 <div class="mb-4">
                     <ValidationHistoryModal :fed="props.fed" />
                 </div>
-
-                <!-- Validation sections -->
-                <!-- <div class="space-y-4">
-                    <div v-for="(section, i) in ['Validation DAF', 'Validation DAL', 'Validation responsable 1', 'Validation responsable 2']" :key="i" class="border border-gray-400 p-4">
-                        <h3 class="mb-3 text-sm font-bold">{{ section }}</h3>
-                        <div class="grid gap-2 text-sm">
-                            <div class="flex gap-4">
-                                <span>☐ oui</span>
-                                <span>☐ non</span>
-                                <span v-if="i < 2">(Nombre de signatures requises : .........)</span>
-                            </div>
-                            <div>
-                                <span class="font-medium">Réserve :</span>
-                                <span class="ml-2 border-b border-dotted border-gray-500">...................................................</span>
-                            </div>
-                            <div class="flex gap-8">
-                                <div>
-                                    <span class="font-medium">Montant (chiffre) :</span>
-                                    <span class="ml-2 border-b border-dotted border-gray-500">........................</span>
-                                </div>
-                                <div>
-                                    <span class="font-medium">Montant (lettre) :</span>
-                                    <span class="ml-2 border-b border-dotted border-gray-500">....................................................................................</span>
-                                </div>
-                            </div>
-                            <div class="mt-2">
-                                <span class="font-medium">{{ i < 2 ? 'Signature' : 'Nom et signature' }} :</span>
-                                <span class="ml-2 border-b border-dotted border-gray-500">....................................................................................</span>
-                            </div>
-                        </div>
-                    </div>
-                </div> -->
             </div>
         </div>
     </AppLayout>

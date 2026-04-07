@@ -34,5 +34,10 @@ class FedItem extends Model
     {
         return $this->belongsTo(BudgetLine::class);
     }
+
+    public function entities()
+    {
+        return $this->hasMany(FedItemEntity::class);
+    }
 }
 

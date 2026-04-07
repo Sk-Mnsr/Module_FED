@@ -6,7 +6,6 @@ use App\Models\Fed;
 use App\Models\FedAttachment;
 use App\Models\FedItem;
 use App\Models\BudgetLine;
-use App\Models\CategorieDepense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -30,7 +29,10 @@ class FedController extends Controller
     public function create(Request $request)
     {
         $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);
-        $budgetLines = BudgetLine::with('budget.department')->get()->map(function (BudgetLine $line) {
+        $budgetLines = BudgetLine::where('is_reclassified', false)
+            ->with('agence:id,nom,code')
+            ->get(['id', 'code', 'label', 'montant_estime', 'budget_id', 'is_global', 'global_line_id', 'agence_id'])
+            ->map(function (BudgetLine $line) {
             return [
                 'id' => $line->id,
                 'code' => $line->code,
@@ -38,17 +40,18 @@ class FedController extends Controller
                 'montant_estime' => $line->montant_estime,
                 'year' => $line->budget?->year,
                 'department_name' => $line->budget?->department?->name,
+                'is_global' => $line->is_global,
+                'global_line_id' => $line->global_line_id,
+                'agence_name' => $line->agence?->nom,
             ];
         })->values();
 
-        $categories = CategorieDepense::orderBy('categorie')->get(['id', 'categorie', 'code']);
 
         $userDepartment = $request->user()->profil?->departement;
 
         return Inertia::render('feds/Create', [
             'departments' => $departments,
             'budgetLines' => $budgetLines,
-            'categories' => $categories,
             'userDepartment' => $userDepartment,
         ]);
     }
@@ -89,7 +92,7 @@ class FedController extends Controller
             abort(403);
         }
 
-        $fed->load(['items.budgetLine', 'attachments']);
+        $fed->load(['items.budgetLine', 'items.entities.budgetLine.agence', 'attachments']);
 
         return Inertia::render('feds/Show', [
             'fed' => $fed,
@@ -102,26 +105,30 @@ class FedController extends Controller
             abort(403);
         }
 
-        $fed->load(['items.budgetLine', 'attachments']);
+        $fed->load(['items.budgetLine', 'items.entities', 'attachments']);
 
-        $categories = CategorieDepense::orderBy('categorie')->get(['id', 'categorie', 'code']);
 
         return Inertia::render('feds/Edit', [
             'fed' => $fed,
             'canEdit' => $fed->isEditableByRequester(),
             'authSignature' => $request->user()->signature,
             'departments' => \App\Models\Department::orderBy('name')->get(['id', 'name']),
-            'budgetLines' => BudgetLine::with('budget.department')->get()->map(function (BudgetLine $line) {
-                return [
-                    'id' => $line->id,
-                    'code' => $line->code,
-                    'label' => $line->label,
-                    'montant_estime' => $line->montant_estime,
-                    'year' => $line->budget?->year,
-                    'department_name' => $line->budget?->department?->name,
-                ];
-            })->values(),
-            'categories' => $categories,
+            'budgetLines' => BudgetLine::where('is_reclassified', false)
+                ->with(['budget.department', 'agence:id,nom,code'])
+                ->get()
+                ->map(function (BudgetLine $line) {
+                    return [
+                        'id' => $line->id,
+                        'code' => $line->code,
+                        'label' => $line->label,
+                        'montant_estime' => $line->montant_estime,
+                        'year' => $line->budget?->year,
+                        'department_name' => $line->budget?->department?->name,
+                        'is_global' => $line->is_global,
+                        'global_line_id' => $line->global_line_id,
+                        'agence_name' => $line->agence?->nom,
+                    ];
+                })->values(),
             'userDepartment' => $request->user()->profil?->departement,
         ]);
     }
@@ -236,8 +243,6 @@ class FedController extends Controller
             'demandeur' => 'nullable|string|max:255',
             'department' => 'nullable|string|max:255',
             'fonction' => 'nullable|string|max:255',
-            'category' => 'nullable|string|exists:categorie_depenses,code',
-            'subcategory' => 'nullable|string|max:255',
             'beneficiaire' => ['nullable', function ($attribute, $value, $fail) {
                 if ($value !== null && $value !== '' && !is_array($value) && !is_string($value)) {
                     $fail('Le champ bénéficiaire doit être une liste ou un texte.');
@@ -252,6 +257,9 @@ class FedController extends Controller
             'items.*.description' => 'nullable|string',
             'items.*.unit_price' => 'nullable|numeric|min:0',
             'items.*.total_price' => 'nullable|numeric|min:0',
+            'items.*.entities' => 'nullable|array',
+            'items.*.entities.*.budget_line_id' => 'required|integer|exists:budget_lines,id',
+            'items.*.entities.*.quantity' => 'required|numeric|min:0',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240',
             'removed_attachment_ids' => 'nullable|array',
@@ -266,7 +274,6 @@ class FedController extends Controller
             'demandeur' => 'required|string|max:255',
             'department' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
-            'category' => 'required|string|exists:categorie_depenses,code',
             'beneficiaire' => ['nullable', function ($attribute, $value, $fail) {
                 if ($value !== null && $value !== '' && !is_array($value) && !is_string($value)) {
                     $fail('Le champ bénéficiaire doit être une liste ou un texte.');
@@ -283,6 +290,9 @@ class FedController extends Controller
             'items.*.description' => 'nullable|string',
             'items.*.unit_price' => 'nullable|numeric|min:0',
             'items.*.total_price' => 'nullable|numeric|min:0',
+            'items.*.entities' => 'nullable|array',
+            'items.*.entities.*.budget_line_id' => 'required|integer|exists:budget_lines,id',
+            'items.*.entities.*.quantity' => 'required|numeric|min:0',
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|max:10240',
             'removed_attachment_ids' => 'nullable|array',
@@ -297,8 +307,6 @@ class FedController extends Controller
             'demandeur',
             'department',
             'fonction',
-            'category',
-            'subcategory',
             'beneficiaire',
             'motive',
             'estimated_total',
@@ -340,7 +348,7 @@ class FedController extends Controller
         FedItem::where('fed_id', $fed->id)->delete();
 
         foreach ($normalized as $item) {
-            FedItem::create([
+            $fedItem = FedItem::create([
                 'fed_id' => $fed->id,
                 'budget_line_id' => $item['budget_line_id'] ?? null,
                 'label' => $item['label'],
@@ -349,6 +357,17 @@ class FedController extends Controller
                 'unit_price' => $item['unit_price'] ?? null,
                 'total_price' => $item['total_price'] ?? null,
             ]);
+
+            if (!empty($item['entities'])) {
+                foreach ($item['entities'] as $entity) {
+                    if ($entity['quantity'] > 0) {
+                        $fedItem->entities()->create([
+                            'budget_line_id' => $entity['budget_line_id'],
+                            'quantity' => $entity['quantity'],
+                        ]);
+                    }
+                }
+            }
         }
     }
 
@@ -375,6 +394,7 @@ class FedController extends Controller
                 'description' => $item['description'] ?? null,
                 'unit_price' => $item['unit_price'] ?? null,
                 'total_price' => $item['total_price'] ?? null,
+                'entities' => $item['entities'] ?? [],
             ];
         }
 
@@ -433,8 +453,6 @@ class FedController extends Controller
             'demandeur' => $fed->demandeur,
             'department' => $fed->department,
             'fonction' => $fed->fonction,
-            'category' => $fed->category,
-            'subcategory' => $fed->subcategory,
             'beneficiaire' => $this->splitBeneficiaires($fed->beneficiaire),
             'motive' => $fed->motive,
             'estimated_total' => $fed->estimated_total,
@@ -447,6 +465,12 @@ class FedController extends Controller
                     'description' => $item->description,
                     'unit_price' => $item->unit_price,
                     'total_price' => $item->total_price,
+                    'entities' => $item->entities->map(function ($entity) {
+                        return [
+                            'budget_line_id' => $entity->budget_line_id,
+                            'quantity' => $entity->quantity,
+                        ];
+                    })->toArray(),
                 ];
             })->toArray(),
         ];

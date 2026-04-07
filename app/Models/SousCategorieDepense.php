@@ -15,6 +15,7 @@ class SousCategorieDepense extends Model
         'categorie_depense_id',
         'sous_categorie',
         'code',
+        'responsable',
     ];
 
     public function categorieDepense()

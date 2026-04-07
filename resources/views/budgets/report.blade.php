@@ -28,18 +28,15 @@
             <thead>
                 <tr>
                     <th>N°</th>
-                    <th>Code ligne budgétaire</th>
+                    <th>Code ligne</th>
                     <th>Libellé de la dépense</th>
-                    <th>Type</th>
-                    <th>Catégorie dépense</th>
-                    <th>Sous catégorie</th>
-                    <th>Rubrique dépenses</th>
-                    <th>Sous rubrique</th>
+                    <th>Responsable</th>
+                    <th>Famille</th>
+                    <th>Catégorie</th>
                     <th>Montant estimé</th>
                     <th>Montant consommé</th>
                     <th>Montant stock</th>
-                    <th>Date souhaitée d'exécution</th>
-                    <th>Justifications</th>
+                    <th>Compte GL</th>
                 </tr>
             </thead>
             <tbody>
@@ -48,26 +45,23 @@
                         <td>{{ $index + 1 }}</td>
                         <td>{{ $line->code ?? '-' }}</td>
                         <td>{{ $line->label }}</td>
-                        <td>{{ $line->type ?? '-' }}</td>
-                        <td>{{ $line->categorieDepense?->categorie ?? '-' }}</td>
-                        <td>{{ $line->sousCategorieDepense?->sous_categorie ?? '-' }}</td>
-                        <td>{{ $line->rubrique ?? '-' }}</td>
-                        <td>{{ $line->sous_rubrique ?? '-' }}</td>
+                        <td>{{ $line->responsable ?? '-' }}</td>
+                        <td>{{ $line->article?->sous_categorie?->categorie?->famille?->nom ?? '-' }}</td>
+                        <td>{{ $line->article?->sous_categorie?->categorie?->nom ?? '-' }}</td>
                         <td class="text-right">{{ number_format((float) ($line->montant_estime ?? 0), 0, ',', ' ') }}</td>
                         <td class="text-right">{{ number_format((float) ($line->montant_consomme ?? 0), 0, ',', ' ') }}</td>
                         <td class="text-right">{{ number_format((float) ($line->montant_stock ?? 0), 0, ',', ' ') }}</td>
-                        <td>{{ $line->date_souhaitee_execution ?? '-' }}</td>
-                        <td>{{ $line->justification ?? '-' }}</td>
+                        <td>{{ $line->compte_gl ?? '-' }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="13">Aucune ligne budgétaire.</td>
+                        <td colspan="10">Aucune ligne budgétaire.</td>
                     </tr>
                 @endforelse
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="8">TOTAL BUDGET</td>
+                    <td colspan="6">TOTAL BUDGET</td>
                     <td class="text-right">{{ number_format((float) ($totalEstime ?? 0), 0, ',', ' ') }}</td>
                     <td class="text-right">{{ number_format((float) ($budget->lines->sum('montant_consomme') ?? 0), 0, ',', ' ') }}</td>
                     <td class="text-right">{{ number_format((float) ($budget->lines->sum('montant_stock') ?? 0), 0, ',', ' ') }}</td>

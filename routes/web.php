@@ -30,9 +30,15 @@ use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\TypologieDepenseController;
 use App\Http\Controllers\CategorieDepenseController;
+use App\Http\Controllers\TypeDepenseController;
 use App\Http\Controllers\AppSettingController;
 use App\Http\Controllers\EcritureComptableController;
 
+use App\Http\Controllers\Configuration\ArticleController;
+use App\Http\Controllers\Configuration\AgenceController;
+use App\Http\Controllers\Configuration\FamilleController;
+use App\Http\Controllers\Configuration\CategorieController;
+use App\Http\Controllers\Configuration\SousCategorieController;
 use App\Http\Controllers\AppelOffreController;
 use App\Http\Controllers\OffreController;
 use App\Http\Controllers\ComiteController;
@@ -80,11 +86,11 @@ use App\Http\Controllers\EvaluationController;
         Route::put('banques/{banque}', [\App\Http\Controllers\BanqueController::class, 'update'])->name('banques.update');
         Route::delete('banques/{banque}', [\App\Http\Controllers\BanqueController::class, 'destroy'])->name('banques.destroy');
 
-        // Comptes de charges
-        Route::get('comptes-charges', [\App\Http\Controllers\CompteChargeController::class, 'index'])->name('comptes-charges.index');
-        Route::post('comptes-charges', [\App\Http\Controllers\CompteChargeController::class, 'store'])->name('comptes-charges.store');
-        Route::put('comptes-charges/{compteCharge}', [\App\Http\Controllers\CompteChargeController::class, 'update'])->name('comptes-charges.update');
-        Route::delete('comptes-charges/{compteCharge}', [\App\Http\Controllers\CompteChargeController::class, 'destroy'])->name('comptes-charges.destroy');
+        // Types de dépenses
+        Route::get('type-depenses', [TypeDepenseController::class, 'index'])->name('type-depenses.index');
+        Route::post('type-depenses', [TypeDepenseController::class, 'store'])->name('type-depenses.store');
+        Route::put('type-depenses/{typeDepense}', [TypeDepenseController::class, 'update'])->name('type-depenses.update');
+        Route::delete('type-depenses/{typeDepense}', [TypeDepenseController::class, 'destroy'])->name('type-depenses.destroy');
         
         // Fiches d'intégration
         Route::get('fiche-integrations/export', [\App\Http\Controllers\FicheIntegrationController::class, 'export'])->name('fiche-integrations.export');
@@ -93,6 +99,19 @@ use App\Http\Controllers\EvaluationController;
         Route::post('fiche-integrations', [\App\Http\Controllers\FicheIntegrationController::class, 'store'])->name('fiche-integrations.store');
         Route::put('fiche-integrations/{ficheIntegration}', [\App\Http\Controllers\FicheIntegrationController::class, 'update'])->name('fiche-integrations.update');
         Route::delete('fiche-integrations/{ficheIntegration}', [\App\Http\Controllers\FicheIntegrationController::class, 'destroy'])->name('fiche-integrations.destroy');
+
+        // Articles & Agences & Familles
+        Route::resource('articles', ArticleController::class);
+        Route::resource('agences', AgenceController::class);
+
+        // Familles → Catégories → Sous-Catégories
+        Route::get('familles/export-template', [FamilleController::class, 'exportTemplate'])->name('familles.template');
+        Route::post('familles/import', [FamilleController::class, 'import'])->name('familles.import');
+        Route::resource('familles', FamilleController::class);
+        Route::get('familles/{famille}/categories', [FamilleController::class, 'categories'])->name('familles.categories');
+        Route::get('categories/{categorie}/sous-categories', [FamilleController::class, 'sousCategories'])->name('categories.sous-categories');
+        Route::resource('categories', CategorieController::class)->except(['index', 'show']);
+        Route::resource('sous-categories', SousCategorieController::class)->except(['index', 'show']);
     });
 
     // Routes pour les validations N+1 (AVANT le resource pour éviter que "n1" soit interprété comme {fed})

@@ -27,18 +27,32 @@ interface Categorie {
     code: string;
     sous_categories: SousCategorie[];
 }
+interface Article {
+    id: number;
+    code: string;
+    description: string;
+    responsable?: string;
+    type_depense?: { id: number; nom_depense: string; compte_gl?: string };
+    sous_categorie?: {
+        id: number;
+        sous_categorie: string;
+        categorie_id: number;
+        categorie?: { id: number; categorie: string; code: string };
+    };
+}
 
 interface BudgetLineForm {
     label: string;
     type: string;
     categorie_depense_id: number | null;
-    sous_categorie: string;
-    rubrique: string;
-    sous_rubrique: string;
-    montant_estime: number | null;
+    montant_estime: number | undefined;
     date_souhaitee_execution: string | null;
     justification: string;
     compte_gl: string;
+    responsable: string;
+    article_id: number | null;
+    article_categorie_name?: string;
+    article_sous_categorie_name?: string;
 }
 
 interface Props {
@@ -59,11 +73,14 @@ interface Props {
             rubrique?: string | null;
             sous_rubrique?: string | null;
             compte_gl?: string | null;
+            responsable?: string | null;
+            article_id?: number | null;
         }>;
     };
     departments: Department[];
     typologies: Array<{ type: string; libelle: string }>;
     categories: Categorie[];
+    articles: Article[];
 }
 
 const props = defineProps<Props>();
@@ -77,26 +94,28 @@ const makeLine = (): BudgetLineForm => ({
     label: '',
     type: '',
     categorie_depense_id: null,
-    sous_categorie: '',
-    rubrique: '',
-    sous_rubrique: '',
-    montant_estime: null,
+    montant_estime: undefined,
     date_souhaitee_execution: null,
     justification: '',
     compte_gl: '',
+    responsable: '',
+    article_id: null,
+    article_categorie_name: '',
+    article_sous_categorie_name: '',
 });
 
 const mapLine = (l: Props['budget']['lines'][0]): BudgetLineForm => ({
     label: l.label,
     type: l.type ?? '',
     categorie_depense_id: l.categorie_depense_id,
-    sous_categorie: l.sous_categorie_depense?.sous_categorie ?? '',
-    rubrique: l.rubrique ?? '',
-    sous_rubrique: l.sous_rubrique ?? '',
-    montant_estime: l.montant_estime != null ? Number(l.montant_estime) : null,
+    montant_estime: l.montant_estime != null ? Number(l.montant_estime) : undefined,
     date_souhaitee_execution: l.date_souhaitee_execution ?? null,
     justification: l.justification ?? '',
     compte_gl: l.compte_gl ?? '',
+    responsable: l.responsable ?? '',
+    article_id: l.article_id ?? null,
+    article_categorie_name: (l as any).article?.sous_categorie?.categorie?.categorie || '--',
+    article_sous_categorie_name: (l as any).article?.sous_categorie?.sous_categorie || '--',
 });
 
 const getSousCategories = (categorieId: number | null) => {
@@ -105,8 +124,32 @@ const getSousCategories = (categorieId: number | null) => {
     return cat?.sous_categories ?? [];
 };
 
-const onCategorieChange = (line: BudgetLineForm) => {
-    line.sous_categorie = '';
+const onCategorieChange = (line: BudgetLineForm) => { /* No longer needed */ };
+
+const onArticleChange = (line: BudgetLineForm) => {
+    const article = props.articles.find(a => a.id === line.article_id);
+    if (article) {
+        if (article.responsable) line.responsable = article.responsable;
+        
+        // Article categorization (pre-defined)
+        line.article_categorie_name = article.sous_categorie?.categorie?.categorie || '--';
+        line.article_sous_categorie_name = article.sous_categorie?.sous_categorie || '--';
+
+        // Mapping Typologie based on type_depense
+        if (article.type_depense) {
+            const typology = props.typologies.find(t =>
+                t.type.toLowerCase() === article.type_depense?.nom_depense.toLowerCase() ||
+                t.libelle.toLowerCase() === article.type_depense?.nom_depense.toLowerCase()
+            );
+            if (typology) line.type = typology.type;
+        }
+        if (article.type_depense?.compte_gl) {
+            line.compte_gl = article.type_depense.compte_gl;
+        }
+    } else {
+        line.article_categorie_name = '';
+        line.article_sous_categorie_name = '';
+    }
 };
 
 const form = useForm({
@@ -191,6 +234,34 @@ const submit = () => {
                                 <InputError :message="form.errors[`lines.${index}.type` as keyof typeof form.errors]" />
                             </div>
                             <div>
+                                <Label :for="`responsable-${index}`" class="text-base font-medium text-gray-700">Responsable</Label>
+                                <select :id="`responsable-${index}`" v-model="line.responsable"
+                                    class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900">
+                                    <option value="">-- Sélectionner --</option>
+                                    <option value="IT">IT</option>
+                                    <option value="Facilities">Facilities</option>
+                                    <option value="RH">RH</option>
+                                </select>
+                                <InputError :message="form.errors[`lines.${index}.responsable` as keyof typeof form.errors]" />
+                            </div>
+                            <div>
+                                <Label :for="`article-${index}`" class="text-base font-medium text-gray-700">Article (code ligne)</Label>
+                                <select :id="`article-${index}`" v-model="line.article_id"
+                                    class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900"
+                                    @change="onArticleChange(line)">
+                                    <option :value="null">-- Sélectionner --</option>
+                                    <option v-for="art in props.articles" :key="art.id" :value="art.id">
+                                        {{ art.code }} — {{ art.description }}
+                                    </option>
+                                </select>
+                                <div v-if="line.article_id" class="mt-1.5 flex flex-wrap gap-2 text-xs text-blue-600 italic">
+                                    <span>Cat. Article: {{ line.article_categorie_name }}</span>
+                                    <span>/</span>
+                                    <span>Sous-cat. Article: {{ line.article_sous_categorie_name }}</span>
+                                </div>
+                                <InputError :message="form.errors[`lines.${index}.article_id` as keyof typeof form.errors]" />
+                            </div>
+                            <div>
                                 <Label :for="`categorie-${index}`" class="text-base font-medium text-gray-700">Catégorie dépense</Label>
                                 <select
                                     :id="`categorie-${index}`"
@@ -204,42 +275,6 @@ const submit = () => {
                                     </option>
                                 </select>
                                 <InputError :message="form.errors[`lines.${index}.categorie_depense_id` as keyof typeof form.errors]" />
-                            </div>
-                            <div>
-                                <Label :for="`sous-categorie-${index}`" class="text-base font-medium text-gray-700">Sous catégorie</Label>
-                                <Input
-                                    :id="`sous-categorie-${index}`"
-                                    v-model="line.sous_categorie"
-                                    type="text"
-                                    class="mt-1.5 border-gray-300"
-                                    :list="`sous-categorie-list-${index}`"
-                                    placeholder="Saisir ou sélectionner une sous-catégorie..."
-                                    :disabled="!line.categorie_depense_id"
-                                />
-                                <datalist :id="`sous-categorie-list-${index}`">
-                                    <option v-for="sc in getSousCategories(line.categorie_depense_id)" :key="sc.id" :value="sc.sous_categorie" />
-                                </datalist>
-                                <InputError :message="form.errors[`lines.${index}.sous_categorie` as keyof typeof form.errors]" />
-                            </div>
-                            <div>
-                                <Label :for="`rubrique-${index}`" class="text-base font-medium text-gray-700">Rubrique dépenses</Label>
-                                <Input
-                                    :id="`rubrique-${index}`"
-                                    v-model="line.rubrique"
-                                    type="text"
-                                    class="mt-1.5 border-gray-300"
-                                    :list="`rubrique-list-${index}`"
-                                    placeholder="Saisir une rubrique..."
-                                />
-                                <datalist :id="`rubrique-list-${index}`">
-                                    <option v-for="s in props.rubriqueSuggestions" :key="s" :value="s" />
-                                </datalist>
-                                <InputError :message="form.errors[`lines.${index}.rubrique` as keyof typeof form.errors]" />
-                            </div>
-                            <div>
-                                <Label :for="`sous-rubrique-${index}`" class="text-base font-medium text-gray-700">Sous rubrique</Label>
-                                <Input :id="`sous-rubrique-${index}`" v-model="line.sous_rubrique" type="text" class="mt-1.5 border-gray-300" />
-                                <InputError :message="form.errors[`lines.${index}.sous_rubrique` as keyof typeof form.errors]" />
                             </div>
                             <div>
                                 <Label :for="`montant-estime-${index}`" class="text-base font-medium text-gray-700">Montant estimé</Label>

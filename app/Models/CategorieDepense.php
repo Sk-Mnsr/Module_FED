@@ -14,6 +14,7 @@ class CategorieDepense extends Model
     protected $fillable = [
         'categorie',
         'code',
+        'responsable',
     ];
 
     public function sousCategories()

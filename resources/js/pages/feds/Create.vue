@@ -10,11 +10,18 @@ import FormSection from '@/components/FormSection.vue';
 import { computed, ref, watch } from 'vue';
 import { Plus, Trash2, Minus } from 'lucide-vue-next';
 
+interface FedItemEntityForm {
+    budget_line_id: number;
+    quantity: number;
+    label: string;
+}
+
 interface FedItemForm {
     label: string;
     budget_line_id: number | '';
     quantity: number | '';
     description: string;
+    entities: FedItemEntityForm[];
 }
 
 interface Department {
@@ -29,18 +36,15 @@ interface BudgetLine {
     montant_estime?: number | null;
     year?: number | null;
     department_name?: string | null;
+    is_global: boolean;
+    global_line_id?: number | null;
+    agence_name?: string | null;
 }
 
-interface Category {
-    id: number;
-    categorie: string;
-    code: string;
-}
 
 interface Props {
     departments: Department[];
     budgetLines: BudgetLine[];
-    categories: Category[];
     userDepartment?: string | null;
 }
 
@@ -62,6 +66,7 @@ const makeItem = (): FedItemForm => ({
     budget_line_id: '',
     quantity: 1,
     description: '',
+    entities: [],
 });
 
 const form = useForm({
@@ -69,8 +74,6 @@ const form = useForm({
     demandeur: '',
     department: props.userDepartment || '',
     fonction: '',
-    category: '',
-    subcategory: '',
     beneficiaire: [''],
     motive: '',
     priority: 'normal',
@@ -137,9 +140,40 @@ const selectedYear = computed(() => {
     return new Date().getFullYear();
 });
 
+const handleBudgetLineChange = (index: number) => {
+    const item = form.items[index];
+    if (!item.budget_line_id) {
+        item.entities = [];
+        return;
+    }
+
+    const subLines = props.budgetLines.filter(line => line.global_line_id === item.budget_line_id);
+    item.entities = subLines.map(line => ({
+        budget_line_id: line.id,
+        quantity: 0,
+        label: line.agence_name || line.label,
+    }));
+    item.quantity = 0;
+};
+
+watch(
+    () => form.items,
+    (newItems) => {
+        newItems.forEach((item) => {
+            if (item.entities.length > 0) {
+                const total = item.entities.reduce((sum, entity) => sum + (Number(entity.quantity) || 0), 0);
+                if (item.quantity !== total) {
+                    item.quantity = total;
+                }
+            }
+        });
+    },
+    { deep: true }
+);
+
 const availableBudgetLines = computed(() => {
     return props.budgetLines.filter(line => {
-        if (!line.department_name || !line.year) {
+        if (!line.department_name || !line.year || !line.is_global) {
             return false;
         }
         return line.department_name === form.department && line.year === selectedYear.value;
@@ -148,8 +182,8 @@ const availableBudgetLines = computed(() => {
 
 const submit = () => {
     // Client-side validation for mandatory fields
-    if (!form.department || !form.category || !form.motive) {
-        alert('Veuillez renseigner tous les champs obligatoires (Département, Catégorie, Motif).');
+    if (!form.department || !form.motive) {
+        alert('Veuillez renseigner tous les champs obligatoires (Département, Motif).');
         return;
     }
 
@@ -158,9 +192,14 @@ const submit = () => {
         return;
     }
     
-    const invalidItems = form.items.some(item => !item.label || !item.budget_line_id || !item.quantity);
+    const invalidItems = form.items.some(item => {
+        if (!item.label || !item.budget_line_id || !item.quantity) return true;
+        // Si c'est une ligne globale avec des entités, il faut qu'au moins une entité ait une quantité > 0
+        if (item.entities.length > 0 && !item.entities.some(e => e.quantity > 0)) return true;
+        return false;
+    });
     if (invalidItems) {
-        alert('Veuillez renseigner l\'intitulé, la ligne budgétaire et la quantité pour tous les articles.');
+        alert('Veuillez renseigner l\'intitulé, la ligne budgétaire et les quantités (par entité si applicable) pour tous les articles.');
         return;
     }
 
@@ -226,25 +265,6 @@ const submit = () => {
                         <InputError :message="form.errors.fonction" />
                     </div>
 
-                    <div>
-                        <Label for="category" class="text-base font-medium text-gray-700">Catégorie des dépenses</Label>
-                        <select
-                            id="category"
-                            v-model="form.category"
-                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900"
-                        >
-                            <option value="">-- Sélectionner --</option>
-                            <option v-for="cat in props.categories" :key="cat.id" :value="cat.code">
-                                {{ cat.categorie }} ({{ cat.code }})
-                            </option>
-                        </select>
-                        <InputError :message="form.errors.category" />
-                    </div>
-                    <div>
-                        <Label for="subcategory" class="text-base font-medium text-gray-700">Sous-catégorie</Label>
-                        <Input id="subcategory" v-model="form.subcategory" type="text" class="mt-1.5 border-gray-300" />
-                        <InputError :message="form.errors.subcategory" />
-                    </div>
 
                     <div>
                         <div class="flex items-center justify-between">
@@ -326,16 +346,20 @@ const submit = () => {
                                     v-model.number="item.quantity"
                                     type="number"
                                     step="1"
-                                    class="mt-1.5 border-gray-300"
+                                    :readonly="item.entities.length > 0"
+                                    :class="['mt-1.5 border-gray-300', item.entities.length > 0 ? 'bg-gray-50' : '']"
                                 />
                                 <InputError :message="form.errors[`items.${index}.quantity` as keyof typeof form.errors]" />
                             </div>
+
+
 
                             <div class="md:col-span-2">
                                 <Label :for="`budget-line-${index}`" class="text-base font-medium text-gray-700">Ligne budgétaire</Label>
                                 <select
                                     :id="`budget-line-${index}`"
                                     v-model="item.budget_line_id"
+                                    @change="handleBudgetLineChange(index)"
                                     class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
                                 >
                                     <option value="">-- Sélectionner --</option>
@@ -348,6 +372,40 @@ const submit = () => {
                                     <option v-else disabled>Sélectionnez un département</option>
                                 </select>
                                 <InputError :message="form.errors[`items.${index}.budget_line_id` as keyof typeof form.errors]" />
+                            </div>
+                                                        <div v-if="item.entities.length > 0" class="md:col-span-2 space-y-3 rounded-md border border-gray-100 bg-gray-50/50 p-4">
+                                <div class="flex items-center justify-between">
+                                    <Label class="text-sm font-semibold text-gray-600 uppercase tracking-wider">Quantités par entité ({{ item.entities.length }})</Label>
+                                    <span class="text-xs text-gray-400 italic">Détail par entité</span>
+                                </div>
+                                <div class="max-h-[300px] overflow-y-auto rounded border border-gray-200 bg-white">
+                                    <table class="w-full text-sm">
+                                        <thead class="sticky top-0 bg-gray-100 text-xs font-medium text-gray-500 uppercase">
+                                            <tr>
+                                                <th class="px-3 py-2 text-left">Entité</th>
+                                                <th class="px-3 py-2 text-right w-32">Quantité</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <tr v-for="(entity, eIndex) in item.entities" :key="eIndex" class="hover:bg-gray-50/50">
+                                                <td class="px-3 py-3 font-medium text-gray-700">
+                                                    {{ entity.label }}
+                                                </td>
+                                                <td class="px-3 py-2">
+                                                    <Input
+                                                        :id="`entity-${index}-${eIndex}`"
+                                                        v-model.number="entity.quantity"
+                                                        type="number"
+                                                        step="1"
+                                                        min="0"
+                                                        class="h-9 border-gray-300 text-right font-medium"
+                                                        placeholder="0"
+                                                    />
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                             <div class="md:col-span-2">
                                 <Label :for="`desc-${index}`" class="text-base font-medium text-gray-700">Description</Label>
