@@ -18,9 +18,6 @@ class AchatsFedController extends Controller
 
         $feds = Fed::with(['requester'])
             ->whereIn('status', [
-                Fed::STATUS_PENDING_VALIDATION,
-                Fed::STATUS_N1_NEEDS_INFO,
-                Fed::STATUS_N1_REJECTED,
                 Fed::STATUS_N1_APPROVED,
                 Fed::STATUS_ACHATS_NEEDS_INFO,
                 Fed::STATUS_ACHATS_REJECTED,

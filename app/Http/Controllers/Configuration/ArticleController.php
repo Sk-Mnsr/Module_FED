@@ -35,6 +35,8 @@ class ArticleController extends Controller
             'responsable'      => 'required|in:IT,Facilities,RH,ALL',
             'sous_categorie_id' => 'nullable|exists:sous_categories,id',
             'type_depense_id'  => 'nullable|exists:type_depenses,id',
+            'stock_actuel'     => 'nullable|integer|min:0',
+            'seuil_alerte'     => 'nullable|integer|min:0',
         ]);
 
         Article::create($validated);
@@ -49,6 +51,8 @@ class ArticleController extends Controller
             'responsable'      => 'required|in:IT,Facilities,RH,ALL',
             'sous_categorie_id' => 'nullable|exists:sous_categories,id',
             'type_depense_id'  => 'nullable|exists:type_depenses,id',
+            'stock_actuel'     => 'nullable|integer|min:0',
+            'seuil_alerte'     => 'nullable|integer|min:0',
         ]);
 
         $article->update($validated);

@@ -60,6 +60,8 @@ const form = ref({
     categorie_id: null as number | null,
     sous_categorie_id: null as number | null,
     type_depense_id: null as number | null,
+    stock_actuel: 0,
+    seuil_alerte: 5,
 });
 
 // Filtrage dynamique en cascade
@@ -93,7 +95,7 @@ const resolveHierarchy = (article: any) => {
 
 const openCreateModal = () => {
     isEditing.value = false;
-    form.value = { id: null, code: '', description: '', responsable: 'ALL', famille_id: null, categorie_id: null, sous_categorie_id: null, type_depense_id: null };
+    form.value = { id: null, code: '', description: '', responsable: 'ALL', famille_id: null, categorie_id: null, sous_categorie_id: null, type_depense_id: null, stock_actuel: 0, seuil_alerte: 5 };
     showModal.value = true;
 };
 
@@ -108,6 +110,8 @@ const openEditModal = (article: any) => {
         categorie_id: null,
         sous_categorie_id: article.sous_categorie_id ?? null,
         type_depense_id: article.type_depense_id ?? null,
+        stock_actuel: article.stock_actuel ?? 0,
+        seuil_alerte: article.seuil_alerte ?? 5,
     };
     resolveHierarchy(article);
     showModal.value = true;
@@ -125,6 +129,8 @@ const submitForm = () => {
         responsable: form.value.responsable,
         sous_categorie_id: form.value.sous_categorie_id,
         type_depense_id: form.value.type_depense_id,
+        stock_actuel: form.value.stock_actuel,
+        seuil_alerte: form.value.seuil_alerte,
     };
     if (isEditing.value) {
         router.put(`/articles/${form.value.id}`, payload, { onSuccess: () => showModal.value = false });
@@ -211,6 +217,18 @@ const breadcrumbLabel = (article: any) => {
                     <div class="space-y-1.5">
                         <Label for="description">Description <span class="text-red-500">*</span></Label>
                         <Input id="description" v-model="form.description" required placeholder="Description de l'article" />
+                    </div>
+
+                    <!-- Stock Initial & Seuil -->
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <Label for="stock_actuel">Stock Initial</Label>
+                            <Input id="stock_actuel" type="number" v-model="form.stock_actuel" min="0" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="seuil_alerte">Seuil d'Alerte</Label>
+                            <Input id="seuil_alerte" type="number" v-model="form.seuil_alerte" min="0" />
+                        </div>
                     </div>
 
                     <!-- Hiérarchie en cascade -->

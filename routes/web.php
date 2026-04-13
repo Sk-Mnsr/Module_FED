@@ -43,6 +43,9 @@ use App\Http\Controllers\AppelOffreController;
 use App\Http\Controllers\OffreController;
 use App\Http\Controllers\ComiteController;
 use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\DemandeApprovisionnementController;
+
     // Routes pour les utilisateurs
     // - SuperAdmin uniquement : toutes les opérations (fait partie de Configuration)
     Route::middleware(['auth'])->group(function () {
@@ -200,6 +203,20 @@ use App\Http\Controllers\EvaluationController;
     // Routes pour les Évaluations
     Route::get('offres/{offre}/evaluations/create', [EvaluationController::class, 'create'])->name('evaluations.create');
     Route::post('offres/{offre}/evaluations', [EvaluationController::class, 'store'])->name('evaluations.store');
+
+    // Routes pour la Gestion de Stock
+    Route::middleware('role:it,responsable_achats,responsable_stock')->group(function () {
+        Route::get('stock', [StockController::class, 'index'])->name('stock.index');
+        Route::get('stock/movements', [StockController::class, 'movements'])->name('stock.movements');
+        Route::post('stock/movements', [StockController::class, 'store'])->name('stock.movements.store');
+        
+        Route::post('demandes-approvisionnement/{demande}/status', [DemandeApprovisionnementController::class, 'updateStatus'])->name('demandes-approvisionnement.update-status');
+    });
+
+    Route::resource('demandes-approvisionnement', DemandeApprovisionnementController::class)->parameters([
+        'demandes-approvisionnement' => 'demande'
+    ]);
+
 
 });
 

@@ -46,6 +46,24 @@ const mainNavItems = computed<NavItem[]>(() => {
 
     const roleSlugs: string[] = auth.value?.roles || [];
     const profileType = auth.value?.user?.profile;
+
+    const approachItems = [];
+    if (!roleSlugs.includes('responsable_stock')) {
+        approachItems.push({
+            title: 'Nouvelle demande',
+            href: '/demandes-approvisionnement/create',
+        });
+    }
+    approachItems.push({
+        title: 'Liste des demandes',
+        href: '/demandes-approvisionnement',
+    });
+
+    items.push({
+        title: 'Approvisionnement',
+        icon: ShoppingCart,
+        items: approachItems,
+    });
     const hasConfigAccess = auth.value?.isSuperAdmin
         || auth.value?.isIt
         || auth.value?.isAdmin
@@ -108,6 +126,14 @@ const mainNavItems = computed<NavItem[]>(() => {
             title: 'Bons de commande',
             href: '/bons-de-commande',
             icon: FileText,
+        });
+    }
+
+    if (hasConfigAccess || roleSlugs.includes('responsable_achats') || roleSlugs.includes('responsable_stock')) {
+        items.push({
+            title: 'Gestion de Stock',
+            href: '/stock',
+            icon: Table2,
         });
     }
 

@@ -16,6 +16,8 @@ class Article extends Model
         'responsable',
         'sous_categorie_id',
         'type_depense_id',
+        'stock_actuel',
+        'seuil_alerte',
     ];
 
     public function sousCategorie(): BelongsTo
@@ -26,6 +28,16 @@ class Article extends Model
     public function typeDepense(): BelongsTo
     {
         return $this->belongsTo(TypeDepense::class);
+    }
+
+    public function stockMovements()
+    {
+        return $this->hasMany(StockMovement::class);
+    }
+
+    public function latestMovement()
+    {
+        return $this->hasOne(StockMovement::class)->latestOfMany();
     }
 }
 

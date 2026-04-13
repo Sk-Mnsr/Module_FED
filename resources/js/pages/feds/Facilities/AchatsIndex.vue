@@ -167,7 +167,6 @@ const tableData = computed(() =>
                     >
                         <option value="">Tous les statuts</option>
                         <optgroup label="Initial">
-                            <option value="pending_validation">En attente N+1</option>
                             <option value="n1_approved">En attente Achats</option>
                         </optgroup>
                         <optgroup label="Achats">

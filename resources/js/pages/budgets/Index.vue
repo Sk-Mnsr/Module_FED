@@ -361,7 +361,7 @@ const responsableBadge = (r?: string | null) => {
                                         </button>
                                     </td>
                                     <td class="px-4 py-3 text-sm text-gray-900">{{ index + 1 }}</td>
-                                    <td class="px-4 py-3 text-sm font-mono text-purple-700">{{ line.code || '-' }}</td>
+                                    <td class="px-4 py-3 text-sm font-mono text-purple-700 whitespace-nowrap">{{ line.code || '-' }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-900">{{ line.label }}</td>
                                     <td class="px-4 py-3">
                                         <span v-if="line.responsable" :class="['inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', responsableBadge(line.responsable)]">
@@ -414,7 +414,7 @@ const responsableBadge = (r?: string | null) => {
                                     >
                                         <td class="px-2 py-2"></td>
                                         <td class="px-4 py-2"></td>
-                                        <td class="px-4 py-2 text-xs font-mono text-gray-500">{{ entityLine.code || '-' }}</td>
+                                        <td class="px-4 py-2 text-xs font-mono text-gray-500 whitespace-nowrap">{{ entityLine.code || '-' }}</td>
                                         <td class="px-4 py-2 text-xs text-gray-600">
                                             <span class="mr-1.5 inline-flex items-center rounded bg-gray-200 px-1.5 py-0.5 text-xs font-medium text-gray-700">
                                                 {{ entityLine.agence?.nom ?? entityLine.agence?.code ?? '?' }}

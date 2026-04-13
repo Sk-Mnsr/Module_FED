@@ -165,6 +165,20 @@ const priorityOptions = [
 
 const hasItems = ref(props.fed.items && props.fed.items.length > 0);
 const hasAttachments = ref(props.fed.attachments && props.fed.attachments.length > 0);
+const isEditingTotal = ref(false);
+
+const getEntityPercentage = (item: FedItemForm, entity: FedItemEntityForm) => {
+    const total = Number(item.quantity) || 0;
+    if (total === 0) return 0;
+    return Number(((entity.quantity / total) * 100).toFixed(2));
+};
+
+const handlePercentageChange = (item: FedItemForm, entity: FedItemEntityForm, percentage: number) => {
+    const total = Number(item.quantity) || 0;
+    if (total > 0) {
+        entity.quantity = Math.round((percentage / 100) * total);
+    }
+};
 
 const addItem = () => {
     form.items.push(makeItem());
@@ -232,6 +246,8 @@ const handleBudgetLineChange = (index: number) => {
 watch(
     () => form.items,
     (newItems: FedItemForm[]) => {
+        if (isEditingTotal.value) return;
+
         newItems.forEach((item: FedItemForm) => {
             if (item.entities && item.entities.length > 0) {
                 const total = item.entities.reduce((sum: number, entity: FedItemEntityForm) => sum + (Number(entity.quantity) || 0), 0);
@@ -484,8 +500,9 @@ const submitRequest = () => {
                                     v-model.number="item.quantity"
                                     type="number"
                                     step="1"
-                                    :readonly="item.entities && item.entities.length > 0"
-                                    :class="['mt-1.5 border-gray-300', (item.entities && item.entities.length > 0) ? 'bg-gray-50' : '']"
+                                    @focus="isEditingTotal = true"
+                                    @blur="isEditingTotal = false"
+                                    :class="['mt-1.5 border-gray-300', (item.entities && item.entities.length > 0) ? 'bg-blue-50/30' : '']"
                                 />
                                 <InputError :message="form.errors[`items.${index}.quantity` as keyof typeof form.errors]" />
                             </div>
@@ -500,6 +517,7 @@ const submitRequest = () => {
                                         <thead class="sticky top-0 bg-gray-100 text-xs font-medium text-gray-500 uppercase">
                                             <tr>
                                                 <th class="px-3 py-2 text-left">Entité / Agence</th>
+                                                <th class="px-3 py-2 text-right w-32">Perc. (%)</th>
                                                 <th class="px-3 py-2 text-right w-32">Quantité</th>
                                             </tr>
                                         </thead>
@@ -507,6 +525,16 @@ const submitRequest = () => {
                                             <tr v-for="(entity, eIndex) in item.entities" :key="eIndex" class="hover:bg-gray-50/50">
                                                 <td class="px-3 py-3 font-medium text-gray-700">
                                                     {{ entity.label }}
+                                                </td>
+                                                <td class="px-3 py-2">
+                                                    <Input
+                                                        :id="`entity-perc-${index}-${eIndex}`"
+                                                        :value="getEntityPercentage(item, entity)"
+                                                        type="number"
+                                                        readonly
+                                                        class="h-9 border-gray-300 text-right font-medium bg-gray-50"
+                                                        placeholder="0"
+                                                    />
                                                 </td>
                                                 <td class="px-3 py-2">
                                                     <Input
