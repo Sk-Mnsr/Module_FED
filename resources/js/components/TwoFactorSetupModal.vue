@@ -15,7 +15,6 @@ import {
     PinInputSlot,
 } from '@/components/ui/pin-input';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
-import { confirm } from '@/routes/two-factor';
 import { Form } from '@inertiajs/vue3';
 import { useClipboard } from '@vueuse/core';
 import { Check, Copy, Loader2, ScanLine } from 'lucide-vue-next';
@@ -38,6 +37,11 @@ const code = ref<number[]>([]);
 const codeValue = computed<string>(() => code.value.join(''));
 
 const pinInputContainerRef = ref<HTMLElement | null>(null);
+
+const confirmTwoFactorForm = {
+    action: '/user/confirmed-two-factor-authentication',
+    method: 'post' as const,
+};
 
 const modalConfig = computed<{
     title: string;
@@ -231,7 +235,7 @@ watch(
 
                 <template v-else>
                     <Form
-                        v-bind="confirm.form()"
+                        v-bind="confirmTwoFactorForm"
                         reset-on-error
                         @finish="code = []"
                         @success="isOpen = false"

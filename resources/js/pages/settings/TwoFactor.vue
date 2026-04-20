@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useTwoFactorAuth } from '@/composables/useTwoFactorAuth';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import { disable, enable, show } from '@/routes/two-factor';
+import { show } from '@/routes/two-factor';
 import { BreadcrumbItem } from '@/types';
 import { Form, Head } from '@inertiajs/vue3';
 import { ShieldBan, ShieldCheck } from 'lucide-vue-next';
@@ -32,6 +32,16 @@ const breadcrumbs: BreadcrumbItem[] = [
 
 const { hasSetupData, clearTwoFactorAuthData } = useTwoFactorAuth();
 const showSetupModal = ref<boolean>(false);
+
+const enableTwoFactorForm = {
+    action: '/user/two-factor-authentication',
+    method: 'post' as const,
+};
+
+const disableTwoFactorForm = {
+    action: '/user/two-factor-authentication',
+    method: 'post' as const,
+};
 
 onUnmounted(() => {
     clearTwoFactorAuthData();
@@ -70,7 +80,7 @@ onUnmounted(() => {
                         </Button>
                         <Form
                             v-else
-                            v-bind="enable.form()"
+                            v-bind="enableTwoFactorForm"
                             @success="showSetupModal = true"
                             #default="{ processing }"
                         >
@@ -97,7 +107,8 @@ onUnmounted(() => {
                     <TwoFactorRecoveryCodes />
 
                     <div class="relative inline">
-                        <Form v-bind="disable.form()" #default="{ processing }">
+                        <Form v-bind="disableTwoFactorForm" #default="{ processing }">
+                            <input type="hidden" name="_method" value="DELETE" />
                             <Button
                                 variant="destructive"
                                 type="submit"

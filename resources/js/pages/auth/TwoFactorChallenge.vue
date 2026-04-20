@@ -8,7 +8,6 @@ import {
     PinInputSlot,
 } from '@/components/ui/pin-input';
 import AuthLayout from '@/layouts/AuthLayout.vue';
-import { store } from '@/routes/two-factor/login';
 import { Form, Head } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
@@ -38,6 +37,11 @@ const authConfigContent = computed<AuthConfigContent>(() => {
 
 const showRecoveryInput = ref<boolean>(false);
 
+const challengeForm = {
+    action: '/two-factor-challenge',
+    method: 'post' as const,
+};
+
 const toggleRecoveryMode = (clearErrors: () => void): void => {
     showRecoveryInput.value = !showRecoveryInput.value;
     clearErrors();
@@ -58,7 +62,7 @@ const codeValue = computed<string>(() => code.value.join(''));
         <div class="space-y-6">
             <template v-if="!showRecoveryInput">
                 <Form
-                    v-bind="store.form()"
+                    v-bind="challengeForm"
                     class="space-y-4"
                     reset-on-error
                     @error="code = []"
@@ -107,7 +111,7 @@ const codeValue = computed<string>(() => code.value.join(''));
 
             <template v-else>
                 <Form
-                    v-bind="store.form()"
+                    v-bind="challengeForm"
                     class="space-y-4"
                     reset-on-error
                     #default="{ errors, processing, clearErrors }"
