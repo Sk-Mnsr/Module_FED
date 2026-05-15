@@ -2,7 +2,15 @@ import { InertiaLinkProps } from '@inertiajs/vue3';
 import type { LucideIcon } from 'lucide-vue-next';
 
 export interface Auth {
-    user: User;
+    user: User | null;
+    profil?: string | null;
+    roles?: string[];
+    isSuperAdmin?: boolean;
+    isInCommittee?: boolean;
+    canMonetiqueCentral?: boolean;
+    canResponsableMonetique?: boolean;
+    canInitiateCoficarteVente?: boolean;
+    canInitiateCoficarteRecharge?: boolean;
 }
 
 export interface BreadcrumbItem {
@@ -18,6 +26,12 @@ export interface NavItem {
     items?: NavItem[];
     onClick?: () => void;
     separator?: boolean;
+}
+
+/** Groupe du menu latéral (ex. FED, Gestion de stock). */
+export interface NavGroup {
+    label?: string;
+    items: NavItem[];
 }
 
 export type AppPageProps<

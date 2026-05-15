@@ -3,10 +3,12 @@
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\RequirePasswordChange;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+use Maravel\Http\Middleware\AccountStatusMiddleware;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,16 +18,17 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-            // Middleware Maravel pour vérifier le statut du compte
-            $middleware->alias([
-        'account.status' => \Maravel\Http\Middleware\AccountStatusMiddleware::class,
-            ]);
+        // Middleware Maravel pour vérifier le statut du compte
+        $middleware->alias([
+            'account.status' => AccountStatusMiddleware::class,
+        ]);
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
 
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+            RequirePasswordChange::class,
         ]);
 
         $middleware->alias([

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->enum('profile', ['admin', 'other'])->default('other');
+            $table->enum('profile', ['admin', 'other', 'monetique'])->default('other');
             $table->boolean('activated')->default(true);
             $table->boolean('password_change_required')->default(false);
             $table->text('two_factor_secret')->nullable();

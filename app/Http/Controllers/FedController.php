@@ -2,10 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BudgetLine;
+use App\Models\Department;
 use App\Models\Fed;
 use App\Models\FedAttachment;
 use App\Models\FedItem;
-use App\Models\BudgetLine;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -28,26 +29,26 @@ class FedController extends Controller
 
     public function create(Request $request)
     {
-        $departments = \App\Models\Department::orderBy('name')->get(['id', 'name']);
+        $departments = Department::orderBy('name')->get(['id', 'name']);
         $budgetLines = BudgetLine::where('is_reclassified', false)
             ->with('agence:id,nom,code')
             ->get(['id', 'code', 'label', 'montant_estime', 'budget_id', 'is_global', 'global_line_id', 'agence_id'])
             ->map(function (BudgetLine $line) {
-            return [
-                'id' => $line->id,
-                'code' => $line->code,
-                'label' => $line->label,
-                'montant_estime' => $line->montant_estime,
-                'year' => $line->budget?->year,
-                'department_name' => $line->budget?->department?->name,
-                'is_global' => $line->is_global,
-                'global_line_id' => $line->global_line_id,
-                'agence_name' => $line->agence?->nom,
-            ];
-        })->values();
+                return [
+                    'id' => $line->id,
+                    'code' => $line->code,
+                    'label' => $line->label,
+                    'montant_estime' => $line->montant_estime,
+                    'year' => $line->budget?->year,
+                    'department_name' => $line->budget?->department?->name,
+                    'is_global' => $line->is_global,
+                    'global_line_id' => $line->global_line_id,
+                    'agence_name' => $line->agence?->nom,
+                ];
+            })->values();
 
-
-        $userDepartment = $request->user()->profil?->departement;
+        $userDepartment = $request->user()->department?->name
+            ?? $request->user()->profil?->departement;
 
         return Inertia::render('feds/Create', [
             'departments' => $departments,
@@ -82,7 +83,7 @@ class FedController extends Controller
 
         DB::commit();
 
-        return redirect(route('feds.edit', $fed) . '?submit=1')
+        return redirect(route('feds.edit', $fed).'?submit=1')
             ->with('success', 'Demande créée. Soumettez pour validation.');
     }
 
@@ -107,12 +108,11 @@ class FedController extends Controller
 
         $fed->load(['items.budgetLine', 'items.entities', 'attachments']);
 
-
         return Inertia::render('feds/Edit', [
             'fed' => $fed,
             'canEdit' => $fed->isEditableByRequester(),
             'authSignature' => $request->user()->signature,
-            'departments' => \App\Models\Department::orderBy('name')->get(['id', 'name']),
+            'departments' => Department::orderBy('name')->get(['id', 'name']),
             'budgetLines' => BudgetLine::where('is_reclassified', false)
                 ->with(['budget.department', 'agence:id,nom,code'])
                 ->get()
@@ -129,7 +129,8 @@ class FedController extends Controller
                         'agence_name' => $line->agence?->nom,
                     ];
                 })->values(),
-            'userDepartment' => $request->user()->profil?->departement,
+            'userDepartment' => $request->user()->department?->name
+                ?? $request->user()->profil?->departement,
         ]);
     }
 
@@ -139,7 +140,7 @@ class FedController extends Controller
             abort(403);
         }
 
-        if (!$fed->isEditableByRequester()) {
+        if (! $fed->isEditableByRequester()) {
             return redirect()->route('feds.index')
                 ->with('error', "Cette FED n'est plus modifiable.");
         }
@@ -169,7 +170,7 @@ class FedController extends Controller
             abort(403);
         }
 
-        if (!$fed->isEditableByRequester()) {
+        if (! $fed->isEditableByRequester()) {
             return redirect()->route('feds.index')
                 ->with('error', "Cette FED n'est plus supprimable.");
         }
@@ -194,7 +195,7 @@ class FedController extends Controller
             abort(403);
         }
 
-        if (!$fed->isEditableByRequester()) {
+        if (! $fed->isEditableByRequester()) {
             return redirect()->route('feds.index')
                 ->with('error', "Cette FED n'est plus soumissible.");
         }
@@ -204,10 +205,10 @@ class FedController extends Controller
         $validated = validator($payload, $this->getSubmitRules())->validate();
 
         $signature = $validated['requester_signature'] ?? null;
-        if (!$signature && $request->boolean('use_saved_signature')) {
+        if (! $signature && $request->boolean('use_saved_signature')) {
             $signature = $request->user()->signature;
         }
-        if (!$signature) {
+        if (! $signature) {
             return redirect()->back()->withErrors(['requester_signature' => 'Signature requise.']);
         }
 
@@ -244,7 +245,7 @@ class FedController extends Controller
             'department' => 'nullable|string|max:255',
             'fonction' => 'nullable|string|max:255',
             'beneficiaire' => ['nullable', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !is_array($value) && !is_string($value)) {
+                if ($value !== null && $value !== '' && ! is_array($value) && ! is_string($value)) {
                     $fail('Le champ bénéficiaire doit être une liste ou un texte.');
                 }
             }],
@@ -275,7 +276,7 @@ class FedController extends Controller
             'department' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'beneficiaire' => ['nullable', function ($attribute, $value, $fail) {
-                if ($value !== null && $value !== '' && !is_array($value) && !is_string($value)) {
+                if ($value !== null && $value !== '' && ! is_array($value) && ! is_string($value)) {
                     $fail('Le champ bénéficiaire doit être une liste ou un texte.');
                 }
             }],
@@ -316,7 +317,7 @@ class FedController extends Controller
         $payload = [];
 
         foreach ($fields as $field) {
-            if ($onlyProvided && !array_key_exists($field, $data)) {
+            if ($onlyProvided && ! array_key_exists($field, $data)) {
                 continue;
             }
 
@@ -324,13 +325,14 @@ class FedController extends Controller
 
             if ($field === 'beneficiaire') {
                 $payload[$field] = $this->normalizeBeneficiaires($value);
+
                 continue;
             }
 
             $payload[$field] = $value;
         }
 
-        if (!$onlyProvided && empty($payload['priority'])) {
+        if (! $onlyProvided && empty($payload['priority'])) {
             $payload['priority'] = 'normal';
         }
 
@@ -358,7 +360,7 @@ class FedController extends Controller
                 'total_price' => $item['total_price'] ?? null,
             ]);
 
-            if (!empty($item['entities'])) {
+            if (! empty($item['entities'])) {
                 foreach ($item['entities'] as $entity) {
                     if ($entity['quantity'] > 0) {
                         $fedItem->entities()->create([
@@ -376,7 +378,7 @@ class FedController extends Controller
         $normalized = [];
 
         foreach ($items as $item) {
-            if (!is_array($item)) {
+            if (! is_array($item)) {
                 continue;
             }
 
@@ -403,12 +405,12 @@ class FedController extends Controller
 
     private function storeAttachments(Fed $fed, Request $request): void
     {
-        if (!$request->hasFile('attachments')) {
+        if (! $request->hasFile('attachments')) {
             return;
         }
 
         foreach ($request->file('attachments', []) as $file) {
-            if (!$file || !$file->isValid()) {
+            if (! $file || ! $file->isValid()) {
                 continue;
             }
 
@@ -427,7 +429,7 @@ class FedController extends Controller
 
     private function deleteAttachments(Fed $fed, array $attachmentIds): void
     {
-        if (!$attachmentIds) {
+        if (! $attachmentIds) {
             return;
         }
 
@@ -533,4 +535,3 @@ class FedController extends Controller
         return $data;
     }
 }
-

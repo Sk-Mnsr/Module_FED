@@ -4,11 +4,14 @@ namespace App\Providers;
 
 use App\Actions\Fortify\CreateNewUser;
 use App\Actions\Fortify\ResetUserPassword;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
@@ -28,9 +31,40 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->configureAuthentication();
         $this->configureActions();
         $this->configureViews();
         $this->configureRateLimiting();
+    }
+
+    private function configureAuthentication(): void
+    {
+        Fortify::authenticateUsing(function (Request $request) {
+            $username = Fortify::username();
+
+            $user = User::query()
+                ->where($username, $request->{$username})
+                ->with('profil')
+                ->first();
+
+            if (! $user || ! Hash::check((string) $request->password, $user->password)) {
+                return null;
+            }
+
+            if (! $user->activated) {
+                throw ValidationException::withMessages([
+                    $username => __('Ce compte est désactivé. Contactez l’administrateur.'),
+                ]);
+            }
+
+            if (! User::annuaireProfilAllowsLogin($user->profil)) {
+                throw ValidationException::withMessages([
+                    $username => __('Votre fiche annuaire n’est pas active. Contactez l’administrateur.'),
+                ]);
+            }
+
+            return $user;
+        });
     }
 
     /**

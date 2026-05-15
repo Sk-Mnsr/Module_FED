@@ -16,6 +16,14 @@ interface Props {
             nom: string;
             slug: string;
         }[];
+        agence?: {
+            id: number;
+            code: string;
+            nom: string;
+        } | null;
+        matricule?: string | null;
+        department_id?: number | null;
+        department?: { id: number; name: string } | null;
         profil?: {
             id: number;
             nom: string;
@@ -73,6 +81,23 @@ const breadcrumbs: BreadcrumbItem[] = [
                             <dd class="mt-1 text-sm">{{ user.email }}</dd>
                         </div>
                         <div>
+                            <dt class="text-muted-foreground text-sm font-medium">IDFLEX</dt>
+                            <dd class="mt-1 text-sm">{{ user.matricule || user.profil?.matricule || '—' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground text-sm font-medium">Département</dt>
+                            <dd class="mt-1 text-sm">
+                                {{ user.department?.name || user.profil?.departement || '—' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-muted-foreground text-sm font-medium">Agence (entité)</dt>
+                            <dd class="mt-1 text-sm">
+                                <template v-if="user.agence">{{ user.agence.nom }} ({{ user.agence.code }})</template>
+                                <template v-else>—</template>
+                            </dd>
+                        </div>
+                        <div>
                             <dt class="text-muted-foreground text-sm font-medium">Date de création</dt>
                             <dd class="mt-1 text-sm">
                                 {{ new Date(user.created_at).toLocaleDateString('fr-FR', {
@@ -118,29 +143,20 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
 
                 <div v-if="user.profil" class="rounded-lg border border-sidebar-border bg-card p-6">
-                    <h2 class="mb-4 text-lg font-semibold">Profil associé</h2>
+                    <h2 class="mb-4 text-lg font-semibold">Annuaire RH (synchronisé)</h2>
+                    <p class="mb-3 text-muted-foreground text-xs">
+                        Copie des champs utilisateur pour les modules (FED, budgets, N+1).
+                    </p>
                     <dl class="space-y-3">
                         <div>
-                            <dt class="text-muted-foreground text-sm font-medium">Nom complet</dt>
+                            <dt class="text-muted-foreground text-sm font-medium">Nom annuaire</dt>
                             <dd class="mt-1 text-sm">
                                 {{ user.profil.prenom }} {{ user.profil.nom }}
                             </dd>
                         </div>
-                        <div>
-                            <dt class="text-muted-foreground text-sm font-medium">Matricule</dt>
-                            <dd class="mt-1 text-sm">{{ user.profil.matricule }}</dd>
-                        </div>
                         <div v-if="user.profil.fonction">
                             <dt class="text-muted-foreground text-sm font-medium">Fonction</dt>
                             <dd class="mt-1 text-sm">{{ user.profil.fonction }}</dd>
-                        </div>
-                        <div v-if="user.profil.departement">
-                            <dt class="text-muted-foreground text-sm font-medium">Département</dt>
-                            <dd class="mt-1 text-sm">{{ user.profil.departement }}</dd>
-                        </div>
-                        <div v-if="user.profil.email">
-                            <dt class="text-muted-foreground text-sm font-medium">Email</dt>
-                            <dd class="mt-1 text-sm">{{ user.profil.email }}</dd>
                         </div>
                         <div v-if="user.profil.telephone">
                             <dt class="text-muted-foreground text-sm font-medium">Téléphone</dt>
@@ -150,10 +166,9 @@ const breadcrumbs: BreadcrumbItem[] = [
                 </div>
 
                 <div v-else class="rounded-lg border border-sidebar-border bg-card p-6">
-                    <h2 class="mb-4 text-lg font-semibold">Profil associé</h2>
-                    <p class="text-muted-foreground text-sm">Aucun profil associé à cet utilisateur</p>
-                    <p class="mt-2 text-muted-foreground text-xs">
-                        Un profil peut être associé à un utilisateur en utilisant la même adresse email.
+                    <h2 class="mb-4 text-lg font-semibold">Annuaire RH</h2>
+                    <p class="text-muted-foreground text-sm">
+                        Aucune fiche annuaire pour l’instant. Elle est créée ou mise à jour lors de l’enregistrement de l’utilisateur.
                     </p>
                 </div>
             </div>

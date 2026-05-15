@@ -73,13 +73,42 @@ class RoleSeeder extends Seeder
                 'description' => 'Opérations - Suivi et validation opérationnelle',
                 'actif' => true,
             ],
+            [
+                'nom' => 'Monétique',
+                'slug' => 'monetique',
+                'description' => 'Accès au module Monétique (Coficarte, Cartes, Transferts, Ventes)',
+                'actif' => true,
+            ],
+            [
+                'nom' => 'Responsable Monétique',
+                'slug' => 'responsable_monetique',
+                'description' => 'Gestion centrale Coficarte : ajout de cartes, modification des prix de vente (siège)',
+                'actif' => true,
+            ],
+            [
+                'nom' => "Chef d'agence CA",
+                'slug' => 'chef_agence_ca',
+                'description' => "Chef d'agence : réception / retour de cartes, gestion du stock d'agence, approvisionnement des chargés de clientèle (CC), suivi des ventes et recharges au niveau de l'agence. La monétique centrale (création de cartes, transferts siège → agence, prix) reste sur le rôle Monétique.",
+                'actif' => true,
+            ],
+            [
+                'nom' => 'Chargé Clientèle CC',
+                'slug' => 'charge_clientele_cc',
+                'description' => 'Chargé Clientèle CC - Gestion commerciale Monétique',
+                'actif' => true,
+            ],
+            [
+                'nom' => 'Caissier',
+                'slug' => 'caissier',
+                'description' => 'Caissier - Traitement des opérations Monétique au guichet',
+                'actif' => true,
+            ],
         ];
 
         foreach ($roles as $roleData) {
             Role::updateOrCreate(
                 ['nom' => $roleData['nom']],
                 [
-                    'slug' => $roleData['slug'],
                     'slug' => $roleData['slug'],
                     'description' => $roleData['description'],
                     'actif' => $roleData['actif'],
@@ -88,4 +117,3 @@ class RoleSeeder extends Seeder
         }
     }
 }
-

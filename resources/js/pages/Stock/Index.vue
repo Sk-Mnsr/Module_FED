@@ -5,12 +5,24 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAppearance } from '@/composables/useAppearance';
 import { 
     Plus, Minus, AlertTriangle, ArrowUpRight, ArrowDownRight, History, 
     ChevronDown, Package, Layers, FolderTree, Search, RotateCcw, 
-    Filter, CheckCircle, XCircle, TrendingUp, Eye
+    Filter, CheckCircle, XCircle, TrendingUp, Eye, Moon, Sun, LibraryBig,
 } from 'lucide-vue-next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+
+const { updateAppearance } = useAppearance();
+
+function togglePageTheme() {
+    if (typeof document === 'undefined') return;
+    if (document.documentElement.classList.contains('dark')) {
+        updateAppearance('light');
+    } else {
+        updateAppearance('dark');
+    }
+}
 
 
 interface Article {
@@ -225,6 +237,10 @@ const resetFilters = () => {
     statusFilter.value = 'tous';
 };
 
+const hasActiveFilters = computed(
+    () => searchQuery.value.trim() !== '' || statusFilter.value !== 'tous',
+);
+
 const showModal = ref(false);
 const showViewModal = ref(false);
 const selectedArticle = ref<Article | null>(null);
@@ -322,9 +338,13 @@ const submitMovement = () => {
 };
 
 const getStockStatusClass = (article: Article) => {
-    if (article.stock_actuel <= 0) return 'bg-red-100 text-red-800';
-    if (article.stock_actuel <= article.seuil_alerte) return 'bg-amber-100 text-amber-800';
-    return 'bg-green-100 text-green-800';
+    if (article.stock_actuel <= 0) {
+        return 'bg-red-100 text-red-800 dark:bg-red-950/80 dark:text-red-200';
+    }
+    if (article.stock_actuel <= article.seuil_alerte) {
+        return 'bg-amber-100 text-amber-900 dark:bg-amber-950/80 dark:text-amber-200';
+    }
+    return 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-200';
 };
 
 const getStockStatusLabel = (article: Article) => {
@@ -342,38 +362,62 @@ const openViewModal = (article: Article) => {
 <template>
     <Head title="Gestion de Stock" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6 max-w-7xl mx-auto">
-            <div class="flex items-center justify-between">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900 tracking-tight text-purple-900">Gestion des Stocks</h1>
-                    <div class="flex items-center gap-2 mt-1">
-                        <p class="text-sm text-gray-500 italic">Suivi et mouvements d'inventaire par Famille</p>
-                    </div>
+        <div class="flex min-h-0 w-full max-w-none flex-1 flex-col gap-5 px-4 pb-6 pt-3 sm:px-6 lg:px-8">
+            <header class="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div class="min-w-0 space-y-1">
+                    <p class="text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400">Inventaire</p>
+                    <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-50 sm:text-3xl">Gestion des stocks</h1>
+                    <p class="max-w-3xl text-sm text-gray-500 dark:text-neutral-400 lg:max-w-none">Suivi et mouvements par famille, avec filtres rapides sur les niveaux de stock.</p>
                 </div>
-                <div class="flex items-center gap-3">
-                    <Button variant="default" @click="openMovementModal(null, 'entree')" class="bg-emerald-600 hover:bg-emerald-700 flex items-center gap-2 shadow-lg shadow-emerald-200">
-                        <Plus class="h-4 w-4" /> Nouvelle Entrée
+                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        class="shrink-0 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800 relative"
+                        title="Basculer le thème clair / sombre"
+                        @click="togglePageTheme"
+                    >
+                        <Sun class="h-4 w-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+                        <Moon class="absolute h-4 w-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+                    </Button>
+                    <Button
+                        variant="default"
+                        class="bg-emerald-600 hover:bg-emerald-700 flex items-center gap-2 shadow-md shadow-emerald-600/20 dark:shadow-emerald-900/40"
+                        @click="openMovementModal(null, 'entree')"
+                    >
+                        <Plus class="h-4 w-4 shrink-0" />
+                        <span class="hidden sm:inline">Nouvelle entrée</span>
+                        <span class="sm:hidden">Entrée</span>
                     </Button>
                     <Link href="/stock/movements">
-                        <Button variant="outline" class="flex items-center gap-2 hover:bg-gray-50 border-gray-200">
-                            <History class="h-4 w-4" /> Historique
+                        <Button variant="outline" class="flex items-center gap-2 border-gray-200 bg-white hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800 dark:text-neutral-100">
+                            <History class="h-4 w-4 shrink-0" />
+                            Historique
                         </Button>
                     </Link>
                 </div>
-            </div>
+            </header>
 
-            <!-- Onglets des Familles -->
-            <div class="flex flex-col gap-2">
-                <div class="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none border-b border-gray-200">
-                    <button 
-                        v-for="famille in families" 
+            <!-- Familles : bandeau compact, scroll horizontal sur mobile -->
+            <div class="flex shrink-0 flex-col gap-1">
+                <div
+                    class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-2 scrollbar-none border-b border-gray-200 dark:border-neutral-800"
+                    role="tablist"
+                    aria-label="Familles"
+                >
+                    <button
+                        v-for="famille in families"
                         :key="famille.id"
+                        type="button"
+                        role="tab"
+                        :aria-selected="activeFamilyId === famille.id ? 'true' : 'false'"
                         @click="activeFamilyId = famille.id"
                         :class="[
-                            'px-6 py-2.5 rounded-t-lg font-bold text-sm transition-all whitespace-nowrap border-x border-t -mb-[1px]',
-                            activeFamilyId === famille.id 
-                                ? 'bg-white border-gray-200 text-purple-700 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]' 
-                                : 'bg-gray-50/50 border-transparent text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+                            'shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all sm:text-sm',
+                            activeFamilyId === famille.id
+                                ? 'bg-purple-600 text-white shadow-sm dark:bg-purple-500'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
                         ]"
                     >
                         {{ famille.nom }}
@@ -381,140 +425,203 @@ const openViewModal = (article: Article) => {
                 </div>
             </div>
 
-            <!-- Dashboard Global -->
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                <div class="bg-indigo-600 rounded-2xl p-5 text-white shadow-xl flex flex-col justify-between relative overflow-hidden group">
-                    <div class="relative z-10">
-                        <p class="text-xs font-semibold opacity-70 uppercase tracking-widest">Total Articles</p>
-                        <p class="text-4xl font-black mt-2 tracking-tight">{{ globalStats.totalArticles }}</p>
+            <!-- KPI : pleine largeur, plus confortable sur grands écrans -->
+            <div class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:gap-4">
+                <div
+                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
+                >
+                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
+                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Total articles</p>
+                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.totalArticles }}</p>
+                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Références uniques</p>
                     </div>
-                    <div class="mt-4 flex items-center text-xs opacity-80 font-medium relative z-10">
-                        <Layers class="h-3.5 w-3.5 mr-1.5" />
-                        Références uniques
-                    </div>
-                    <Layers class="absolute -right-4 -bottom-4 h-24 w-24 opacity-10 transform -rotate-12 group-hover:scale-110 transition-transform duration-500" />
+                    <Layers class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
                 </div>
 
-                <div class="bg-emerald-600 rounded-2xl p-5 text-white shadow-xl flex flex-col justify-between relative overflow-hidden group">
-                    <div class="relative z-10">
-                        <p class="text-xs font-semibold opacity-70 uppercase tracking-widest">Stock Physique</p>
-                        <p class="text-4xl font-black mt-2 tracking-tight">{{ globalStats.totalQty }}</p>
+                <div
+                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
+                >
+                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
+                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Stock physique</p>
+                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.totalQty }}</p>
+                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Unités totales</p>
                     </div>
-                    <div class="mt-4 flex items-center text-xs opacity-80 font-medium relative z-10">
-                        <TrendingUp class="h-3.5 w-3.5 mr-1.5" />
-                        Unités totales
-                    </div>
-                    <Package class="absolute -right-4 -bottom-4 h-24 w-24 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform duration-500" />
+                    <Package class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
                 </div>
 
-                <div class="bg-amber-500 rounded-2xl p-5 text-white shadow-xl flex flex-col justify-between relative overflow-hidden group">
-                    <div class="relative z-10">
-                        <p class="text-xs font-semibold opacity-70 uppercase tracking-widest">En Alerte</p>
-                        <p class="text-4xl font-black mt-2 tracking-tight">{{ globalStats.alerte }}</p>
+                <div
+                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
+                >
+                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
+                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">En alerte</p>
+                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.alerte }}</p>
+                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Sous le seuil</p>
                     </div>
-                    <div class="mt-4 flex items-center text-xs opacity-80 font-medium relative z-10">
-                        <AlertTriangle class="h-3.5 w-3.5 mr-1.5" />
-                        Articles sous le seuil
-                    </div>
-                    <AlertTriangle class="absolute -right-4 -bottom-4 h-24 w-24 opacity-10 transform -rotate-12 group-hover:scale-110 transition-transform duration-500" />
+                    <AlertTriangle class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
                 </div>
 
-                <div class="bg-rose-600 rounded-2xl p-5 text-white shadow-xl flex flex-col justify-between relative overflow-hidden group">
-                    <div class="relative z-10">
-                        <p class="text-xs font-semibold opacity-70 uppercase tracking-widest">En Rupture</p>
-                        <p class="text-4xl font-black mt-2 tracking-tight">{{ globalStats.rupture }}</p>
+                <div
+                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-rose-600 to-red-700 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
+                >
+                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
+                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">En rupture</p>
+                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.rupture }}</p>
+                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Stock épuisé</p>
                     </div>
-                    <div class="mt-4 flex items-center text-xs opacity-80 font-medium relative z-10">
-                        <XCircle class="h-3.5 w-3.5 mr-1.5" />
-                        Stock épuisé
-                    </div>
-                    <Minus class="absolute -right-4 -bottom-4 h-24 w-24 opacity-10 transform rotate-12 group-hover:scale-110 transition-transform duration-500" />
+                    <Minus class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
                 </div>
 
-                <div class="bg-slate-700 rounded-2xl p-5 text-white shadow-xl flex flex-col justify-between relative overflow-hidden group lg:hidden xl:flex">
-                    <div class="relative z-10">
-                        <p class="text-xs font-semibold opacity-70 uppercase tracking-widest">Familles</p>
-                        <p class="text-4xl font-black mt-2 tracking-tight">{{ globalStats.famillesCount }}</p>
+                <div
+                    class="relative col-span-2 flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 px-4 py-3 text-white shadow-md sm:col-span-1 sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
+                >
+                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
+                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Familles</p>
+                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.famillesCount }}</p>
+                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Groupes logiques</p>
                     </div>
-                    <div class="mt-4 flex items-center text-xs opacity-80 font-medium relative z-10">
-                        <FolderTree class="h-3.5 w-3.5 mr-1.5" />
-                        Groupes logiques
-                    </div>
-                    <FolderTree class="absolute -right-4 -bottom-4 h-24 w-24 opacity-10 transform -rotate-12 group-hover:scale-110 transition-transform duration-500" />
+                    <FolderTree class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
                 </div>
             </div>
 
-            <!-- Filtres et Recherche -->
-            <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
-                <div class="flex flex-col md:flex-row gap-4">
-                    <div class="relative flex-1">
-                        <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <Input 
-                            v-model="searchQuery" 
-                            placeholder="Rechercher par nom, code..." 
-                            class="pl-10 h-10 border-gray-200 focus-visible:ring-purple-500 rounded-lg shadow-sm"
+            <!-- Filtres -->
+            <div class="shrink-0 space-y-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 sm:p-4">
+                <div class="flex flex-col gap-3 md:flex-row md:items-center">
+                    <div class="relative min-w-0 flex-1">
+                        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
+                        <Input
+                            v-model="searchQuery"
+                            placeholder="Rechercher par nom, code…"
+                            class="h-10 rounded-lg border-gray-200 pl-10 shadow-sm focus-visible:ring-purple-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500"
                         />
                     </div>
-                    <div class="flex gap-2">
-                        <div class="relative w-[200px]">
-                            <Filter class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                            <select 
+                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <div class="relative min-w-[12rem] flex-1 sm:flex-initial sm:w-52">
+                            <Filter class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
+                            <select
                                 v-model="statusFilter"
-                                class="w-full h-10 pl-10 pr-4 rounded-lg border border-gray-200 bg-white text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm"
+                                class="h-10 w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-9 text-sm shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                             >
                                 <option value="tous">Tous les statuts</option>
-                                <option value="sains">État Optimal</option>
-                                <option value="alerte">En Alerte</option>
-                                <option value="rupture">En Rupture</option>
+                                <option value="sains">État optimal</option>
+                                <option value="alerte">En alerte</option>
+                                <option value="rupture">En rupture</option>
                             </select>
-                            <ChevronDown class="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                            <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
                         </div>
-                        <Button variant="secondary" @click="resetFilters" class="h-10 flex items-center gap-2 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 rounded-lg">
-                            <RotateCcw class="h-4 w-4" /> Réinitialiser
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            class="h-10 shrink-0 gap-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
+                            @click="resetFilters"
+                        >
+                            <RotateCcw class="h-4 w-4" />
+                            Réinitialiser
                         </Button>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-4 text-sm">
-                    <span class="text-gray-500 font-semibold whitespace-nowrap">Filtres rapides :</span>
-                    <div class="flex flex-wrap gap-2">
-                        <button 
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">Filtres rapides</span>
+                    <div class="flex flex-wrap gap-1.5">
+                        <button
+                            type="button"
                             @click="statusFilter = 'tous'"
-                            :class="['px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm border', statusFilter === 'tous' ? 'bg-purple-100 text-purple-700 border-purple-200 ring-2 ring-purple-500/10' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300']"
+                            :class="[
+                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
+                                statusFilter === 'tous'
+                                    ? 'border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-700 dark:bg-purple-950/60 dark:text-purple-200'
+                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                            ]"
                         >
                             Tous
                         </button>
-                        <button 
+                        <button
+                            type="button"
                             @click="statusFilter = 'sains'"
-                            :class="['px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm border', statusFilter === 'sains' ? 'bg-emerald-100 text-emerald-700 border-emerald-200 ring-2 ring-emerald-500/10' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300']"
+                            :class="[
+                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
+                                statusFilter === 'sains'
+                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'
+                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                            ]"
                         >
-                            <span class="flex items-center gap-1.5"><CheckCircle class="h-3.5 w-3.5" /> Optimal</span>
+                            <CheckCircle class="h-3.5 w-3.5" />
+                            Optimal
                         </button>
-                        <button 
+                        <button
+                            type="button"
                             @click="statusFilter = 'alerte'"
-                            :class="['px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm border', statusFilter === 'alerte' ? 'bg-amber-100 text-amber-700 border-amber-200 ring-2 ring-amber-500/10' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300']"
+                            :class="[
+                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
+                                statusFilter === 'alerte'
+                                    ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200'
+                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                            ]"
                         >
-                            <span class="flex items-center gap-1.5"><AlertTriangle class="h-3.5 w-3.5" /> Alerte</span>
+                            <AlertTriangle class="h-3.5 w-3.5" />
+                            Alerte
                         </button>
-                        <button 
+                        <button
+                            type="button"
                             @click="statusFilter = 'rupture'"
-                            :class="['px-4 py-1.5 rounded-full text-xs font-semibold transition-all shadow-sm border', statusFilter === 'rupture' ? 'bg-rose-100 text-rose-700 border-rose-200 ring-2 ring-rose-500/10' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50 hover:border-gray-300']"
+                            :class="[
+                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
+                                statusFilter === 'rupture'
+                                    ? 'border-rose-300 bg-rose-100 text-rose-800 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200'
+                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                            ]"
                         >
-                            <span class="flex items-center gap-1.5"><XCircle class="h-3.5 w-3.5" /> Rupture</span>
+                            <XCircle class="h-3.5 w-3.5" />
+                            Rupture
                         </button>
                     </div>
                 </div>
             </div>
 
-            <div class="space-y-4">
-                <div v-if="hierarchicalData.length === 0" class="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-                    <Package class="mx-auto h-12 w-12 text-gray-400" />
-                    <h3 class="mt-2 text-sm font-semibold text-gray-900">Aucun article trouvé</h3>
-                    <p class="mt-1 text-sm text-gray-500">Commencez par ajouter des articles dans la configuration.</p>
+            <div class="flex min-h-0 flex-1 flex-col gap-4">
+                <div
+                    v-if="hierarchicalData.length === 0"
+                    class="flex min-h-[min(24rem,calc(100dvh-22rem))] flex-1 flex-col justify-center rounded-2xl border border-dashed border-gray-300 bg-gradient-to-b from-white to-gray-50/80 px-6 py-12 text-center dark:border-neutral-700 dark:from-neutral-900 dark:to-neutral-950/80 sm:py-16"
+                >
+                    <h3 class="text-base font-semibold text-gray-900 dark:text-neutral-100">Aucun article trouvé</h3>
+                    <p class="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-neutral-400">
+                        <template v-if="hasActiveFilters">
+                            Aucun résultat pour ces critères. Essayez d’élargir la recherche ou réinitialisez les filtres.
+                        </template>
+                        <template v-else>
+                            Commencez par créer des articles et les rattacher à une famille dans la configuration.
+                        </template>
+                    </p>
+                    <div class="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
+                        <Button
+                            v-if="hasActiveFilters"
+                            type="button"
+                            variant="outline"
+                            class="w-full border-gray-200 sm:w-auto dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+                            @click="resetFilters"
+                        >
+                            <RotateCcw class="mr-2 h-4 w-4" />
+                            Réinitialiser les filtres
+                        </Button>
+                        <Link href="/articles" class="w-full sm:w-auto">
+                            <Button
+                                type="button"
+                                class="w-full gap-2 bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 sm:w-auto"
+                            >
+                                <LibraryBig class="h-4 w-4" />
+                                Ouvrir les articles (configuration)
+                            </Button>
+                        </Link>
+                    </div>
                 </div>
 
-                <div v-else v-for="famille in hierarchicalData.filter(f => f.id === activeFamilyId)" :key="famille.id" class="overflow-hidden bg-white border border-gray-200 rounded-lg shadow-sm">
-                    <div class="p-4 space-y-6">
+                <div
+                    v-else
+                    v-for="famille in hierarchicalData.filter(f => f.id === activeFamilyId)"
+                    :key="famille.id"
+                    class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+                >
+                    <div class="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
                         <!-- Dashboard de la Famille -->
                         <!-- <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                                     <div class="bg-blue-600 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform">
@@ -563,89 +670,94 @@ const openViewModal = (article: Article) => {
                                     </div>
                                 </div> -->
 
-                                <div v-if="activeFamilyData?.categories?.length > 0" class="pt-4 border-t border-gray-100 flex flex-col gap-4">
-                                    
+                                <div v-if="activeFamilyData?.categories?.length > 0" class="flex min-h-0 flex-1 flex-col gap-3 border-t border-gray-100 pt-3 dark:border-neutral-800 sm:pt-4">
+
                                     <!-- Onglets des Catégories -->
-                                    <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-gray-100">
-                                        <button 
-                                            v-for="categorie in activeFamilyData.categories" 
+                                    <div class="-mx-0.5 flex gap-1 overflow-x-auto px-0.5 pb-2 scrollbar-none border-b border-gray-100 dark:border-neutral-800">
+                                        <button
+                                            v-for="categorie in activeFamilyData.categories"
                                             :key="categorie.id"
+                                            type="button"
                                             @click="activeCategoryId = categorie.id"
                                             :class="[
-                                                'px-4 py-2 rounded-t-md font-semibold text-sm transition-all whitespace-nowrap border-x border-t -mb-[1px]',
-                                                activeCategoryId === categorie.id 
-                                                    ? 'bg-blue-50 border-blue-100 text-blue-700' 
-                                                    : 'bg-white border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700'
+                                                'shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm',
+                                                activeCategoryId === categorie.id
+                                                    ? 'bg-blue-600 text-white shadow-sm dark:bg-blue-500'
+                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
                                             ]"
                                         >
                                             <div class="flex items-center gap-1.5">
-                                                <Layers class="h-3.5 w-3.5" :class="activeCategoryId === categorie.id ? 'text-blue-600' : 'text-gray-400'" />
+                                                <Layers class="h-3.5 w-3.5 shrink-0 opacity-80" />
                                                 {{ categorie.nom }}
                                             </div>
                                         </button>
                                     </div>
 
                                     <!-- Section Sous-catégories et Table -->
-                                    <div v-if="activeCategoryData" class="flex flex-col gap-4">
-                                        
+                                    <div v-if="activeCategoryData" class="flex min-h-0 flex-1 flex-col gap-3">
+
                                         <!-- Onglets des Sous-Catégories -->
-                                        <div v-if="activeCategoryData.sousCategories?.length > 0" class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none border-b border-gray-100">
-                                            <button 
-                                                v-for="sousCategorie in activeCategoryData.sousCategories" 
+                                        <div v-if="activeCategoryData.sousCategories?.length > 0" class="-mx-0.5 flex gap-1 overflow-x-auto border-b border-gray-100 px-0.5 pb-2 dark:border-neutral-800">
+                                            <button
+                                                v-for="sousCategorie in activeCategoryData.sousCategories"
                                                 :key="sousCategorie.id"
+                                                type="button"
                                                 @click="activeSousCategoryId = sousCategorie.id"
                                                 :class="[
-                                                    'px-4 py-1.5 rounded-full text-xs font-semibold transition-all whitespace-nowrap border',
-                                                    activeSousCategoryId === sousCategorie.id 
-                                                        ? 'bg-amber-50 border-amber-200 text-amber-700 shadow-sm' 
-                                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+                                                    'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all',
+                                                    activeSousCategoryId === sousCategorie.id
+                                                        ? 'border-amber-400 bg-amber-100 text-amber-900 dark:border-amber-600 dark:bg-amber-950/50 dark:text-amber-100'
+                                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800',
                                                 ]"
                                             >
                                                 <div class="flex items-center gap-1.5">
-                                                    <Package class="h-3 w-3" :class="activeSousCategoryId === sousCategorie.id ? 'text-amber-600' : 'text-gray-400'" />
+                                                    <Package class="h-3 w-3 shrink-0" />
                                                     {{ sousCategorie.nom }}
                                                 </div>
                                             </button>
                                         </div>
 
-                                        <!-- Table des articles de la sous-catégorie active -->
-                                        <div v-if="activeSousCategoryData" class="overflow-hidden border border-gray-200 rounded-lg shadow-sm bg-white">
-                                            <table class="min-w-full divide-y divide-gray-200">
-                                                <thead class="bg-gray-50/80">
+                                        <!-- Table des articles -->
+                                        <div v-if="activeSousCategoryData" class="-mx-px min-h-0 flex-1 overflow-auto rounded-lg border border-gray-200 dark:border-neutral-700">
+                                            <table class="min-w-full divide-y divide-gray-200 dark:divide-neutral-700 md:min-w-[640px]">
+                                                <thead class="sticky top-0 z-10 bg-gray-50/95 shadow-sm backdrop-blur-sm dark:bg-neutral-950/95">
                                                     <tr>
-                                                        <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Code</th>
-                                                        <th scope="col" class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Article</th>
-                                                        <th scope="col" class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Stock</th>
-                                                        <th scope="col" class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Seuil</th>
-                                                        <th scope="col" class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Statut</th>
-                                                        <th scope="col" class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                                                        <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Code</th>
+                                                        <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Article</th>
+                                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Stock</th>
+                                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Seuil</th>
+                                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Statut</th>
+                                                        <th scope="col" class="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Actions</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody class="bg-white divide-y divide-gray-100">
-                                                    <tr v-for="article in activeSousCategoryData.articles" :key="article.id" class="hover:bg-gray-50/80 transition-colors">
-                                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 font-mono">{{ article.code }}</td>
-                                                        <td class="px-4 py-3 text-sm text-gray-900 font-semibold">{{ article.description }}</td>
-                                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-center align-middle">
+                                                <tbody class="divide-y divide-gray-100 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
+                                                    <tr v-for="article in activeSousCategoryData.articles" :key="article.id" class="transition-colors hover:bg-gray-50/90 dark:hover:bg-neutral-800/60">
+                                                        <td class="whitespace-nowrap px-3 py-2.5 font-mono text-sm text-gray-500 dark:text-neutral-400 sm:px-4">{{ article.code }}</td>
+                                                        <td class="px-3 py-2.5 text-sm font-semibold text-gray-900 dark:text-neutral-100 sm:px-4">{{ article.description }}</td>
+                                                        <td class="whitespace-nowrap px-3 py-2.5 text-center align-middle sm:px-4">
                                                             <div class="flex items-center justify-center gap-1">
-                                                                <span class="font-bold text-base" :class="article.stock_actuel <= article.seuil_alerte ? 'text-red-600' : 'text-gray-900'">
+                                                                <span
+                                                                    class="text-base font-bold tabular-nums"
+                                                                    :class="article.stock_actuel <= article.seuil_alerte ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-neutral-100'"
+                                                                >
                                                                     {{ article.stock_actuel }}
                                                                 </span>
-                                                                <AlertTriangle v-if="article.stock_actuel <= article.seuil_alerte" class="h-3.5 w-3.5 text-red-500 animate-pulse" />
+                                                                <AlertTriangle v-if="article.stock_actuel <= article.seuil_alerte" class="h-3.5 w-3.5 shrink-0 animate-pulse text-red-500" />
                                                             </div>
                                                         </td>
-                                                        <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500 text-center">{{ article.seuil_alerte }}</td>
-                                                        <td class="px-4 py-3 whitespace-nowrap text-center">
+                                                        <td class="whitespace-nowrap px-3 py-2.5 text-center text-sm text-gray-500 tabular-nums dark:text-neutral-400 sm:px-4">{{ article.seuil_alerte }}</td>
+                                                        <td class="whitespace-nowrap px-3 py-2.5 text-center sm:px-4">
                                                             <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getStockStatusClass(article)]">
                                                                 {{ getStockStatusLabel(article) }}
                                                             </span>
                                                         </td>
-                                                        <td class="px-4 py-3 whitespace-nowrap text-right text-sm font-medium">
-                                                            <div class="flex items-center justify-end gap-2 font-normal">
-                                                                <Button size="sm" variant="ghost" class="h-8 w-8 p-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50" @click="openViewModal(article)">
+                                                        <td class="whitespace-nowrap px-3 py-2.5 text-right text-sm font-medium sm:px-4">
+                                                            <div class="flex items-center justify-end gap-1.5 font-normal sm:gap-2">
+                                                                <Button size="sm" variant="ghost" class="h-8 w-8 p-0 text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-300" @click="openViewModal(article)">
                                                                     <Eye class="h-4 w-4" />
                                                                 </Button>
-                                                                <Button size="sm" variant="outline" class="h-8 px-2.5 text-emerald-700 bg-emerald-50 border-emerald-200 hover:bg-emerald-100" @click="openMovementModal(article, 'entree')">
-                                                                    <Plus class="h-3.5 w-3.5 mr-1" /> Entrée
+                                                                <Button size="sm" variant="outline" class="h-8 px-2.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950/70" @click="openMovementModal(article, 'entree')">
+                                                                    <Plus class="mr-1 h-3.5 w-3.5" /> Entrée
                                                                 </Button>
                                                             </div>
                                                         </td>
@@ -653,18 +765,17 @@ const openViewModal = (article: Article) => {
                                                 </tbody>
                                             </table>
                                         </div>
-                                        <div v-else class="text-center py-8 text-gray-500 text-sm italic">
+                                        <div v-else class="py-8 text-center text-sm italic text-gray-500 dark:text-neutral-400">
                                             Aucun article ou sous-catégorie disponible.
                                         </div>
                                     </div>
-                                    <div v-else class="text-center py-8 text-gray-500 text-sm italic">
+                                    <div v-else class="py-8 text-center text-sm italic text-gray-500 dark:text-neutral-400">
                                         Aucune catégorie disponible.
                                     </div>
                                 </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
+            </div>
 
         <!-- Modal Mouvement Amélioré -->
         <Dialog :open="showModal" @update:open="showModal = $event">
@@ -847,6 +958,7 @@ const openViewModal = (article: Article) => {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        </div>
     </AppLayout>
 </template>
 

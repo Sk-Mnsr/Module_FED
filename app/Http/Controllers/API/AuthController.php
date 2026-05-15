@@ -15,7 +15,6 @@ use Maravel\Http\Controllers\APIController;
  */
 class AuthController extends APIController
 {
-
     /**
      * Connecte un utilisateur
      *
@@ -28,20 +27,30 @@ class AuthController extends APIController
     {
         $validator = Validator::make($request->all(), [
             'email' => 'required',
-            "password" => 'required'
+            'password' => 'required',
         ]);
         if ($validator->fails()) {
             return $this->responseError($validator->errors(), 400);
         } else {
-            $user = User::where('email', $request->email)->first();
-            if (Hash::check($request->password, $user->password)) {
-                return $this->responseOk([
-                    "userToken" => $user->createToken($request->email)->plainTextToken,
-                    "user" => $user,
-                ]);
-            } else {
-                return $this->responseError(["password" => ["password incorrect"]], 400);
+            $user = User::where('email', $request->email)->with('profil')->first();
+
+            if (! $user || ! Hash::check($request->password, $user->password)) {
+                return $this->responseError(['password' => ['Mot de passe incorrect']], 400);
             }
+
+            if (! $user->activated) {
+                return $this->responseError(['email' => ['Compte désactivé']], 403);
+            }
+
+            if (! User::annuaireProfilAllowsLogin($user->profil)) {
+                return $this->responseError(['email' => ['Fiche annuaire inactive']], 403);
+            }
+
+            return $this->responseOk([
+                'userToken' => $user->createToken($request->email)->plainTextToken,
+                'user' => $user,
+                'password_change_required' => $user->password_change_required,
+            ]);
         }
     }
 
@@ -63,9 +72,9 @@ class AuthController extends APIController
     public function logout(Request $request)
     {
         if ($request->user()->currentAccessToken()->delete()) {
-            return $this->responseOk(["messages" => ["logout done"]]);
+            return $this->responseOk(['messages' => ['logout done']]);
         } else {
-            return $this->responseError(["errors" => ["error during logout"]]);
+            return $this->responseError(['errors' => ['error during logout']]);
         }
     }
 }

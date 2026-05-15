@@ -21,13 +21,18 @@ interface Props {
         name: string;
         fonction?: string;
         email: string;
+        matricule?: string | null;
+        department_id?: number | null;
+        agence_id?: number | null;
         profil?: {
             department_id?: number | null;
+            matricule?: string | null;
         };
         roles?: Role[];
     };
     roles: Role[];
     departments: Array<{ id: number; name: string }>;
+    agences: Array<{ id: number; code: string; nom: string }>;
 }
 
 const props = defineProps<Props>();
@@ -47,10 +52,12 @@ const form = useForm({
     name: props.user.name,
     fonction: props.user.fonction || '',
     email: props.user.email,
+    matricule: props.user.matricule ?? props.user.profil?.matricule ?? '',
     password: '',
     password_confirmation: '',
     role_id: (props.user.roles && props.user.roles.length > 0) ? props.user.roles[0].id : null as number | null,
-    department_id: props.user.profil?.department_id ?? null,
+    department_id: props.user.department_id ?? props.user.profil?.department_id ?? null,
+    agence_id: props.user.agence_id ?? null,
 });
 
 const submit = () => {
@@ -110,6 +117,19 @@ const submit = () => {
                         />
                         <InputError :message="form.errors.email" />
                     </div>
+
+                    <div>
+                        <Label for="matricule" class="text-base font-medium text-gray-700">IDFLEX</Label>
+                        <Input
+                            id="matricule"
+                            v-model="form.matricule"
+                            type="text"
+                            autocomplete="off"
+                            class="mt-1.5 border-gray-300 focus-visible:border-gray-400"
+                            placeholder="Identifiant Flexcube"
+                        />
+                        <InputError :message="form.errors.matricule" />
+                    </div>
                 </FormSection>
 
                 <FormSection title="Changer le mot de passe" :columns="2" :show-code-icon="false">
@@ -159,6 +179,9 @@ const submit = () => {
                                 {{ role.nom }}
                             </option>
                         </select>
+                        <p class="mt-1 text-xs text-gray-500">
+                            Le profil d'accès (administrateur, monétique ou métier) est défini automatiquement selon le rôle choisi.
+                        </p>
                         <p v-if="props.roles.length === 0" class="mt-2 text-sm text-gray-500">
                             Aucun rôle disponible. Veuillez contacter un administrateur.
                         </p>
@@ -166,7 +189,7 @@ const submit = () => {
                     </div>
                 </FormSection>
 
-                <FormSection title="Département" :columns="1" :show-code-icon="false">
+                <FormSection title="Département & entité" :columns="1" :show-code-icon="false">
                     <div>
                         <Label for="department_id" class="text-base font-medium text-gray-700">Département</Label>
                         <select
@@ -184,6 +207,25 @@ const submit = () => {
                             </option>
                         </select>
                         <InputError :message="form.errors.department_id" />
+                    </div>
+                    <div>
+                        <Label for="agence_id" class="text-base font-medium text-gray-700">Agence (entité)</Label>
+                        <select
+                            id="agence_id"
+                            v-model="form.agence_id"
+                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
+                        >
+                            <option :value="null">Aucune / Siège</option>
+                            <option
+                                v-for="agence in props.agences"
+                                :key="agence.id"
+                                :value="agence.id"
+                            >
+                                {{ agence.nom }} ({{ agence.code }})
+                            </option>
+                        </select>
+                        <p class="mt-1 text-xs text-gray-500">Utile pour le module Monétique (stock par agence).</p>
+                        <InputError :message="form.errors.agence_id" />
                     </div>
                 </FormSection>
 

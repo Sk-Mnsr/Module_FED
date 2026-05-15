@@ -1,6 +1,7 @@
 <template>
   <AppLayout title="Écritures Comptables">
     <div class="flex flex-col gap-6 p-6">
+      <ComptabiliteModuleTabs />
       <!-- Header -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200">
         <div class="px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -12,10 +13,10 @@
             </div>
             <div>
               <h1 class="text-xl font-bold text-gray-900">Écritures Comptables</h1>
-              <p class="text-sm text-gray-500">Consultez et exportez les écritures comptables générées.</p>
+              <p class="text-sm text-gray-500">Consultation  et exportations des écritures comptables générées</p>
             </div>
           </div>
-          <div class="flex gap-3">
+          <div class="flex flex-wrap gap-3 items-center">
             <a
               href="/ecritures-comptables/export"
               class="inline-flex items-center px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
@@ -26,8 +27,54 @@
               </svg>
               Exporter CSV
             </a>
+            <template v-if="canPushComptableImport">
+              <input
+                ref="forwardInput"
+                type="file"
+                accept=".csv,.txt,text/csv"
+                class="sr-only"
+                @change="onForwardFile"
+              />
+              <button
+                v-if="comptableImportApiConfigured"
+                type="button"
+                class="inline-flex items-center px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
+                :disabled="forwarding"
+                @click="() => forwardInput?.click()"
+                title="Envoie le fichier tel quel à Flex, sans l’enregistrer ici"
+              >
+                <span v-if="forwarding" class="mr-2 inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                {{ forwarding ? 'Transfert…' : 'Envoi direct (Flex, sans base)' }}
+              </button>
+            </template>
+            <button
+              v-if="comptableImportApiConfigured && canPushComptableImport"
+              type="button"
+              class="inline-flex items-center px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50"
+              :disabled="pushing"
+              @click="confirmPush"
+            >
+              <svg v-if="!pushing" class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m-4-4l4 4m0 0l4-4" />
+              </svg>
+              <span v-if="pushing" class="mr-2 inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              {{ pushing ? 'Envoi…' : 'Envoyer vers la plateforme' }}
+            </button>
+            <p
+              v-else-if="canPushComptableImport && !comptableImportApiConfigured"
+              class="self-center text-sm text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-200"
+            >
+              Intégration : renseignez <code class="text-xs">ECRITURES_COMPTABLES_IMPORT_URL</code> et <code class="text-xs">ECRITURES_COMPTABLES_IMPORT_KEY</code> dans <code class="text-xs">.env</code>.
+            </p>
           </div>
         </div>
+      </div>
+
+      <div v-if="page.props.flash?.success" class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+        {{ page.props.flash.success }}
+      </div>
+      <div v-if="page.props.flash?.error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        {{ page.props.flash.error }}
       </div>
 
       <!-- Data Table -->
@@ -45,7 +92,7 @@
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">date_de_valeur</th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">code_agence</th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">libelle_ecriture</th>
-                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">user_id</th>
+                <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" title="IDFLEX (export / Flex)">user_id</th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">annee_comptable</th>
                 <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">mois_comptable</th>
               </tr>
@@ -87,8 +134,8 @@
                 <td class="px-6 py-4 text-sm text-gray-500 max-w-xs truncate" :title="ecriture.libelle_ecriture">
                   {{ ecriture.libelle_ecriture || '-' }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {{ ecriture.user_id || '-' }}
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" :title="'Id interne: ' + (ecriture.user_id ?? '-')">
+                  {{ ecriture.user?.profil?.matricule || '-' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {{ ecriture.annee_comptable || '-' }}
@@ -124,16 +171,70 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { Link, usePage } from '@inertiajs/vue3'
+import { ref } from 'vue'
+import { Link, usePage, router } from '@inertiajs/vue3'
 import AppLayout from '@/layouts/AppLayout.vue'
+import ComptabiliteModuleTabs from '@/components/ComptabiliteModuleTabs.vue'
+
+const page = usePage()
+const pushing = ref(false)
+const forwarding = ref(false)
+const forwardInput = ref(null)
 
 const props = defineProps({
   ecritures: {
     type: Object,
     required: true,
   },
+  comptableImportApiConfigured: {
+    type: Boolean,
+    default: false,
+  },
+  canPushComptableImport: {
+    type: Boolean,
+    default: false,
+  },
 })
+
+const confirmPush = () => {
+  if (!window.confirm('Envoyer toutes les écritures comptables (fichier CSV) vers l’API de la plateforme ?\n\n(Vérifiez côté manuel l’unicité des no_batch avant envoi — l’API peut renvoyer une erreur générique en cas de doublon.)')) {
+    return
+  }
+  pushing.value = true
+  router.post(
+    '/ecritures-comptables/push',
+    {},
+    {
+      preserveScroll: true,
+      onFinish: () => {
+        pushing.value = false
+      },
+    },
+  )
+}
+
+const onForwardFile = (e) => {
+  const file = e.target?.files?.[0]
+  e.target.value = ''
+  if (!file) {
+    return
+  }
+  if (!window.confirm('Transférer ce fichier directement vers Flex, sans l’enregistrer en base ?')) {
+    return
+  }
+  forwarding.value = true
+  router.post(
+    '/ecritures-comptables/push',
+    { forward_file: file },
+    {
+      forceFormData: true,
+      preserveScroll: true,
+      onFinish: () => {
+        forwarding.value = false
+      },
+    },
+  )
+}
 
 const formatAmount = (amount) => {
   if (!amount) return '0'

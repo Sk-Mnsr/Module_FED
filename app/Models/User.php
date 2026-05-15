@@ -3,15 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Maravel\Models\AuthenticatableBase;
 
 class User extends AuthenticatableBase
 {
-    use HasFactory, Notifiable, TwoFactorAuthenticatable, HasApiTokens;
+    use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
      * The attributes that are mass assignable.
@@ -27,6 +27,9 @@ class User extends AuthenticatableBase
         'activated',
         'password_change_required',
         'signature',
+        'agence_id',
+        'matricule',
+        'department_id',
     ];
 
     /**
@@ -56,48 +59,55 @@ class User extends AuthenticatableBase
      */
     protected $enumCasts = [
         [
-			'colum_name' => 'profile',
-			'additional_column_name' => "profile_fr",
-			'choices' => [
-				'admin' => "Adminitrateur",
-				'other' => "Métier",
-			]
-		],
-		[
-			'colum_name' => 'profile',
-			'additional_column_name' => "ability_rules",
-			'choices' => [
-				'admin' => [
-					[
-						'subject' => ['all'],
-						'action' => ['manage'],
-					],
-				],
-				'other' => [
-					[
-						'subject' => ['user'],
-						'action' => ['read'],
-					],
-				],
-			],
-		],
-		[
-			'colum_name' => 'activated',
-			'additional_column_name' => "activated_fr",
-			'choices' => [
-				1 => "Oui",
-				0 => "Non",
-			]
-		],
-		[
-			'colum_name' => 'password_change_required',
-			'additional_column_name' => "password_change_required_fr",
-			'choices' => [
-				1 => "Oui",
-				0 => "Non",
-			]
-		],
-		
+            'colum_name' => 'profile',
+            'additional_column_name' => 'profile_fr',
+            'choices' => [
+                'admin' => 'Adminitrateur',
+                'other' => 'Métier',
+                'monetique' => 'Monétique',
+            ],
+        ],
+        [
+            'colum_name' => 'profile',
+            'additional_column_name' => 'ability_rules',
+            'choices' => [
+                'admin' => [
+                    [
+                        'subject' => ['all'],
+                        'action' => ['manage'],
+                    ],
+                ],
+                'other' => [
+                    [
+                        'subject' => ['user'],
+                        'action' => ['read'],
+                    ],
+                ],
+                'monetique' => [
+                    [
+                        'subject' => ['user'],
+                        'action' => ['read'],
+                    ],
+                ],
+            ],
+        ],
+        [
+            'colum_name' => 'activated',
+            'additional_column_name' => 'activated_fr',
+            'choices' => [
+                1 => 'Oui',
+                0 => 'Non',
+            ],
+        ],
+        [
+            'colum_name' => 'password_change_required',
+            'additional_column_name' => 'password_change_required_fr',
+            'choices' => [
+                1 => 'Oui',
+                0 => 'Non',
+            ],
+        ],
+
     ];
 
     /**
@@ -120,7 +130,32 @@ class User extends AuthenticatableBase
      */
     public function getHasSignatureAttribute(): bool
     {
-        return !empty($this->attributes['signature'] ?? null);
+        return ! empty($this->attributes['signature'] ?? null);
+    }
+
+    public function department()
+    {
+        return $this->belongsTo(Department::class);
+    }
+
+    /**
+     * Annuaire RH : la connexion est refusée si le statut du profil indique une désactivation.
+     */
+    public static function annuaireProfilAllowsLogin(?Profil $profil): bool
+    {
+        if ($profil === null) {
+            return true;
+        }
+
+        $s = $profil->statut;
+        if ($s === null || $s === '') {
+            return true;
+        }
+
+        $normalized = strtolower(trim((string) $s));
+        $blocked = ['inactif', 'inactive', 'désactivé', 'desactive', 'suspendu', 'licencié', 'licencie'];
+
+        return ! in_array($normalized, $blocked, true);
     }
 
     /**
@@ -129,6 +164,24 @@ class User extends AuthenticatableBase
     public function profil()
     {
         return $this->hasOne(Profil::class, 'email', 'email');
+    }
+
+    public function agence()
+    {
+        return $this->belongsTo(Agence::class);
+    }
+
+    public function zones()
+    {
+        return $this->belongsToMany(Zone::class, 'zone_user');
+    }
+
+    /**
+     * Agence dont cet utilisateur est chef (s’il existe une désignation sur la table agences).
+     */
+    public function agenceDirigee()
+    {
+        return $this->hasOne(Agence::class, 'chef_agence_user_id');
     }
 
     /**
@@ -166,7 +219,7 @@ class User extends AuthenticatableBase
     /**
      * Récupère tous les rôles de l'utilisateur
      */
-    public function getRoles(): \Illuminate\Support\Collection
+    public function getRoles(): Collection
     {
         return $this->roles;
     }
@@ -174,5 +227,23 @@ class User extends AuthenticatableBase
     public function feds()
     {
         return $this->hasMany(Fed::class, 'requester_id');
+    }
+
+    /**
+     * Valeur à mettre dans la colonne « user_id » des exports / API Flex (IDFLEX = matricule du profil).
+     */
+    public function flexComptaUserIdentifier(): string
+    {
+        $m = $this->matricule;
+        if ($m === null || trim((string) $m) === '') {
+            $this->loadMissing('profil');
+            $m = $this->profil?->matricule;
+        }
+
+        if ($m === null) {
+            return '';
+        }
+
+        return trim((string) $m);
     }
 }

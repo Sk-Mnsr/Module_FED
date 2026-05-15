@@ -33,6 +33,9 @@ interface Props {
     onItemsPerPageChange?: (items: number) => void;
     onSort?: (column: string, direction: 'asc' | 'desc') => void;
     onSelectionChange?: (selectedRows: any[]) => void;
+    /** Tri synchronisé serveur (URL / Inertia) : affichage et bascule corrects après navigation */
+    serverSortColumn?: string | null;
+    serverSortDirection?: 'asc' | 'desc';
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -88,17 +91,36 @@ const emitSelectionChange = () => {
     }
 };
 
+const displaySortColumn = computed(() =>
+    props.serverSortColumn !== undefined ? props.serverSortColumn : sortColumn.value,
+);
+
+const displaySortDirection = computed(() =>
+    props.serverSortColumn !== undefined
+        ? (props.serverSortDirection ?? 'asc')
+        : sortDirection.value,
+);
+
 const handleSort = (column: string) => {
     if (!props.onSort) return;
-    
-    if (sortColumn.value === column) {
-        sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
+
+    const baseCol =
+        props.serverSortColumn !== undefined ? props.serverSortColumn : sortColumn.value;
+    const baseDir =
+        props.serverSortColumn !== undefined
+            ? (props.serverSortDirection ?? 'asc')
+            : sortDirection.value;
+
+    let nextDir: 'asc' | 'desc';
+    if (baseCol === column) {
+        nextDir = baseDir === 'asc' ? 'desc' : 'asc';
     } else {
-        sortColumn.value = column;
-        sortDirection.value = 'asc';
+        nextDir = 'asc';
     }
-    
-    props.onSort(column, sortDirection.value);
+
+    sortColumn.value = column;
+    sortDirection.value = nextDir;
+    props.onSort(column, nextDir);
 };
 
 const getInitials = (name: string) => {
@@ -129,7 +151,6 @@ const totalPages = computed(() => {
     const total = props.totalItems > 0 ? props.totalItems : tableData.value.length;
     const perPage = props.itemsPerPage || 5;
     const pages = Math.ceil(total / perPage);
-    console.log('totalPages computed:', { total, perPage, pages, totalItems: props.totalItems, tableDataLength: tableData.value.length });
     return pages > 0 ? pages : 1;
 });
 
@@ -184,16 +205,8 @@ const getPageNumbers = computed(() => {
 });
 
 const goToPage = (page: number) => {
-    console.log('goToPage called:', { page, totalPages: totalPages.value, currentPage: props.currentPage, onPageChange: !!props.onPageChange });
-    if (page >= 1 && page <= totalPages.value) {
-        if (props.onPageChange) {
-            console.log('Calling onPageChange with page:', page);
-            props.onPageChange(page);
-        } else {
-            console.warn('onPageChange handler is not defined');
-        }
-    } else {
-        console.warn('Page out of range:', { page, min: 1, max: totalPages.value });
+    if (page >= 1 && page <= totalPages.value && props.onPageChange) {
+        props.onPageChange(page);
     }
 };
 
@@ -233,7 +246,7 @@ const handleItemsPerPageChange = (value: string) => {
                                     <ChevronUp
                                         :class="[
                                             'h-4 w-4',
-                                            sortColumn === column.key && sortDirection === 'asc'
+                                            displaySortColumn === column.key && displaySortDirection === 'asc'
                                                 ? 'text-gray-900'
                                                 : 'text-gray-400',
                                         ]"
@@ -241,7 +254,7 @@ const handleItemsPerPageChange = (value: string) => {
                                     <ChevronDown
                                         :class="[
                                             'h-4 w-4 -mt-1',
-                                            sortColumn === column.key && sortDirection === 'desc'
+                                            displaySortColumn === column.key && displaySortDirection === 'desc'
                                                 ? 'text-gray-900'
                                                 : 'text-gray-400',
                                         ]"
@@ -337,7 +350,7 @@ const handleItemsPerPageChange = (value: string) => {
                         size="sm"
                         class="h-8"
                         :disabled="props.currentPage === 1 || totalPages <= 1"
-                        @click="() => { console.log('Previous clicked'); goToPage(props.currentPage - 1); }"
+                        @click="() => goToPage(props.currentPage - 1)"
                     >
                         ← Précedent
                     </Button>
@@ -349,7 +362,7 @@ const handleItemsPerPageChange = (value: string) => {
                                 size="sm"
                                 class="h-8 w-8"
                                 :class="{ 'bg-purple-600 text-white hover:bg-purple-700': page === props.currentPage }"
-                                @click="() => { console.log('Page number clicked:', page); goToPage(page); }"
+                                @click="() => goToPage(page)"
                             >
                                 {{ page }}
                             </Button>
@@ -361,7 +374,7 @@ const handleItemsPerPageChange = (value: string) => {
                         size="sm"
                         class="h-8"
                         :disabled="props.currentPage === totalPages || totalPages <= 1"
-                        @click="() => { console.log('Next clicked'); goToPage(props.currentPage + 1); }"
+                        @click="() => goToPage(props.currentPage + 1)"
                     >
                         Suivant →
                     </Button>

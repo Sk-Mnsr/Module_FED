@@ -14,7 +14,8 @@ interface User {
     id: number;
     name: string;
     email: string;
-    is_active: boolean;
+    activated: boolean;
+    matricule?: string | null;
     created_at: string;
     profil?: {
         id: number;
@@ -28,6 +29,11 @@ interface User {
         nom: string;
         slug: string;
     }[];
+    agence?: {
+        id: number;
+        code: string;
+        nom: string;
+    } | null;
 }
 
 interface Props {
@@ -122,8 +128,8 @@ const columns: Column[] = [
         sortable: true,
     },
     {
-        key: 'flexcube',
-        title: 'Matricule',
+        key: 'idflex',
+        title: 'IDFLEX',
         sortable: true,
     },
     {
@@ -132,15 +138,14 @@ const columns: Column[] = [
         sortable: true,
     },
     {
-        key: 'profil',
-        title: 'PROFIL',
+        key: 'agence',
+        title: 'ENTITÉ',
     },
     {
         key: 'roles',
         title: 'RÔLES',
-    },
-    {
-        key: 'is_active',
+    },    {
+        key: 'activated',
         title: 'ACTIVATION',
     },
     {
@@ -153,11 +158,11 @@ const tableData = computed(() => {
     return props.users.data.map(user => ({
         id: user.id,
         name: user.name,
-        flexcube: user.profil?.matricule || user.email?.split('@')[0] || '-',
+        idflex: user.matricule || user.profil?.matricule || user.email?.split('@')[0] || '-',
         email: user.email,
-        profil: user.profil ? `${user.profil.prenom} ${user.profil.nom}` : 'Metier',
+        agence: user.agence ? `${user.agence.nom}` : '—',
         roles: user.roles || [],
-        is_active: user.is_active,
+        activated: user.activated,
         user: user,
     }));
 });
@@ -274,7 +279,7 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
                     <Input
                         v-model="filters.search"
                         type="text"
-                        placeholder="Rechercher (nom, email, adresse)"
+                        placeholder="Rechercher (nom, email, IDFLEX…)"
                         class="flex-1 border-gray-300 focus-visible:border-gray-400"
                         @keyup.enter="applyFilters"
                     />
@@ -305,16 +310,16 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
                     <span class="text-gray-900 font-medium">{{ item.name }}</span>
                 </template>
 
-                <template #item.flexcube="{ item }">
-                    <span class="text-gray-900">{{ item.flexcube }}</span>
+                <template #item.idflex="{ item }">
+                    <span class="text-gray-900">{{ item.idflex }}</span>
                 </template>
 
                 <template #item.email="{ item }">
                     <span class="text-gray-900">{{ item.email }}</span>
                 </template>
 
-                <template #item.profil="{ item }">
-                    <span class="text-gray-900">{{ item.profil }}</span>
+                <template #item.agence="{ item }">
+                    <span class="text-gray-900 text-sm">{{ item.agence }}</span>
                 </template>
 
                 <template #item.roles="{ item }">
@@ -332,22 +337,22 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
                     </div>
                 </template>
 
-                <template #item.is_active="{ item }">
+                <template #item.activated="{ item }">
                     <div class="flex items-center gap-2">
                         <component 
-                            :is="item.is_active ? Unlock : Lock" 
+                            :is="item.activated ? Unlock : Lock" 
                             :class="[
                                 'h-5 w-5',
-                                item.is_active ? 'text-green-600' : 'text-gray-400'
+                                item.activated ? 'text-green-600' : 'text-gray-400'
                             ]" 
                         />
                         <span 
                             :class="[
                                 'text-base font-medium',
-                                item.is_active ? 'text-green-700' : 'text-gray-500'
+                                item.activated ? 'text-green-700' : 'text-gray-500'
                             ]"
                         >
-                            {{ item.is_active ? 'Activé' : 'Désactivé' }}
+                            {{ item.activated ? 'Activé' : 'Désactivé' }}
                         </span>
                     </div>
                 </template>
@@ -372,13 +377,13 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
                             @click="toggleUser(item.id)"
                             :class="[
                                 'inline-flex items-center justify-center rounded-md p-2 transition-colors',
-                                item.is_active 
+                                item.activated 
                                     ? 'text-orange-600 hover:bg-orange-50 hover:text-orange-700' 
                                     : 'text-green-600 hover:bg-green-50 hover:text-green-700'
                             ]"
-                            :title="item.is_active ? 'Désactiver' : 'Activer'"
+                            :title="item.activated ? 'Désactiver' : 'Activer'"
                         >
-                            <component :is="item.is_active ? Lock : Unlock" class="h-5 w-5" />
+                            <component :is="item.activated ? Lock : Unlock" class="h-5 w-5" />
                         </button>
                         <button
                             @click="deleteUser(item.id)"

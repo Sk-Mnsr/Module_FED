@@ -17,38 +17,56 @@ Route::get('dashboard', [DashboardController::class, 'index'])->middleware(['aut
 
 require __DIR__.'/settings.php';
 
-use App\Http\Controllers\UserController;
-use App\Http\Controllers\FedController;
-use App\Http\Controllers\N1FedController;
 use App\Http\Controllers\AchatsFedController;
-use App\Http\Controllers\FacilitiesFedController;
-use App\Http\Controllers\CGFedController;
-use App\Http\Controllers\DafFedController;
-use App\Http\Controllers\DgaFedController;
-use App\Http\Controllers\BonDeCommandeController;
-use App\Http\Controllers\DepartmentController;
-use App\Http\Controllers\BudgetController;
-use App\Http\Controllers\TypologieDepenseController;
-use App\Http\Controllers\CategorieDepenseController;
-use App\Http\Controllers\TypeDepenseController;
-use App\Http\Controllers\AppSettingController;
-use App\Http\Controllers\EcritureComptableController;
-
-use App\Http\Controllers\Configuration\ArticleController;
-use App\Http\Controllers\Configuration\AgenceController;
-use App\Http\Controllers\Configuration\FamilleController;
-use App\Http\Controllers\Configuration\CategorieController;
-use App\Http\Controllers\Configuration\SousCategorieController;
 use App\Http\Controllers\AppelOffreController;
-use App\Http\Controllers\OffreController;
+use App\Http\Controllers\AppSettingController;
+use App\Http\Controllers\BanqueController;
+use App\Http\Controllers\BonDeCommandeController;
+use App\Http\Controllers\BudgetController;
+use App\Http\Controllers\CategorieDepenseController;
+use App\Http\Controllers\CGFedController;
 use App\Http\Controllers\ComiteController;
-use App\Http\Controllers\EvaluationController;
-use App\Http\Controllers\StockController;
+use App\Http\Controllers\Configuration\AgenceController;
+use App\Http\Controllers\Configuration\ZoneController;
+use App\Http\Controllers\Configuration\ApporteurAffaireController;
+use App\Http\Controllers\Configuration\ArticleController;
+use App\Http\Controllers\Configuration\CategorieController;
+use App\Http\Controllers\Configuration\FamilleController;
+use App\Http\Controllers\Configuration\SousCategorieController;
+use App\Http\Controllers\DafFedController;
 use App\Http\Controllers\DemandeApprovisionnementController;
+use App\Http\Controllers\DepartmentController;
+use App\Http\Controllers\DgaFedController;
+use App\Http\Controllers\EcritureComptableController;
+use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\FacilitiesFedController;
+use App\Http\Controllers\FedController;
+use App\Http\Controllers\FicheIntegrationController;
+use App\Http\Controllers\FournisseurController;
+use App\Http\Controllers\Monetique\ApporteurController;
+use App\Http\Controllers\Monetique\CampaignController;
+use App\Http\Controllers\Monetique\CarteController;
+use App\Http\Controllers\Monetique\ChefAgenceController;
+use App\Http\Controllers\Monetique\CoficarteController;
+use App\Http\Controllers\Monetique\EncaissementController;
+use App\Http\Controllers\Monetique\PilotageController;
+use App\Http\Controllers\Monetique\RechargeController;
+use App\Http\Controllers\Monetique\StockThresholdController;
+use App\Http\Controllers\Monetique\SupplyRequestController;
+use App\Http\Controllers\Monetique\TransfertController;
+use App\Http\Controllers\Monetique\VenteController;
+use App\Http\Controllers\N1FedController;
+use App\Http\Controllers\OffreController;
+use App\Http\Controllers\OperationDiverseController;
+use App\Http\Controllers\PublicSoumissionController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\TypeDepenseController;
+use App\Http\Controllers\TypologieDepenseController;
+use App\Http\Controllers\UserController;
 
-    // Routes pour les utilisateurs
-    // - SuperAdmin uniquement : toutes les opérations (fait partie de Configuration)
-    Route::middleware(['auth'])->group(function () {
+// Routes pour les utilisateurs
+// - SuperAdmin uniquement : toutes les opérations (fait partie de Configuration)
+Route::middleware(['auth'])->group(function () {
     Route::resource('users', UserController::class)->middleware('role:it');
     Route::post('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle')->middleware('role:it');
     Route::resource('departments', DepartmentController::class)->middleware('role:it');
@@ -75,37 +93,44 @@ use App\Http\Controllers\DemandeApprovisionnementController;
     // Entités partagées (IT et Responsable Achats)
     Route::middleware('role:it,responsable_achats')->group(function () {
         // Fournisseurs
-        Route::get('fournisseurs', [\App\Http\Controllers\FournisseurController::class, 'index'])->name('fournisseurs.index');
-        Route::post('fournisseurs', [\App\Http\Controllers\FournisseurController::class, 'store'])->name('fournisseurs.store');
-        Route::put('fournisseurs/{fournisseur}', [\App\Http\Controllers\FournisseurController::class, 'update'])->name('fournisseurs.update');
-        Route::delete('fournisseurs/{fournisseur}', [\App\Http\Controllers\FournisseurController::class, 'destroy'])->name('fournisseurs.destroy');
+        Route::get('fournisseurs', [FournisseurController::class, 'index'])->name('fournisseurs.index');
+        Route::post('fournisseurs', [FournisseurController::class, 'store'])->name('fournisseurs.store');
+        Route::put('fournisseurs/{fournisseur}', [FournisseurController::class, 'update'])->name('fournisseurs.update');
+        Route::delete('fournisseurs/{fournisseur}', [FournisseurController::class, 'destroy'])->name('fournisseurs.destroy');
     });
 
     // Nouvelles routes pour les entités de base (IT uniquement)
     Route::middleware('role:it')->group(function () {
         // Banques
-        Route::get('banques', [\App\Http\Controllers\BanqueController::class, 'index'])->name('banques.index');
-        Route::post('banques', [\App\Http\Controllers\BanqueController::class, 'store'])->name('banques.store');
-        Route::put('banques/{banque}', [\App\Http\Controllers\BanqueController::class, 'update'])->name('banques.update');
-        Route::delete('banques/{banque}', [\App\Http\Controllers\BanqueController::class, 'destroy'])->name('banques.destroy');
+        Route::get('banques', [BanqueController::class, 'index'])->name('banques.index');
+        Route::post('banques', [BanqueController::class, 'store'])->name('banques.store');
+        Route::put('banques/{banque}', [BanqueController::class, 'update'])->name('banques.update');
+        Route::delete('banques/{banque}', [BanqueController::class, 'destroy'])->name('banques.destroy');
 
         // Types de dépenses
         Route::get('type-depenses', [TypeDepenseController::class, 'index'])->name('type-depenses.index');
         Route::post('type-depenses', [TypeDepenseController::class, 'store'])->name('type-depenses.store');
         Route::put('type-depenses/{typeDepense}', [TypeDepenseController::class, 'update'])->name('type-depenses.update');
         Route::delete('type-depenses/{typeDepense}', [TypeDepenseController::class, 'destroy'])->name('type-depenses.destroy');
-        
+
         // Fiches d'intégration
-        Route::get('fiche-integrations/export', [\App\Http\Controllers\FicheIntegrationController::class, 'export'])->name('fiche-integrations.export');
-        Route::post('fiche-integrations/import', [\App\Http\Controllers\FicheIntegrationController::class, 'import'])->name('fiche-integrations.import');
-        Route::get('fiche-integrations', [\App\Http\Controllers\FicheIntegrationController::class, 'index'])->name('fiche-integrations.index');
-        Route::post('fiche-integrations', [\App\Http\Controllers\FicheIntegrationController::class, 'store'])->name('fiche-integrations.store');
-        Route::put('fiche-integrations/{ficheIntegration}', [\App\Http\Controllers\FicheIntegrationController::class, 'update'])->name('fiche-integrations.update');
-        Route::delete('fiche-integrations/{ficheIntegration}', [\App\Http\Controllers\FicheIntegrationController::class, 'destroy'])->name('fiche-integrations.destroy');
+        Route::get('fiche-integrations/export', [FicheIntegrationController::class, 'export'])->name('fiche-integrations.export');
+        Route::post('fiche-integrations/import', [FicheIntegrationController::class, 'import'])->name('fiche-integrations.import');
+        Route::get('fiche-integrations', [FicheIntegrationController::class, 'index'])->name('fiche-integrations.index');
+        Route::post('fiche-integrations', [FicheIntegrationController::class, 'store'])->name('fiche-integrations.store');
+        Route::put('fiche-integrations/{ficheIntegration}', [FicheIntegrationController::class, 'update'])->name('fiche-integrations.update');
+        Route::delete('fiche-integrations/{ficheIntegration}', [FicheIntegrationController::class, 'destroy'])->name('fiche-integrations.destroy');
 
         // Articles & Agences & Familles
         Route::resource('articles', ArticleController::class);
         Route::resource('agences', AgenceController::class);
+        Route::post('zones', [ZoneController::class, 'store'])->name('zones.store');
+        Route::put('zones/{zone}', [ZoneController::class, 'update'])->name('zones.update');
+        Route::delete('zones/{zone}', [ZoneController::class, 'destroy'])->name('zones.destroy');
+        Route::get('apporteurs-affaires', [ApporteurAffaireController::class, 'index'])->name('apporteurs-affaires.index');
+        Route::post('apporteurs-affaires', [ApporteurAffaireController::class, 'store'])->name('apporteurs-affaires.store');
+        Route::put('apporteurs-affaires/{coficarteApporteur}', [ApporteurAffaireController::class, 'update'])->name('apporteurs-affaires.update');
+        Route::delete('apporteurs-affaires/{coficarteApporteur}', [ApporteurAffaireController::class, 'destroy'])->name('apporteurs-affaires.destroy');
 
         // Familles → Catégories → Sous-Catégories
         Route::get('familles/export-template', [FamilleController::class, 'exportTemplate'])->name('familles.template');
@@ -175,6 +200,13 @@ use App\Http\Controllers\DemandeApprovisionnementController;
     // Routes pour les écritures comptables
     Route::get('ecritures-comptables/export', [EcritureComptableController::class, 'export'])->name('ecritures-comptables.export');
     Route::get('ecritures-comptables', [EcritureComptableController::class, 'index'])->name('ecritures-comptables.index');
+    Route::post('ecritures-comptables/push', [EcritureComptableController::class, 'push'])
+        ->name('ecritures-comptables.push')
+        ->middleware('role:it');
+
+    Route::get('operations-diverses', [OperationDiverseController::class, 'index'])->name('operations-diverses.index');
+    Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
+    Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
 
     // Routes pour les FED (demandeur)
     Route::resource('feds', FedController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
@@ -188,7 +220,7 @@ use App\Http\Controllers\DemandeApprovisionnementController;
     Route::get('appel-offres/{appelOffre}/pv-ouverture', [AppelOffreController::class, 'pvOuverture'])->name('appel-offres.pv-ouverture');
     Route::get('appel-offres/{appelOffre}/compare', [EvaluationController::class, 'compare'])->name('evaluations.compare');
     Route::get('appel-offres/{appelOffre}/pv-evaluation', [EvaluationController::class, 'pvEvaluation'])->name('evaluations.pv_evaluation');
-    
+
     // Routes pour le Comité
     Route::get('comites', [ComiteController::class, 'index'])->name('comites.index');
     Route::get('appel-offres/{appelOffre}/comites/create', [ComiteController::class, 'create'])->name('comites.create');
@@ -209,19 +241,99 @@ use App\Http\Controllers\DemandeApprovisionnementController;
         Route::get('stock', [StockController::class, 'index'])->name('stock.index');
         Route::get('stock/movements', [StockController::class, 'movements'])->name('stock.movements');
         Route::post('stock/movements', [StockController::class, 'store'])->name('stock.movements.store');
-        
+
         Route::post('demandes-approvisionnement/{demande}/status', [DemandeApprovisionnementController::class, 'updateStatus'])->name('demandes-approvisionnement.update-status');
     });
 
     Route::resource('demandes-approvisionnement', DemandeApprovisionnementController::class)->parameters([
-        'demandes-approvisionnement' => 'demande'
+        'demandes-approvisionnement' => 'demande',
     ]);
 
+    // Module Monétique
+    Route::middleware('role:monetique,chef_agence_ca,charge_clientele_cc,caissier')->prefix('monetique')->group(function () {
+        Route::get('coficarte', [CoficarteController::class, 'index'])->name('monetique.coficarte');
+
+        Route::get('pilotage', [PilotageController::class, 'index'])->name('monetique.pilotage');
+
+        Route::middleware('role:monetique')->group(function () {
+            Route::get('demandes-approvisionnement', [SupplyRequestController::class, 'monetiqueIndex'])
+                ->name('monetique.demandestransfert.index');
+            Route::post('demandes-approvisionnement/{coficarte_supply_request}/refuser', [SupplyRequestController::class, 'monetiqueRefuser'])
+                ->name('monetique.demandestransfert.refuser');
+            Route::get('parametrage/seuils-stock', [StockThresholdController::class, 'edit'])->name('monetique.parametrage.seuils-stock');
+            Route::put('parametrage/seuils-stock', [StockThresholdController::class, 'update'])->name('monetique.parametrage.seuils-stock.update');
+            Route::get('campagnes', [CampaignController::class, 'index'])->name('monetique.campagnes.index');
+            Route::post('campagnes', [CampaignController::class, 'store'])->name('monetique.campagnes.store');
+            Route::put('campagnes/{campagne}', [CampaignController::class, 'update'])->name('monetique.campagnes.update');
+        });
+
+        Route::prefix('cartes')->group(function () {
+            Route::get('ajouter', [CarteController::class, 'create'])->name('monetique.cartes.ajouter');
+            Route::post('/', [CarteController::class, 'store'])->name('monetique.cartes.store');
+            Route::get('modifier-prix', [CarteController::class, 'modifierPrix'])->name('monetique.cartes.modifier-prix');
+            Route::put('prix', [CarteController::class, 'updateBulkPrix'])->name('monetique.cartes.prix');
+            Route::get('en-stock', [CarteController::class, 'enStock'])->name('monetique.cartes.en-stock');
+            Route::get('vendus', [CarteController::class, 'vendus'])->name('monetique.cartes.vendus');
+            Route::get('{coficarte_card}/mouvements', [CarteController::class, 'mouvements'])->name('monetique.cartes.mouvements');
+        });
+
+        Route::prefix('transferts')->group(function () {
+            Route::get('nouveau', [TransfertController::class, 'create'])->name('monetique.transferts.nouveau');
+            Route::post('/', [TransfertController::class, 'store'])->name('monetique.transferts.store');
+            Route::get('en-attente', [TransfertController::class, 'enAttente'])->name('monetique.transferts.en-attente');
+            Route::get('historique', [TransfertController::class, 'historique'])->name('monetique.transferts.historique');
+            Route::post('{coficarte_transfer}/annuler', [TransfertController::class, 'annuler'])->name('monetique.transferts.annuler');
+            Route::post('{coficarte_transfer}/valider-reception', [TransfertController::class, 'validerReception'])->name('monetique.transferts.valider-reception');
+            Route::get('{coficarte_transfer}/bon-pdf', [TransfertController::class, 'bonPdf'])->name('monetique.transferts.bon-pdf');
+            Route::get('{coficarte_transfer}', [TransfertController::class, 'show'])->name('monetique.transferts.show');
+        });
+
+        Route::middleware('role:chef_agence_ca')->prefix('agence')->group(function () {
+            Route::get('retour-cartes', [ChefAgenceController::class, 'retourCartes'])->name('monetique.agence.retour-cartes');
+            Route::post('retour-cartes', [ChefAgenceController::class, 'retourCartesStore'])->name('monetique.agence.retour-cartes.store');
+            Route::get('approvisionnement-cc', [ChefAgenceController::class, 'approvisionnementCc'])->name('monetique.agence.approvisionnement-cc');
+            Route::post('approvisionnement-cc', [ChefAgenceController::class, 'approvisionnementCcStore'])->name('monetique.agence.approvisionnement-cc.store');
+            Route::get('suivi', [ChefAgenceController::class, 'suivi'])->name('monetique.agence.suivi');
+            Route::get('demandes-approvisionnement', [SupplyRequestController::class, 'chefIndex'])->name('monetique.agence.demandes-approvisionnement');
+            Route::post('demandes-approvisionnement', [SupplyRequestController::class, 'chefStore'])->name('monetique.agence.demandes-approvisionnement.store');
+            Route::post('demandes-approvisionnement/{coficarte_supply_request}/annuler', [SupplyRequestController::class, 'chefAnnuler'])
+                ->name('monetique.agence.demandes-approvisionnement.annuler');
+            Route::get('apporteurs', [ApporteurController::class, 'index'])->name('monetique.agence.apporteurs');
+            Route::post('apporteurs', [ApporteurController::class, 'store'])->name('monetique.agence.apporteurs.store');
+            Route::delete('apporteurs/{coficarte_apporteur}', [ApporteurController::class, 'destroy'])->name('monetique.agence.apporteurs.destroy');
+        });
+
+        Route::middleware('role:charge_clientele_cc')->prefix('cc')->group(function () {
+            Route::get('delester-chef-agence', [ChefAgenceController::class, 'delesterCcVersChefAgence'])->name('monetique.cc.delester-chef-agence');
+            Route::post('delester-chef-agence', [ChefAgenceController::class, 'delesterCcVersChefAgenceStore'])->name('monetique.cc.delester-chef-agence.store');
+            Route::permanentRedirect('retour-chef-agence', '/monetique/cc/delester-chef-agence');
+        });
+
+        Route::prefix('ventes')->group(function () {
+            Route::get('nouveau', [VenteController::class, 'create'])->name('monetique.ventes.nouveau');
+            Route::post('/', [VenteController::class, 'store'])->name('monetique.ventes.store');
+            Route::get('historique', [VenteController::class, 'historique'])->name('monetique.ventes.historique');
+        });
+
+        Route::prefix('recharges')->group(function () {
+            Route::get('nouveau', [RechargeController::class, 'create'])->name('monetique.recharges.nouveau');
+            Route::post('/', [RechargeController::class, 'store'])->name('monetique.recharges.store');
+            Route::get('historique', [RechargeController::class, 'historique'])->name('monetique.recharges.historique');
+        });
+
+        Route::middleware('role:caissier,monetique,it')->group(function () {
+            Route::get('encaissements', [EncaissementController::class, 'caisse'])->name('monetique.encaissements');
+            Route::get('encaissements/ventes', fn () => redirect()->route('monetique.encaissements'))->name('monetique.encaissements.ventes');
+            Route::get('encaissements/recharges', fn () => redirect()->route('monetique.encaissements'))->name('monetique.encaissements.recharges');
+            Route::post('encaissements/ventes/{coficarte_sale}/confirmer', [EncaissementController::class, 'confirmerVente'])->name('monetique.encaissements.ventes.confirmer');
+            Route::post('encaissements/recharges/{coficarte_recharge}/confirmer', [EncaissementController::class, 'confirmerRecharge'])->name('monetique.encaissements.recharges.confirmer');
+        });
+    });
 
 });
 
 // Routes publiques pour les Fournisseurs (Soumission via URL signée)
 Route::middleware(['signed'])->group(function () {
-    Route::get('fournisseur/soumission/{appelOffre}/{fournisseur}', [\App\Http\Controllers\PublicSoumissionController::class, 'create'])->name('public.soumission.create');
-    Route::post('fournisseur/soumission/{appelOffre}/{fournisseur}', [\App\Http\Controllers\PublicSoumissionController::class, 'store'])->name('public.soumission.store');
+    Route::get('fournisseur/soumission/{appelOffre}/{fournisseur}', [PublicSoumissionController::class, 'create'])->name('public.soumission.create');
+    Route::post('fournisseur/soumission/{appelOffre}/{fournisseur}', [PublicSoumissionController::class, 'store'])->name('public.soumission.store');
 });
