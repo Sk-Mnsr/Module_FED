@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -8,7 +8,9 @@ import DataTable, { type Column } from '@/components/DataTable.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { getInitials } from '@/composables/useInitials';
 import { ref, computed } from 'vue';
-import { Code, Eye, Pencil, Trash2, RefreshCw, Lock, Unlock } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Code, Eye, Pencil, Trash2, Lock, Unlock, Upload } from 'lucide-vue-next';
 
 interface User {
     id: number;
@@ -234,6 +236,22 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
     url.searchParams.set('direction', direction);
     router.visit(url.toString(), { preserveScroll: true });
 };
+
+const showImportModal = ref(false);
+const importForm = useForm({
+    file: null as File | null,
+});
+
+const submitImport = () => {
+    importForm.post('/users/import', {
+        preserveScroll: true,
+        forceFormData: true,
+        onSuccess: () => {
+            showImportModal.value = false;
+            importForm.reset('file');
+        },
+    });
+};
 </script>
 
 <template>
@@ -241,7 +259,17 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
-            <h1 class="text-3xl font-bold text-gray-900">Liste des utilisateurs</h1>
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <h1 class="text-3xl font-bold text-gray-900">Liste des utilisateurs</h1>
+                <div class="flex items-center gap-2">
+                    <Button variant="outline" @click="showImportModal = true" class="text-blue-700 hover:bg-blue-50 hover:text-blue-800">
+                        <Upload class="mr-2 h-4 w-4" /> Importer
+                    </Button>
+                    <Link href="/users/create">
+                        <Button class="bg-purple-600 hover:bg-purple-700">+ Nouveau</Button>
+                    </Link>
+                </div>
+            </div>
 
             <!-- Section Filtres -->
             <div class="rounded-lg border border-gray-200 bg-white p-4">
@@ -289,9 +317,6 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
                     <Button variant="outline" @click="() => { filters.role = ''; filters.activation = ''; filters.search = ''; applyFilters(); }" class="border-gray-300">
                         Réinitialiser
                     </Button>
-                    <Link href="/users/create">
-                        <Button class="bg-purple-600 hover:bg-purple-700">+ Nouveau</Button>
-                    </Link>
                 </div>
             </div>
 
@@ -396,6 +421,50 @@ const handleSort = (column: string, direction: 'asc' | 'desc') => {
                 </template>
             </DataTable>
         </div>
+
+        <Dialog :open="showImportModal" @update:open="showImportModal = $event">
+            <DialogContent class="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Importer des utilisateurs</DialogTitle>
+                </DialogHeader>
+                <form @submit.prevent="submitImport" class="space-y-4 py-4">
+                    <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                        <p>Importez un fichier Excel ou CSV. Les lignes sans email, nom ou fonction sont ignorées.</p>
+                        <p class="mt-2 font-medium">
+                            <a href="/users/export-template" class="text-blue-700 underline hover:text-blue-900">
+                                Télécharger le template Excel
+                            </a>
+                        </p>
+                        <p class="mt-2 text-xs text-blue-700">
+                            Colonnes : Nom, Fonction, Email, IDFLEX, Mot de passe (optionnel), Role (slug ou nom), Departement, Code agence.
+                            Si le mot de passe est vide, un mot de passe temporaire est généré (changement obligatoire à la première connexion).
+                        </p>
+                    </div>
+                    <div class="space-y-2">
+                        <Label for="import-file">Fichier Excel (.xlsx, .xls, .csv)</Label>
+                        <Input
+                            id="import-file"
+                            type="file"
+                            accept=".xlsx,.xls,.csv"
+                            @input="importForm.file = ($event.target as HTMLInputElement).files?.[0] ?? null"
+                            required
+                        />
+                        <p v-if="importForm.errors.file" class="text-sm text-red-600">
+                            {{ importForm.errors.file }}
+                        </p>
+                    </div>
+                    <DialogFooter class="pt-4">
+                        <Button type="button" variant="outline" @click="showImportModal = false" :disabled="importForm.processing">
+                            Annuler
+                        </Button>
+                        <Button type="submit" class="bg-blue-600 hover:bg-blue-700" :disabled="importForm.processing">
+                            <Upload v-if="!importForm.processing" class="mr-2 h-4 w-4" />
+                            {{ importForm.processing ? 'Importation en cours...' : 'Importer' }}
+                        </Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>
 

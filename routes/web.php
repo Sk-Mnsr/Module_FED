@@ -205,6 +205,11 @@ Route::middleware(['auth'])->group(function () {
         ->middleware('role:it');
 
     Route::get('operations-diverses', [OperationDiverseController::class, 'index'])->name('operations-diverses.index');
+    Route::post('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptableStore'])->name('operations-diverses.piece-comptable.store');
+    Route::get('operations-diverses/piece-comptable/{classeur}/resume', [OperationDiverseController::class, 'pieceComptableResume'])->name('operations-diverses.piece-comptable.resume');
+    Route::post('operations-diverses/piece-comptable/{classeur}/valider', [OperationDiverseController::class, 'pieceComptableValider'])->name('operations-diverses.piece-comptable.valider');
+    Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
+    Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');
     Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
     Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
 

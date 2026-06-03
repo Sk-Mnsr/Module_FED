@@ -371,6 +371,7 @@ const mainNavGroups = computed<NavGroup[]>(() => {
     const canAccessOperationsDiverses =
         hasConfigAccess
         || roleSlugs.includes('ops')
+        || roleSlugs.includes('finance')
         || roleSlugs.includes('controle_de_gestion')
         || roleSlugs.includes('daf');
 

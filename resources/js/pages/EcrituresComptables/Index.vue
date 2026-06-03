@@ -1,7 +1,6 @@
 <template>
   <AppLayout title="Écritures Comptables">
     <div class="flex flex-col gap-6 p-6">
-      <ComptabiliteModuleTabs />
       <!-- Header -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200">
         <div class="px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -174,7 +173,6 @@
 import { ref } from 'vue'
 import { Link, usePage, router } from '@inertiajs/vue3'
 import AppLayout from '@/layouts/AppLayout.vue'
-import ComptabiliteModuleTabs from '@/components/ComptabiliteModuleTabs.vue'
 
 const page = usePage()
 const pushing = ref(false)

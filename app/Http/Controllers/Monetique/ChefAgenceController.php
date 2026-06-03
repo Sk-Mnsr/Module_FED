@@ -19,7 +19,7 @@ class ChefAgenceController extends Controller
 {
     private function ensureChefAgence(?User $user): User
     {
-        if (! $user || ! $user->hasRole('chef_agence_ca')) {
+        if (! $user || ! $user->hasRole('ca')) {
             abort(403);
         }
 
@@ -32,7 +32,7 @@ class ChefAgenceController extends Controller
 
     private function ensureChargeClientele(?User $user): User
     {
-        if (! $user || ! $user->hasRole('charge_clientele_cc')) {
+        if (! $user || ! $user->hasRole('cc')) {
             abort(403);
         }
 
@@ -195,7 +195,7 @@ class ChefAgenceController extends Controller
 
         $cibles = User::query()
             ->where('agence_id', $user->agence_id)
-            ->whereHas('roles', fn ($q) => $q->where('slug', 'charge_clientele_cc'))
+            ->whereHas('roles', fn ($q) => $q->where('slug', 'cc'))
             ->orderBy('name')
             ->get(['id', 'name', 'email']);
 
@@ -227,7 +227,7 @@ class ChefAgenceController extends Controller
                                 ->from('user_role')
                                 ->join('roles', 'roles.id', '=', 'user_role.role_id')
                                 ->whereColumn('user_role.user_id', 'users.id')
-                                ->where('roles.slug', 'charge_clientele_cc');
+                                ->where('roles.slug', 'cc');
                         });
                 }),
             ],

@@ -12,7 +12,7 @@ class ApporteurController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (! $user || ! $user->hasRole('chef_agence_ca') || $user->agence_id === null) {
+        if (! $user || ! $user->hasRole('ca') || $user->agence_id === null) {
             abort(403);
         }
 
@@ -29,7 +29,7 @@ class ApporteurController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (! $user || ! $user->hasRole('chef_agence_ca') || $user->agence_id === null) {
+        if (! $user || ! $user->hasRole('ca') || $user->agence_id === null) {
             abort(403);
         }
 
@@ -53,7 +53,7 @@ class ApporteurController extends Controller
     public function destroy(Request $request, CoficarteApporteur $coficarteApporteur)
     {
         $user = $request->user();
-        if (! $user || ! $user->hasRole('chef_agence_ca') || (int) $coficarteApporteur->agence_id !== (int) $user->agence_id) {
+        if (! $user || ! $user->hasRole('ca') || (int) $coficarteApporteur->agence_id !== (int) $user->agence_id) {
             abort(403);
         }
 

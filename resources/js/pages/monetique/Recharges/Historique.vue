@@ -160,62 +160,71 @@ watch(
     <Head title="Monétique — Recharges — Historique" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6 max-w-[1200px] mx-auto w-full">
-            <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
-                <div class="flex items-center gap-3">
-                    <div class="p-3 bg-violet-100 text-violet-700 rounded-xl">
-                        <History class="h-6 w-6" />
+        <div class="flex min-h-0 w-full max-w-none flex-1 flex-col gap-6 px-4 pb-8 pt-3 sm:px-6 lg:px-8">
+            <header class="flex shrink-0 flex-col gap-4 border-b border-gray-200 pb-6 dark:border-neutral-800 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex min-w-0 items-start gap-4">
+                    <div
+                        class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-red-600 text-white shadow-md shadow-red-600/25 dark:shadow-red-900/40"
+                    >
+                        <History class="h-7 w-7" />
                     </div>
-                    <div>
-                        <h1 class="text-2xl font-bold text-gray-900">Historique des recharges</h1>
-                        <p class="text-sm text-gray-500 mt-0.5">
+                    <div class="min-w-0 space-y-1">
+                        <p class="text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Monétique</p>
+                        <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-50 sm:text-3xl">
+                            Historique des recharges
+                        </h1>
+                        <p class="text-sm text-gray-500 dark:text-neutral-400">
                             {{ recharges.total }} enregistrement(s) dans votre périmètre
                         </p>
                     </div>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <Button variant="outline" class="bg-white" @click="reload">
+                <div class="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                        variant="outline"
+                        class="border-gray-200 bg-white dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100 dark:hover:bg-neutral-800"
+                        @click="reload"
+                    >
                         <RotateCcw class="h-4 w-4 sm:mr-2" />
                         <span class="hidden sm:inline">Actualiser</span>
                     </Button>
                     <Button
                         v-if="canInitiateCoficarteRecharge"
-                        class="bg-violet-600 hover:bg-violet-700"
+                        class="bg-red-600 hover:bg-red-700 dark:hover:bg-red-500"
                         @click="goNouveau"
                     >
                         <Plus class="h-4 w-4 sm:mr-2" />
                         Nouvelle recharge
                     </Button>
                 </div>
-            </div>
+            </header>
 
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-                <p class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Filtres</p>
-                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                    <div class="md:col-span-5 space-y-2">
-                        <Label for="rq" class="text-xs font-medium text-gray-600">Recherche</Label>
+            <div class="space-y-5 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 sm:p-6 lg:p-8">
+                <p class="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-neutral-400">Filtres</p>
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-12 lg:items-end">
+                    <div class="space-y-2 lg:col-span-5 xl:col-span-6">
+                        <Label for="rq" class="text-xs font-medium text-gray-600 dark:text-neutral-400">Recherche</Label>
                         <Input
                             id="rq"
                             v-model="qLocal"
                             placeholder="N° carte, nom demandeur ou caissier…"
-                            class="border-gray-300"
+                            class="h-10 border-gray-300 dark:border-neutral-700 dark:bg-neutral-950"
                             @keydown.enter.prevent="applyFilters"
                         />
                     </div>
-                    <div class="md:col-span-4 space-y-2">
-                        <Label for="rst" class="text-xs font-medium text-gray-600">Statut paiement</Label>
+                    <div class="space-y-2 lg:col-span-4 xl:col-span-3">
+                        <Label for="rst" class="text-xs font-medium text-gray-600 dark:text-neutral-400">Statut paiement</Label>
                         <select
                             id="rst"
                             v-model="statutLocal"
-                            class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
+                            class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
                         >
                             <option v-for="o in statutOptions" :key="o.value || 'all'" :value="o.value">
                                 {{ o.label }}
                             </option>
                         </select>
                     </div>
-                    <div class="md:col-span-3 flex gap-2">
-                        <Button type="button" class="w-full bg-violet-600 hover:bg-violet-700" @click="applyFilters">
+                    <div class="flex gap-2 lg:col-span-3 xl:col-span-3">
+                        <Button type="button" class="h-10 w-full bg-red-600 hover:bg-red-700 dark:hover:bg-red-500" @click="applyFilters">
                             Filtrer
                         </Button>
                     </div>
@@ -233,14 +242,14 @@ watch(
                 :on-items-per-page-change="onItemsPerPageChange"
             >
                 <template #item.numero_carte="{ item }">
-                    <div class="flex flex-col gap-1 min-w-[140px]">
+                    <div class="flex min-w-[9rem] flex-col gap-1">
                         <div class="flex items-center gap-3">
                             <div
-                                class="h-8 w-8 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600 shrink-0"
+                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400"
                             >
                                 <CreditCard class="h-4 w-4" />
                             </div>
-                            <span class="font-mono font-medium text-gray-900 tabular-nums text-sm">
+                            <span class="font-mono text-sm font-medium tabular-nums text-gray-900 dark:text-neutral-100">
                                 {{ formatCardNumberDisplay(item.numero_carte) }}
                             </span>
                         </div>
@@ -264,11 +273,11 @@ watch(
 
                 <template #item.montant="{ item }">
                     <div class="text-sm">
-                        <span class="inline-flex items-center gap-1.5 font-semibold text-gray-800">
-                            <Banknote class="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                        <span class="inline-flex items-center gap-1.5 font-semibold text-red-700 dark:text-red-400">
+                            <Banknote class="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-500" />
                             {{ formatCfa(item.montant_total_affichage ?? item.montant) }}
                         </span>
-                        <p class="text-xs text-gray-500 mt-0.5">
+                        <p class="mt-0.5 text-xs text-gray-500 dark:text-neutral-500">
                             Recharge {{ formatCfa(item.montant) }}
                             <span v-if="(item.honoraire_chargement ?? 0) > 0">
                                 · Honoraires {{ formatCfa(item.honoraire_chargement ?? 0) }}
@@ -280,10 +289,10 @@ watch(
                 <template #item.paiement="{ item }">
                     <span
                         :class="[
-                            'inline-flex rounded-md px-2 py-1 text-xs font-semibold border',
+                            'inline-flex rounded-md border px-2 py-1 text-xs font-semibold',
                             item.payment_status === 'en_attente'
-                                ? 'bg-amber-50 text-amber-900 border-amber-200'
-                                : 'bg-emerald-50 text-emerald-900 border-emerald-200',
+                                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200'
+                                : 'border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200',
                         ]"
                     >
                         {{ item.paiement }}
@@ -316,7 +325,7 @@ watch(
                     <div class="flex items-center justify-end gap-1 flex-wrap">
                         <button
                             type="button"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-violet-700 hover:bg-violet-50"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                             title="Bordereau commercial (aperçu / impression)"
                             @click="ouvrirBordereauCcDepuisLigne(item.bordereau_cc_payload)"
                         >
@@ -327,7 +336,7 @@ watch(
                             :href="item.bordereau_caisse_url"
                             target="_blank"
                             rel="noopener noreferrer"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-emerald-700 hover:bg-emerald-50"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
                             title="Bordereau caisse (pièce jointe)"
                         >
                             <ExternalLink class="h-4 w-4" />

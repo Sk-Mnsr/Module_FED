@@ -35,7 +35,7 @@ class AgenceController extends Controller
             ->withQueryString();
 
         $chefCandidates = User::query()
-            ->whereHas('roles', fn ($q) => $q->where('slug', 'chef_agence_ca'))
+            ->whereHas('roles', fn ($q) => $q->where('slug', 'ca'))
             ->orderBy('name')
             ->get(['id', 'name', 'email', 'agence_id']);
 
@@ -131,7 +131,7 @@ class AgenceController extends Controller
                     if ((string) $request->input('code', $agence?->code ?? '') === Agence::CODE_SIEGE) {
                         return;
                     }
-                    if (! User::whereKey($value)->whereHas('roles', fn ($q) => $q->where('slug', 'chef_agence_ca'))->exists()) {
+                    if (! User::whereKey($value)->whereHas('roles', fn ($q) => $q->where('slug', 'ca'))->exists()) {
                         $fail('Le chef d’agence doit être un utilisateur avec le rôle Chef d’agence CA.');
                     }
                 },
@@ -195,7 +195,7 @@ class AgenceController extends Controller
             return;
         }
 
-        $roleId = Role::where('slug', 'chef_agence_ca')->value('id');
+        $roleId = Role::where('slug', 'ca')->value('id');
 
         $user->agence_id = $agence->id;
         if ($roleId) {

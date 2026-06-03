@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\UserTemplateExport;
+use App\Imports\UserImport;
 use App\Models\Agence;
 use App\Models\Department;
 use App\Models\Profil;
@@ -11,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 
 class UserController extends Controller
 {
@@ -237,6 +240,23 @@ class UserController extends Controller
             ->with('success', 'Utilisateur supprimé avec succès !');
     }
 
+    public function exportTemplate()
+    {
+        return Excel::download(new UserTemplateExport, 'template_utilisateurs.xlsx');
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|mimes:xlsx,xls,csv|max:10240',
+        ]);
+
+        Excel::import(new UserImport, $request->file('file'));
+
+        return redirect()->route('users.index')
+            ->with('success', 'Utilisateurs importés avec succès.');
+    }
+
     /**
      * Toggle the active status of a user.
      */
@@ -299,7 +319,7 @@ class UserController extends Controller
             return;
         }
 
-        if ($role && in_array($role->slug, ['monetique', 'chef_agence_ca', 'charge_clientele_cc', 'caissier'], true)) {
+        if ($role && in_array($role->slug, ['monetique', 'monetique_ops', 'ca', 'cc', 'caissier'], true)) {
             $user->profile = 'monetique';
 
             return;

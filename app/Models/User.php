@@ -229,6 +229,12 @@ class User extends AuthenticatableBase
         return $this->hasMany(Fed::class, 'requester_id');
     }
 
+    /** Classeurs OD (pièces comptables / intégrations). */
+    public function odClasseurs()
+    {
+        return $this->hasMany(OdClasseur::class);
+    }
+
     /**
      * Valeur à mettre dans la colonne « user_id » des exports / API Flex (IDFLEX = matricule du profil).
      */

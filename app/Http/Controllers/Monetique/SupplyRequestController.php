@@ -14,7 +14,7 @@ class SupplyRequestController extends Controller
     public function chefIndex(Request $request)
     {
         $user = $request->user();
-        if (! $user || ! $user->hasRole('chef_agence_ca') || $user->agence_id === null) {
+        if (! $user || ! $user->hasRole('ca') || $user->agence_id === null) {
             abort(403);
         }
 
@@ -51,7 +51,7 @@ class SupplyRequestController extends Controller
     public function chefStore(Request $request)
     {
         $user = $request->user();
-        if (! $user || ! $user->hasRole('chef_agence_ca') || $user->agence_id === null) {
+        if (! $user || ! $user->hasRole('ca') || $user->agence_id === null) {
             abort(403);
         }
 
@@ -76,7 +76,7 @@ class SupplyRequestController extends Controller
     public function chefAnnuler(Request $request, CoficarteSupplyRequest $supplyRequest)
     {
         $user = $request->user();
-        if (! $user || ! $user->hasRole('chef_agence_ca') || (int) $supplyRequest->agence_id !== (int) $user->agence_id) {
+        if (! $user || ! $user->hasRole('ca') || (int) $supplyRequest->agence_id !== (int) $user->agence_id) {
             abort(403);
         }
 

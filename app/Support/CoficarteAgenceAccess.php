@@ -18,7 +18,7 @@ final class CoficarteAgenceAccess
             return true;
         }
 
-        return $user->hasAnyRole(['it', 'monetique', 'responsable_monetique']);
+        return $user->hasAnyRole(['it', 'monetique', 'monetique_ops']);
     }
 
     /**
@@ -34,7 +34,7 @@ final class CoficarteAgenceAccess
             return true;
         }
 
-        return $user->hasRole('responsable_monetique');
+        return $user->hasRole('monetique');
     }
 
     /**
@@ -50,11 +50,11 @@ final class CoficarteAgenceAccess
             return true;
         }
 
-        if ($user->hasAnyRole(['monetique', 'responsable_monetique'])) {
+        if ($user->hasAnyRole(['monetique', 'monetique_ops'])) {
             return true;
         }
 
-        return $user->hasRole('charge_clientele_cc');
+        return $user->hasRole('cc');
     }
 
     public static function canInitiateCoficarteVente(?User $user): bool
@@ -81,7 +81,7 @@ final class CoficarteAgenceAccess
 
         $query->where('agence_id', $user->agence_id);
 
-        if ($user->hasRole('charge_clientele_cc') && ! $user->hasRole('chef_agence_ca')) {
+        if ($user->hasRole('cc') && ! $user->hasRole('ca')) {
             $query->where('assigned_to_user_id', $user->id);
         }
     }

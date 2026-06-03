@@ -444,8 +444,7 @@ const submit = () => {
                                             type="text"
                                             autocomplete="off"
                                             placeholder="Identifiant GPT (optionnel)"
-                                            class="border-gray-200"
-                                        />
+                                            class="border-gray-200"                                        />
                                         <p class="text-xs text-gray-500">Référence associée à l’enrôlement si applicable.</p>
                                         <InputError :message="form.errors.gpt_id" />
                                     </div>

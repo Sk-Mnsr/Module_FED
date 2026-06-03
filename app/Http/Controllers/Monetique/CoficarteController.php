@@ -25,9 +25,9 @@ class CoficarteController extends Controller
             'stats' => $stats,
             'chef_agence_portal' => auth()->user()
                 && ! CoficarteAgenceAccess::canViewAll(auth()->user())
-                && auth()->user()->hasRole('chef_agence_ca'),
+                && auth()->user()->hasRole('ca'),
             'cc_delester_chef_visible' => auth()->user()
-                && auth()->user()->hasRole('charge_clientele_cc'),
+                && auth()->user()->hasRole('cc'),
         ]);
     }
 }

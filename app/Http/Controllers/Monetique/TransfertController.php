@@ -803,7 +803,7 @@ class TransfertController extends Controller
 
         if ($user->isSuperAdmin()) {
             $badge = 'Super Admin';
-        } elseif ($user->hasRole('chef_agence_ca')) {
+        } elseif ($user->hasRole('ca')) {
             $badge = "Chef d'agence";
         } else {
             $first = $user->roles->first();
