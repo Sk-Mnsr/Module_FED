@@ -251,6 +251,8 @@ class UserController extends Controller
             'file' => 'required|mimes:xlsx,xls,csv|max:10240',
         ]);
 
+        set_time_limit(300);
+
         Excel::import(new UserImport, $request->file('file'));
 
         return redirect()->route('users.index')

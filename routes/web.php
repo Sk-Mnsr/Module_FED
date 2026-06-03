@@ -67,6 +67,8 @@ use App\Http\Controllers\UserController;
 // Routes pour les utilisateurs
 // - SuperAdmin uniquement : toutes les opérations (fait partie de Configuration)
 Route::middleware(['auth'])->group(function () {
+    Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('role:it');
+    Route::get('users/export-template', [UserController::class, 'exportTemplate'])->name('users.export-template')->middleware('role:it');
     Route::resource('users', UserController::class)->middleware('role:it');
     Route::post('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle')->middleware('role:it');
     Route::resource('departments', DepartmentController::class)->middleware('role:it');

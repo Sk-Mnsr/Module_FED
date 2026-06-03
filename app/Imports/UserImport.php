@@ -15,12 +15,37 @@ use Maatwebsite\Excel\Concerns\WithHeadingRow;
 
 class UserImport implements ToCollection, WithHeadingRow
 {
+    /** @var array<string, Role> */
+    private array $rolesByKey = [];
+
+    /** @var array<string, int> */
+    private array $agencesByKey = [];
+
+    /** @var array<string, int> */
+    private array $departmentsByKey = [];
+
+    /** @var array<int, string> */
+    private array $departmentNamesById = [];
+
+    /** @var array<string, User> */
+    private array $usersByEmail = [];
+
+    /** @var array<string, User> */
+    private array $usersByMatricule = [];
+
+    /** @var array<string, Profil> */
+    private array $profilesByEmail = [];
+
+    private ?string $defaultPasswordHash = null;
+
     public function collection(Collection $rows): void
     {
+        $this->warmCaches();
+
         foreach ($rows as $row) {
             $row = $row->toArray();
 
-            $email = $this->cell($row, ['email']);
+            $email = $this->normalizeEmail($this->cell($row, ['email']));
             $name = $this->cell($row, ['nom', 'name']);
             $fonction = $this->cell($row, ['fonction']);
 
@@ -34,7 +59,7 @@ class UserImport implements ToCollection, WithHeadingRow
             }
 
             $rawMatricule = $this->cell($row, ['idflex', 'matricule']);
-            $matricule = $rawMatricule !== '' ? $rawMatricule : null;
+            $matricule = $rawMatricule !== '' ? Str::upper($rawMatricule) : null;
 
             $passwordPlain = $this->cell($row, ['mot_de_passe', 'password', 'mot_de_passe_initial']);
 
@@ -44,31 +69,105 @@ class UserImport implements ToCollection, WithHeadingRow
             $attributes = [
                 'name' => $name,
                 'fonction' => $fonction,
-                'matricule' => $matricule,
                 'agence_id' => $agenceId,
                 'department_id' => $departmentId,
                 'activated' => true,
             ];
 
-            $user = User::firstOrNew(['email' => $email]);
+            if ($matricule !== null) {
+                $attributes['matricule'] = $matricule;
+            }
+
+            $user = $this->resolveUser($email, $matricule);
             $isNew = ! $user->exists;
 
             if ($isNew) {
-                $attributes['password'] = Hash::make($passwordPlain !== '' ? $passwordPlain : Str::password(12));
+                $user->email = $email;
+                $attributes['password'] = $passwordPlain !== ''
+                    ? Hash::make($passwordPlain)
+                    : $this->defaultPasswordHash();
                 $attributes['password_change_required'] = true;
             } elseif ($passwordPlain !== '') {
                 $attributes['password'] = Hash::make($passwordPlain);
                 $attributes['password_change_required'] = true;
             }
 
+            if ($user->exists && $user->email !== $email && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                unset($this->usersByEmail[Str::lower($user->email)]);
+                $user->email = $email;
+            }
+
+            $this->syncUserProfileType($user, $role);
             $user->fill($attributes);
             $user->save();
 
             $user->roles()->sync([$role->id]);
-            $this->syncUserProfileType($user, $role);
-            $user->save();
-            $this->syncUserProfil($user);
+            $this->registerUserInCache($user);
+            $this->syncUserProfil($user, $departmentId);
         }
+    }
+
+    private function warmCaches(): void
+    {
+        foreach (Role::query()->where('actif', true)->get() as $role) {
+            $this->rolesByKey[Str::lower($role->slug)] = $role;
+            $this->rolesByKey[Str::lower($role->nom)] = $role;
+        }
+
+        foreach (Agence::query()->get(['id', 'code', 'nom']) as $agence) {
+            $this->agencesByKey[(string) $agence->code] = $agence->id;
+            $this->agencesByKey[Str::lower($agence->nom)] = $agence->id;
+        }
+
+        foreach (Department::query()->get(['id', 'name']) as $department) {
+            $this->departmentsByKey[Str::lower($department->name)] = $department->id;
+            $this->departmentNamesById[$department->id] = $department->name;
+        }
+
+        foreach (User::query()->get() as $user) {
+            $this->registerUserInCache($user);
+        }
+
+        foreach (Profil::query()->get() as $profile) {
+            if ($profile->email) {
+                $this->profilesByEmail[Str::lower($profile->email)] = $profile;
+            }
+        }
+    }
+
+    private function defaultPasswordHash(): string
+    {
+        // Un seul bcrypt pour tous les nouveaux sans mot de passe (changement obligé à la 1re connexion).
+        return $this->defaultPasswordHash ??= Hash::make(Str::password(16));
+    }
+
+    private function registerUserInCache(User $user): void
+    {
+        if ($user->email) {
+            $this->usersByEmail[Str::lower($user->email)] = $user;
+        }
+        if ($user->matricule) {
+            $this->usersByMatricule[Str::upper($user->matricule)] = $user;
+        }
+    }
+
+    private function normalizeEmail(string $email): string
+    {
+        $email = Str::lower(trim($email));
+        $email = (string) preg_replace('/,([a-z]{2,})$/', '.$1', $email);
+
+        return $email;
+    }
+
+    private function resolveUser(string $email, ?string $matricule): User
+    {
+        $user = $this->usersByEmail[$email] ?? null;
+
+        if ($user === null && $matricule !== null) {
+            $user = $this->usersByMatricule[$matricule] ?? null;
+        }
+
+        return $user ?? new User;
     }
 
     private function cell(array $row, array $keys): string
@@ -92,15 +191,7 @@ class UserImport implements ToCollection, WithHeadingRow
             return null;
         }
 
-        $normalized = Str::lower($value);
-
-        return Role::query()
-            ->where('actif', true)
-            ->where(function ($q) use ($normalized, $value) {
-                $q->whereRaw('LOWER(slug) = ?', [$normalized])
-                    ->orWhereRaw('LOWER(nom) = ?', [Str::lower($value)]);
-            })
-            ->first();
+        return $this->rolesByKey[Str::lower($value)] ?? null;
     }
 
     private function resolveDepartmentId(string $value): ?int
@@ -109,11 +200,7 @@ class UserImport implements ToCollection, WithHeadingRow
             return null;
         }
 
-        $department = Department::query()
-            ->whereRaw('LOWER(name) = ?', [Str::lower($value)])
-            ->first();
-
-        return $department?->id;
+        return $this->departmentsByKey[Str::lower($value)] ?? null;
     }
 
     private function resolveAgenceId(string $value): ?int
@@ -122,19 +209,15 @@ class UserImport implements ToCollection, WithHeadingRow
             return null;
         }
 
-        $agence = Agence::query()
-            ->where('code', $value)
-            ->orWhereRaw('LOWER(nom) = ?', [Str::lower($value)])
-            ->first();
-
-        return $agence?->id;
+        return $this->agencesByKey[$value]
+            ?? $this->agencesByKey[Str::lower($value)]
+            ?? null;
     }
 
-    private function syncUserProfil(User $user): void
+    private function syncUserProfil(User $user, ?int $departmentId): void
     {
-        $user->refresh();
-
-        $profile = Profil::firstOrNew(['email' => $user->email]);
+        $emailKey = Str::lower($user->email);
+        $profile = $this->profilesByEmail[$emailKey] ?? new Profil(['email' => $user->email]);
 
         if (! $profile->prenom || ! $profile->nom) {
             $parts = preg_split('/\s+/', trim($user->name));
@@ -144,29 +227,24 @@ class UserImport implements ToCollection, WithHeadingRow
 
         $profile->fonction = $user->fonction;
         $profile->email = $user->email;
+        $profile->matricule = $user->matricule;
+        $profile->statut = $user->activated ? 'actif' : 'inactif';
 
-        if ($user->department_id) {
-            $department = Department::find($user->department_id);
-            if ($department) {
-                $profile->departement = $department->name;
-                $profile->department_id = $department->id;
-            }
+        if ($departmentId) {
+            $profile->departement = $this->departmentNamesById[$departmentId] ?? null;
+            $profile->department_id = $departmentId;
         } else {
             $profile->departement = null;
             $profile->department_id = null;
         }
 
-        $profile->matricule = $user->matricule;
-        $profile->statut = $user->activated ? 'actif' : 'inactif';
-
         $profile->save();
+        $this->profilesByEmail[$emailKey] = $profile;
     }
 
     private function syncUserProfileType(User $user, Role $role): void
     {
-        $adminSlugs = ['it', 'admin'];
-
-        if (in_array($role->slug, $adminSlugs, true)) {
+        if (in_array($role->slug, ['it', 'admin'], true)) {
             $user->profile = 'admin';
 
             return;
