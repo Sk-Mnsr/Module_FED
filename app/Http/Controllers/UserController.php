@@ -176,6 +176,8 @@ class UserController extends Controller
     {
         $user->load('profil');
 
+        $linkedProfile = Profil::resolveForUser($user);
+
         if (! $request->filled('matricule')) {
             $request->merge(['matricule' => null]);
         }
@@ -193,7 +195,7 @@ class UserController extends Controller
                 'string',
                 'max:128',
                 Rule::unique('users', 'matricule')->ignore($user->id),
-                Rule::unique('profiles', 'matricule')->ignore($user->profil?->id),
+                Rule::unique('profiles', 'matricule')->ignore($linkedProfile->id),
             ],
         ]);
 
@@ -282,7 +284,7 @@ class UserController extends Controller
     {
         $user->refresh();
 
-        $profile = Profil::firstOrNew(['email' => $user->email]);
+        $profile = Profil::resolveForUser($user);
 
         if (! $profile->prenom || ! $profile->nom) {
             $parts = preg_split('/\s+/', trim($user->name));

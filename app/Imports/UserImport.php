@@ -217,7 +217,11 @@ class UserImport implements ToCollection, WithHeadingRow
     private function syncUserProfil(User $user, ?int $departmentId): void
     {
         $emailKey = Str::lower($user->email);
-        $profile = $this->profilesByEmail[$emailKey] ?? new Profil(['email' => $user->email]);
+        $profile = Profil::resolveForUser($user);
+
+        if (! $profile->exists) {
+            $this->profilesByEmail[$emailKey] = $profile;
+        }
 
         if (! $profile->prenom || ! $profile->nom) {
             $parts = preg_split('/\s+/', trim($user->name));

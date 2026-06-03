@@ -72,6 +72,28 @@ class Profil extends Model
     }
 
     /**
+     * Retrouve le profil annuaire lié à un utilisateur (e-mail ou matricule IDFLEX).
+     */
+    public static function resolveForUser(User $user): self
+    {
+        if ($user->email) {
+            $profile = static::query()->where('email', $user->email)->first();
+            if ($profile !== null) {
+                return $profile;
+            }
+        }
+
+        if ($user->matricule) {
+            $profile = static::query()->where('matricule', $user->matricule)->first();
+            if ($profile !== null) {
+                return $profile;
+            }
+        }
+
+        return new static(['email' => $user->email]);
+    }
+
+    /**
      * Génère un matricule unique automatiquement
      * Format: MAT-YYYY-XXXX (ex: MAT-2025-0001)
      * 
