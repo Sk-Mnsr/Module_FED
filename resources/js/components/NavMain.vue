@@ -14,32 +14,124 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
-import { toUrl, urlIsActive } from '@/lib/utils';
+import { navUrlMatchScore, toUrl } from '@/lib/utils';
+import { resolveNavIcon } from '@/lib/navIcons';
 import { type NavGroup, type NavItem } from '@/types';
 import { Link, usePage } from '@inertiajs/vue3';
 import { ChevronRight } from 'lucide-vue-next';
 import type { InertiaLinkProps } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 
-defineProps<{
+const props = defineProps<{
     groups: NavGroup[];
 }>();
 
 const page = usePage();
+const openStates = ref<Record<string, boolean>>({});
+
+const menuKey = (...parts: (string | number)[]): string => parts.join(':');
+
+type NavMatch = {
+    href: string;
+    score: number;
+    openKeys: string[];
+};
+
+const findBestNavMatch = (items: NavItem[], prefix: string, openKeys: string[] = []): NavMatch | null => {
+    let best: NavMatch | null = null;
+
+    items.forEach((item, index) => {
+        const key = menuKey(prefix, index);
+        const branchOpenKeys = item.items?.length ? [...openKeys, key] : openKeys;
+
+        if (item.items?.length) {
+            const childMatch = findBestNavMatch(item.items, key, branchOpenKeys);
+            if (childMatch && (!best || childMatch.score > best.score)) {
+                best = childMatch;
+            }
+        }
+
+        if (item.href) {
+            const href = toUrl(item.href);
+            const score = navUrlMatchScore(item.href, page.url);
+
+            if (score >= 0 && (!best || score > best.score)) {
+                best = { href, score, openKeys: branchOpenKeys };
+            }
+        }
+    });
+
+    return best;
+};
+
+const activeNavMatch = computed(() => {
+    let best: NavMatch | null = null;
+
+    props.groups.forEach((group, groupIndex) => {
+        const match = findBestNavMatch(group.items, `g${groupIndex}`);
+        if (match && (!best || match.score > best.score)) {
+            best = match;
+        }
+    });
+
+    return best;
+});
 
 const isItemActive = (item: NavItem): boolean => {
     if (item.href) {
-        return urlIsActive(item.href, page.url);
+        return activeNavMatch.value?.href === toUrl(item.href);
     }
+
     if (item.items) {
-        return item.items.some(subItem => isItemActive(subItem));
+        return item.items.some((subItem) => isItemActive(subItem));
     }
+
     return false;
 };
 
 const isSubItemActive = (href?: NonNullable<InertiaLinkProps['href']>): boolean => {
-    if (!href) return false;
-    return urlIsActive(toUrl(href), page.url);
+    if (!href || !activeNavMatch.value) {
+        return false;
+    }
+
+    return activeNavMatch.value.href === toUrl(href);
 };
+
+const collapsibleSiblingKeys = (items: NavItem[], keyForIndex: (index: number) => string): string[] =>
+    items
+        .map((item, index) => (item.items?.length ? keyForIndex(index) : null))
+        .filter((key): key is string => key !== null);
+
+const syncOpenStatesFromRoute = (): void => {
+    const states: Record<string, boolean> = {};
+    activeNavMatch.value?.openKeys.forEach((key) => {
+        states[key] = true;
+    });
+
+    openStates.value = states;
+};
+
+const isMenuOpen = (key: string): boolean => openStates.value[key] === true;
+
+const setMenuOpen = (key: string, open: boolean, siblingKeys: string[]): void => {
+    if (open) {
+        siblingKeys.forEach((siblingKey) => {
+            openStates.value[siblingKey] = false;
+        });
+        openStates.value[key] = true;
+        return;
+    }
+
+    openStates.value[key] = false;
+};
+
+watch(() => page.url, syncOpenStatesFromRoute, { immediate: true });
+
+watch(
+    () => props.groups,
+    () => syncOpenStatesFromRoute(),
+    { deep: true },
+);
 </script>
 
 <template>
@@ -51,27 +143,40 @@ const isSubItemActive = (href?: NonNullable<InertiaLinkProps['href']>): boolean 
         <SidebarGroupLabel v-if="group.label">{{ group.label }}</SidebarGroupLabel>
         <SidebarMenu>
             <template v-for="(item, itemIndex) in group.items" :key="`${groupIndex}-${itemIndex}-${item.title || 'sep'}`">
-                <!-- Séparateur avant l'item -->
                 <div v-if="item.separator" class="my-4 border-t border-sidebar-border" />
                 <SidebarMenuItem>
-                    <!-- Menu avec sous-menus -->
-                    <Collapsible v-if="item.items && item.items.length > 0" :default-open="isItemActive(item)">
+                    <Collapsible
+                        v-if="item.items && item.items.length > 0"
+                        :open="isMenuOpen(menuKey(`g${groupIndex}`, itemIndex))"
+                        @update:open="(open) => setMenuOpen(
+                            menuKey(`g${groupIndex}`, itemIndex),
+                            open,
+                            collapsibleSiblingKeys(group.items, (index) => menuKey(`g${groupIndex}`, index)),
+                        )"
+                    >
                         <template #default="{ open }">
                             <CollapsibleTrigger as-child>
                                 <SidebarMenuButton
                                     :is-active="isItemActive(item)"
                                     :tooltip="item.title"
                                 >
-                                    <component :is="item.icon" />
+                                    <component :is="resolveNavIcon(item.icon)" v-if="resolveNavIcon(item.icon)" />
                                     <span>{{ item.title }}</span>
                                     <ChevronRight class="ml-auto size-5 transition-transform duration-200" :class="{ 'rotate-90': open }" />
                                 </SidebarMenuButton>
                             </CollapsibleTrigger>
                             <CollapsibleContent>
                                 <SidebarMenuSub>
-                                    <SidebarMenuSubItem v-for="subItem in item.items" :key="subItem.title">
-                                        <!-- Sous-item avec ses propres sous-items (niveau 3) -->
-                                        <Collapsible v-if="subItem.items && subItem.items.length > 0" :default-open="isItemActive(subItem)">
+                                    <SidebarMenuSubItem v-for="(subItem, subIndex) in item.items" :key="subItem.title">
+                                        <Collapsible
+                                            v-if="subItem.items && subItem.items.length > 0"
+                                            :open="isMenuOpen(menuKey(`g${groupIndex}`, itemIndex, subIndex))"
+                                            @update:open="(open) => setMenuOpen(
+                                                menuKey(`g${groupIndex}`, itemIndex, subIndex),
+                                                open,
+                                                collapsibleSiblingKeys(item.items!, (index) => menuKey(`g${groupIndex}`, itemIndex, index)),
+                                            )"
+                                        >
                                             <template #default="{ open: subOpen }">
                                                 <CollapsibleTrigger as-child>
                                                     <SidebarMenuSubButton
@@ -112,7 +217,6 @@ const isSubItemActive = (href?: NonNullable<InertiaLinkProps['href']>): boolean 
                                                 </CollapsibleContent>
                                             </template>
                                         </Collapsible>
-                                        <!-- Sous-item simple avec href -->
                                         <SidebarMenuSubButton
                                             v-else-if="subItem.href"
                                             as-child
@@ -122,7 +226,6 @@ const isSubItemActive = (href?: NonNullable<InertiaLinkProps['href']>): boolean 
                                                 <span>{{ subItem.title }}</span>
                                             </Link>
                                         </SidebarMenuSubButton>
-                                        <!-- Sous-item avec onClick -->
                                         <SidebarMenuSubButton
                                             v-else-if="subItem.onClick"
                                             :is-active="false"
@@ -130,7 +233,6 @@ const isSubItemActive = (href?: NonNullable<InertiaLinkProps['href']>): boolean 
                                         >
                                             <span>{{ subItem.title }}</span>
                                         </SidebarMenuSubButton>
-                                        <!-- Sous-item désactivé -->
                                         <SidebarMenuSubButton
                                             v-else
                                             :is-active="false"
@@ -143,15 +245,14 @@ const isSubItemActive = (href?: NonNullable<InertiaLinkProps['href']>): boolean 
                             </CollapsibleContent>
                         </template>
                     </Collapsible>
-                    <!-- Menu simple sans sous-menus -->
                     <SidebarMenuButton
                         v-else
                         as-child
-                        :is-active="urlIsActive(item.href!, page.url)"
+                        :is-active="isSubItemActive(item.href)"
                         :tooltip="item.title"
                     >
                         <Link :href="item.href">
-                            <component :is="item.icon" />
+                            <component :is="resolveNavIcon(item.icon)" v-if="resolveNavIcon(item.icon)" />
                             <span>{{ item.title }}</span>
                         </Link>
                     </SidebarMenuButton>

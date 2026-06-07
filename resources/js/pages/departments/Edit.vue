@@ -8,11 +8,10 @@ import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import FormSection from '@/components/FormSection.vue';
 
-interface Profile {
+interface Manager {
     id: number;
-    prenom?: string | null;
-    nom?: string | null;
-    email?: string | null;
+    name: string;
+    email: string;
 }
 
 interface Props {
@@ -20,9 +19,9 @@ interface Props {
         id: number;
         name: string;
         code: string;
-        manager_profile_id?: number | null;
+        manager_user_id?: number | null;
     };
-    profiles: Profile[];
+    managers: Manager[];
 }
 
 const props = defineProps<Props>();
@@ -35,16 +34,11 @@ const breadcrumbs: BreadcrumbItem[] = [
 const form = useForm({
     name: props.department.name,
     code: props.department.code,
-    manager_profile_id: props.department.manager_profile_id ?? null,
+    manager_user_id: props.department.manager_user_id ?? null,
 });
 
 const submit = () => {
     form.put(`/departments/${props.department.id}`, { preserveScroll: true });
-};
-
-const formatProfile = (profile: Profile) => {
-    const name = `${profile.prenom ?? ''} ${profile.nom ?? ''}`.trim();
-    return name || profile.email || `Profil #${profile.id}`;
 };
 </script>
 
@@ -82,18 +76,18 @@ const formatProfile = (profile: Profile) => {
                     </div>
 
                     <div>
-                        <Label for="manager_profile_id" class="text-base font-medium text-gray-700">N+1 du département</Label>
+                        <Label for="manager_user_id" class="text-base font-medium text-gray-700">N+1 du département</Label>
                         <select
-                            id="manager_profile_id"
-                            v-model="form.manager_profile_id"
+                            id="manager_user_id"
+                            v-model="form.manager_user_id"
                             class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900"
                         >
                             <option :value="null">-- Aucun --</option>
-                            <option v-for="profile in props.profiles" :key="profile.id" :value="profile.id">
-                                {{ formatProfile(profile) }}
+                            <option v-for="manager in props.managers" :key="manager.id" :value="manager.id">
+                                {{ manager.name }} ({{ manager.email }})
                             </option>
                         </select>
-                        <InputError :message="form.errors.manager_profile_id" />
+                        <InputError :message="form.errors.manager_user_id" />
                     </div>
                 </FormSection>
 

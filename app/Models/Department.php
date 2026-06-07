@@ -12,17 +12,17 @@ class Department extends Model
     protected $fillable = [
         'name',
         'code',
-        'manager_profile_id',
+        'manager_user_id',
     ];
 
     public function manager()
     {
-        return $this->belongsTo(Profil::class, 'manager_profile_id');
+        return $this->belongsTo(User::class, 'manager_user_id');
     }
 
-    public function profiles()
+    public function users()
     {
-        return $this->hasMany(Profil::class);
+        return $this->hasMany(User::class);
     }
 
     public function budgets()

@@ -9,7 +9,7 @@ use App\Models\BudgetLine;
 use App\Models\CategorieDepense;
 use App\Models\Department;
 use App\Models\RubriqueDepense;
-use App\Models\Profil;
+use App\Models\User;
 use App\Models\SousCategorieDepense;
 use App\Models\TypologieDepense;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -62,19 +62,19 @@ class BudgetController extends Controller
 
     public function indexForN1(Request $request)
     {
-        $profil = $request->user()?->profil;
-        if (!$profil) {
-            abort(403, 'Profil N+1 introuvable.');
+        $user = $request->user();
+        if ($user === null) {
+            abort(403, 'Utilisateur N+1 introuvable.');
         }
 
-        $managedDepartmentIds = Department::where('manager_profile_id', $profil->id)->pluck('id')->toArray();
-        $subordinateDepartmentIds = Profil::where('n_plus_1_id', $profil->id)
+        $managedDepartmentIds = Department::where('manager_user_id', $user->id)->pluck('id')->toArray();
+        $subordinateDepartmentIds = User::where('n_plus_1_user_id', $user->id)
             ->whereNotNull('department_id')
             ->pluck('department_id')
             ->toArray();
 
         $departmentIds = array_values(array_unique(array_filter(array_merge(
-            [$profil->department_id],
+            [$user->department_id],
             $managedDepartmentIds,
             $subordinateDepartmentIds
         ))));

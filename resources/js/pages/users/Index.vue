@@ -19,13 +19,6 @@ interface User {
     activated: boolean;
     matricule?: string | null;
     created_at: string;
-    profil?: {
-        id: number;
-        nom: string;
-        prenom: string;
-        matricule: string;
-        site?: string;
-    };
     roles?: {
         id: number;
         nom: string;
@@ -160,7 +153,7 @@ const tableData = computed(() => {
     return props.users.data.map(user => ({
         id: user.id,
         name: user.name,
-        idflex: user.matricule || user.profil?.matricule || user.email?.split('@')[0] || '-',
+        idflex: user.matricule || user.email?.split('@')[0] || '-',
         email: user.email,
         agence: user.agence ? `${user.agence.nom}` : '—',
         roles: user.roles || [],

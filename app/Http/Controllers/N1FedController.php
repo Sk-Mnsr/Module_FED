@@ -10,22 +10,23 @@ class N1FedController extends Controller
 {
     public function index(Request $request)
     {
-        $profil = $request->user()?->profil;
-        if (!$profil) {
-            abort(403, "Profil N+1 introuvable.");
+        $n1User = $request->user();
+        if ($n1User === null) {
+            abort(403, 'Utilisateur N+1 introuvable.');
         }
 
+        $n1UserId = $n1User->id;
         $perPage = (int) $request->get('per_page', 10);
         $status = $request->get('status');
 
         $feds = Fed::with(['requester'])
-            ->whereHas('requester.profil', function ($query) use ($profil) {
+            ->whereHas('requester', function ($query) use ($n1UserId) {
                 $query
-                    ->where('n_plus_1_id', $profil->id)
-                    ->orWhere(function ($sub) use ($profil) {
-                        $sub->whereNull('n_plus_1_id')
-                            ->whereHas('department', function ($dept) use ($profil) {
-                                $dept->where('manager_profile_id', $profil->id);
+                    ->where('n_plus_1_user_id', $n1UserId)
+                    ->orWhere(function ($sub) use ($n1UserId) {
+                        $sub->whereNull('n_plus_1_user_id')
+                            ->whereHas('department', function ($dept) use ($n1UserId) {
+                                $dept->where('manager_user_id', $n1UserId);
                             });
                     });
             })
@@ -49,7 +50,7 @@ class N1FedController extends Controller
         $this->authorizeN1($request, $fed);
 
         $fed->load(['items.budgetLine', 'attachments', 'requester', 'budgetLines', 'fournisseurOffres.attachments']);
-        $departmentId = $fed->requester?->profil?->department_id;
+        $departmentId = $fed->requester?->department_id;
         $year = $fed->date ? $fed->date->format('Y') : now()->format('Y');
 
         return Inertia::render('feds/N1Show', [
@@ -75,10 +76,10 @@ class N1FedController extends Controller
         ]);
 
         $signature = $data['n1_signature'] ?? null;
-        if (!$signature && $request->boolean('use_saved_signature')) {
+        if (! $signature && $request->boolean('use_saved_signature')) {
             $signature = $request->user()->signature;
         }
-        if (!$signature) {
+        if (! $signature) {
             return redirect()->back()->withErrors(['n1_signature' => 'Signature requise pour valider.']);
         }
 
@@ -145,7 +146,7 @@ class N1FedController extends Controller
         ]);
 
         $fed->update([
-            'status' => Fed::STATUS_EXPERT_OPINION_GIVEN, // Retour à Facilities pour choix final
+            'status' => Fed::STATUS_EXPERT_OPINION_GIVEN,
             'expert_opinion_comment' => $data['expert_opinion_comment'],
             'expert_opinion_offre_id' => $data['expert_opinion_offre_id'] ?? null,
             'expert_opinion_at' => now(),
@@ -157,19 +158,19 @@ class N1FedController extends Controller
 
     private function authorizeN1(Request $request, Fed $fed): void
     {
-        $profil = $request->user()?->profil;
-        if (!$profil) {
-            abort(403, "Profil N+1 introuvable.");
+        $n1User = $request->user();
+        if ($n1User === null) {
+            abort(403, 'Utilisateur N+1 introuvable.');
         }
 
-        $requesterProfil = $fed->requester?->profil;
-        if (!$requesterProfil) {
-            abort(403, "Profil du demandeur introuvable.");
+        $requester = $fed->requester;
+        if ($requester === null) {
+            abort(403, 'Demandeur introuvable.');
         }
 
-        $resolvedN1 = $requesterProfil->resolveNPlus1();
-        if (!$resolvedN1 || $resolvedN1->id !== $profil->id) {
-            abort(403, "Accès non autorisé.");
+        $resolvedN1 = $requester->resolveNPlus1();
+        if ($resolvedN1 === null || $resolvedN1->id !== $n1User->id) {
+            abort(403, 'Accès non autorisé.');
         }
     }
 

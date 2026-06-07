@@ -28,7 +28,7 @@ class EcritureComptableImportApiClient
     }
 
     /**
-     * Colonne CSV « user_id » : IDFLEX utilisateur (matricule profil), pas l’id Laravel.
+     * Colonne CSV « user_id » : IDFLEX utilisateur (matricule), pas l’id Laravel.
      *
      * POST vers l’URL Flex avec en-tête « apikey » (valeur depuis ECRITURES_COMPTABLES_IMPORT_KEY).
      *

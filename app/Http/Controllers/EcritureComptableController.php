@@ -17,7 +17,7 @@ class EcritureComptableController extends Controller
     ) {
         $perPage = (int) $request->get('per_page', 10);
 
-        $ecritures = EcritureComptable::with(['user.profil'])
+        $ecritures = EcritureComptable::with(['user'])
             ->orderByDesc('created_at')
             ->paginate($perPage);
 
@@ -67,7 +67,7 @@ class EcritureComptableController extends Controller
         }
 
         $ids = $request->input('ids');
-        $query = EcritureComptable::query()->with(['user.profil'])->orderBy('id');
+        $query = EcritureComptable::query()->with(['user'])->orderBy('id');
 
         if (is_array($ids) && count($ids) > 0) {
             $query->whereIn('id', array_map('intval', $ids));
@@ -98,7 +98,7 @@ class EcritureComptableController extends Controller
 
     public function export(Request $request)
     {
-        $ecritures = EcritureComptable::with(['user.profil'])->orderByDesc('created_at')->get();
+        $ecritures = EcritureComptable::with(['user'])->orderByDesc('created_at')->get();
         $filename = 'ecritures_comptables_'.now()->format('Ymd_His').'.csv';
 
         $delimiter = (string) config('services.ecritures_comptables_import.csv_delimiter', ';');

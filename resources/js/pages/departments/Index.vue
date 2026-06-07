@@ -13,8 +13,7 @@ interface Department {
     code: string;
     manager?: {
         id: number;
-        prenom?: string | null;
-        nom?: string | null;
+        name: string;
         email?: string | null;
     } | null;
     created_at: string;
@@ -69,7 +68,7 @@ const tableData = computed(() => {
         id: dep.id,
         name: dep.name,
         code: dep.code,
-        manager: dep.manager ? `${dep.manager.prenom ?? ''} ${dep.manager.nom ?? ''}`.trim() || dep.manager.email || '-' : '-',
+        manager: dep.manager ? dep.manager.name || dep.manager.email || '-' : '-',
         created_at: new Date(dep.created_at).toLocaleDateString('fr-FR'),
     }));
 });

@@ -7,12 +7,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
 import FormSection from '@/components/FormSection.vue';
+import RoleModuleSelect from '@/components/RoleModuleSelect.vue';
 import { Code } from 'lucide-vue-next';
 
 interface Role {
     id: number;
     nom: string;
     slug: string;
+    module: string | null;
+    description?: string | null;
+}
+
+interface ModuleOption {
+    key: string;
+    label: string;
 }
 
 interface Props {
@@ -24,15 +32,15 @@ interface Props {
         matricule?: string | null;
         department_id?: number | null;
         agence_id?: number | null;
-        profil?: {
-            department_id?: number | null;
-            matricule?: string | null;
-        };
+        n_plus_1_user_id?: number | null;
+        n_plus_2_user_id?: number | null;
         roles?: Role[];
     };
     roles: Role[];
+    modules: ModuleOption[];
     departments: Array<{ id: number; name: string }>;
     agences: Array<{ id: number; code: string; nom: string }>;
+    supervisors: Array<{ id: number; name: string; email: string }>;
 }
 
 const props = defineProps<Props>();
@@ -52,12 +60,14 @@ const form = useForm({
     name: props.user.name,
     fonction: props.user.fonction || '',
     email: props.user.email,
-    matricule: props.user.matricule ?? props.user.profil?.matricule ?? '',
+    matricule: props.user.matricule ?? '',
     password: '',
     password_confirmation: '',
-    role_id: (props.user.roles && props.user.roles.length > 0) ? props.user.roles[0].id : null as number | null,
-    department_id: props.user.department_id ?? props.user.profil?.department_id ?? null,
+    role_ids: (props.user.roles ?? []).map((role) => role.id),
+    department_id: props.user.department_id ?? null,
     agence_id: props.user.agence_id ?? null,
+    n_plus_1_user_id: props.user.n_plus_1_user_id ?? null,
+    n_plus_2_user_id: props.user.n_plus_2_user_id ?? null,
 });
 
 const submit = () => {
@@ -161,32 +171,13 @@ const submit = () => {
                     </div>
                 </FormSection>
 
-                <FormSection title="Rôle" :columns="1">
-                    <div>
-                        <Label for="role_id" class="text-base font-medium text-gray-700">Sélectionner un rôle *</Label>
-                        <select
-                            id="role_id"
-                            v-model="form.role_id"
-                            required
-                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
-                        >
-                            <option :value="null">Sélectionner un rôle</option>
-                            <option
-                                v-for="role in props.roles"
-                                :key="role.id"
-                                :value="role.id"
-                            >
-                                {{ role.nom }}
-                            </option>
-                        </select>
-                        <p class="mt-1 text-xs text-gray-500">
-                            Le profil d'accès (administrateur, monétique ou métier) est défini automatiquement selon le rôle choisi.
-                        </p>
-                        <p v-if="props.roles.length === 0" class="mt-2 text-sm text-gray-500">
-                            Aucun rôle disponible. Veuillez contacter un administrateur.
-                        </p>
-                        <InputError :message="form.errors.role_id" />
-                    </div>
+                <FormSection title="Accès & rôle" :columns="1">
+                    <RoleModuleSelect
+                        v-model="form.role_ids"
+                        :roles="props.roles"
+                        :modules="props.modules"
+                        :error="form.errors.role_ids"
+                    />
                 </FormSection>
 
                 <FormSection title="Département & entité" :columns="1" :show-code-icon="false">
@@ -226,6 +217,37 @@ const submit = () => {
                         </select>
                         <p class="mt-1 text-xs text-gray-500">Utile pour le module Monétique (stock par agence).</p>
                         <InputError :message="form.errors.agence_id" />
+                    </div>
+                </FormSection>
+
+                <FormSection title="Hiérarchie" :columns="1" :show-code-icon="false">
+                    <div>
+                        <Label for="n_plus_1_user_id" class="text-base font-medium text-gray-700">N+1</Label>
+                        <select
+                            id="n_plus_1_user_id"
+                            v-model="form.n_plus_1_user_id"
+                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
+                        >
+                            <option :value="null">Aucun (manager du département par défaut)</option>
+                            <option v-for="supervisor in props.supervisors" :key="supervisor.id" :value="supervisor.id">
+                                {{ supervisor.name }} ({{ supervisor.email }})
+                            </option>
+                        </select>
+                        <InputError :message="form.errors.n_plus_1_user_id" />
+                    </div>
+                    <div>
+                        <Label for="n_plus_2_user_id" class="text-base font-medium text-gray-700">N+2</Label>
+                        <select
+                            id="n_plus_2_user_id"
+                            v-model="form.n_plus_2_user_id"
+                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
+                        >
+                            <option :value="null">Aucun</option>
+                            <option v-for="supervisor in props.supervisors" :key="`n2-${supervisor.id}`" :value="supervisor.id">
+                                {{ supervisor.name }} ({{ supervisor.email }})
+                            </option>
+                        </select>
+                        <InputError :message="form.errors.n_plus_2_user_id" />
                     </div>
                 </FormSection>
 

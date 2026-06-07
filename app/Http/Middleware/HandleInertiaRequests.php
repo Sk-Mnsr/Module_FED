@@ -4,7 +4,9 @@ namespace App\Http\Middleware;
 
 use App\Models\CoficarteCard;
 use App\Models\CoficarteStockThreshold;
+use App\Support\AppNavigation;
 use App\Support\CoficarteAgenceAccess;
+use App\Support\ModuleAccess;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -43,12 +45,10 @@ class HandleInertiaRequests extends Middleware
         [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
 
         $user = $request->user();
-        $profil = null;
         $roles = [];
 
         if ($user) {
             $user->load(['roles', 'agence']);
-            $profil = $user->profil;
             $roles = $user->roles->pluck('slug')->toArray();
         }
 
@@ -105,8 +105,9 @@ class HandleInertiaRequests extends Middleware
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'auth' => [
                 'user' => $user,
-                'profil' => $profil,
                 'roles' => $roles,
+                'normalizedRoles' => $user ? ModuleAccess::normalizedRoleSlugs($user) : [],
+                'modules' => $user ? ModuleAccess::accessibleModuleKeys($user) : [],
                 'isSuperAdmin' => $user ? $user->isSuperAdmin() : false,
                 'isInCommittee' => $user ? DB::table('comite_user')->where('user_id', $user->id)->exists() : false,
                 'canMonetiqueCentral' => $user ? CoficarteAgenceAccess::canViewAll($user) : false,
@@ -115,6 +116,9 @@ class HandleInertiaRequests extends Middleware
                 'canInitiateCoficarteRecharge' => $user ? CoficarteAgenceAccess::canInitiateCoficarteRecharge($user) : false,
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'navigation' => [
+                'groups' => AppNavigation::groups($user),
+            ],
             'coficarteAlerts' => $coficarteAlerts,
         ];
     }

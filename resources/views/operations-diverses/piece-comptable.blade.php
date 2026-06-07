@@ -109,7 +109,7 @@
                     <td class="num">{{ $sens === 'D' ? $fmt($montant) : '' }}</td>
                     <td class="num">{{ $sens === 'C' ? $fmt($montant) : '' }}</td>
                     <td>{{ $row['code_operation'] ?? '' }}</td>
-                    <td></td>
+                    <td>{{ $row['related_account'] ?? '' }}</td>
                     <td>{{ $row['libelle_ecriture'] ?? '' }}</td>
                     <td>{{ $row['date_de_valeur'] ?? '' }}</td>
                 </tr>

@@ -47,8 +47,7 @@ class FedController extends Controller
                 ];
             })->values();
 
-        $userDepartment = $request->user()->department?->name
-            ?? $request->user()->profil?->departement;
+        $userDepartment = $request->user()->department?->name;
 
         return Inertia::render('feds/Create', [
             'departments' => $departments,
@@ -129,8 +128,7 @@ class FedController extends Controller
                         'agence_name' => $line->agence?->nom,
                     ];
                 })->values(),
-            'userDepartment' => $request->user()->department?->name
-                ?? $request->user()->profil?->departement,
+            'userDepartment' => $request->user()->department?->name,
         ]);
     }
 

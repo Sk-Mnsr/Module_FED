@@ -36,7 +36,9 @@ const coficarteAlerts = computed(() => (page.props.coficarteAlerts as CoficarteA
                     {{ alerte.message }}
                 </div>
             </div>
-            <slot />
+            <div class="flex min-h-0 flex-1 flex-col">
+                <slot />
+            </div>
         </AppContent>
     </AppShell>
 </template>

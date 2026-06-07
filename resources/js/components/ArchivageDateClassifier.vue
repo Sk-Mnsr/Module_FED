@@ -1,9 +1,10 @@
 <script lang="ts">
 export type ArchivePiece = {
-    id: number;
+    id: number | string;
     description: string | null;
     original_name: string;
     url: string;
+    is_piece_comptable?: boolean;
 };
 
 export type ArchiveFolder = {
@@ -19,8 +20,11 @@ export type ArchiveFolder = {
     archived_at: string | null;
     created_at: string | null;
     integrated_at: string | null;
-    pdf_url: string;
     resume_url: string;
+    piece_folder_name?: string;
+    piece_display_name?: string;
+    department?: string;
+    folder_path?: string;
     pieces: ArchivePiece[];
 };
 
@@ -28,16 +32,19 @@ export type ArchiveAgent = {
     id: number;
     name: string;
     flex_id: string;
+    folder_name?: string;
 };
 
 export type ArchiveAgentNode = {
     agent: ArchiveAgent;
+    folder_labels?: { year: string; month: string; day: string };
     classeurs: ArchiveFolder[];
 };
 
-export type ArchiveTree = Record<string, Record<string, Record<string, Record<string, ArchiveAgentNode>>>>;
+export type ArchiveTree = Record<string, Record<string, Record<string, Record<string, Record<string, ArchiveAgentNode>>>>>;
 
 export type SearchResultRow = {
+    dept?: string;
     year: string;
     month: string;
     day: string;
@@ -60,27 +67,42 @@ export type ArchiveFilters = {
     date_valeur_du?: string;
     date_valeur_au?: string;
 };
+
+type TreeNodeKind = 'root' | 'dept' | 'year' | 'month' | 'day' | 'agent' | 'piece';
+
+type TreeNode = {
+    id: string;
+    label: string;
+    kind: TreeNodeKind;
+    children: TreeNode[];
+    piece?: ArchiveFolder;
+};
+
+type FlatNode = TreeNode & { depth: number };
 </script>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-    Calendar,
+    CalendarDays,
+    ChevronDown,
     ChevronRight,
     Download,
     FileText,
     Folder,
-    FolderArchive,
+    FolderOpen,
     Search,
-    Shield,
-    ShieldCheck,
+    SlidersHorizontal,
     User,
     X,
     FileSearch,
+    Clock,
+    Hash,
+    Archive,
 } from 'lucide-vue-next';
 
 const props = defineProps<{
@@ -94,7 +116,11 @@ const props = defineProps<{
     comptableImportApiConfigured?: boolean;
 }>();
 
-const validerEnCours = ref<number | null>(null);
+const tree = computed<ArchiveTree>(() => normalizeTree(props.tree ?? {}));
+const showFilters = ref(false);
+const selectedId = ref<string | null>(null);
+const selectedPiece = ref<ArchiveFolder | null>(null);
+const expanded = ref<Set<string>>(new Set(['root']));
 
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
@@ -104,529 +130,514 @@ const MONTHS_FR = [
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ] as const;
 
-const tree = computed<ArchiveTree>(() => props.tree ?? {});
+const DEPT_ORDER = ['finance', 'operations'] as const;
+
+function deptLabel(key: string): string {
+    return key === 'finance' ? 'Finance' : 'Operations';
+}
+
+/** Nouveau format : finance|operations › année › … — Ancien : année directement à la racine. */
+function isDeptTreeFormat(raw: ArchiveTree): boolean {
+    const keys = Object.keys(raw);
+    if (keys.length === 0) {
+        return true;
+    }
+
+    return keys.every((k) => k === 'finance' || k === 'operations');
+}
+
+function normalizeTree(raw: ArchiveTree): ArchiveTree {
+    if (isDeptTreeFormat(raw)) {
+        return {
+            finance: raw.finance ?? {},
+            operations: raw.operations ?? {},
+        };
+    }
+
+    return {
+        finance: {},
+        operations: raw,
+    };
+}
+
 const searchForm = ref({
     q: props.filters?.q ?? '',
     nom_classeur: props.filters?.nom_classeur ?? '',
     numero_batch: props.filters?.numero_batch ?? '',
-    statut: props.filters?.statut ?? '',
     user_id: props.filters?.user_id ? String(props.filters.user_id) : '',
     archive_du: props.filters?.archive_du ?? '',
     archive_au: props.filters?.archive_au ?? '',
-    date_valeur_du: props.filters?.date_valeur_du ?? '',
-    date_valeur_au: props.filters?.date_valeur_au ?? '',
 });
 
-const showSearch = ref(props.searchActive ?? false);
+const stats = computed(() => ({
+    total: props.totalClasseurs ?? 0,
+}));
 
-const now = new Date();
-const selectedYear = ref(String(now.getFullYear()));
-const selectedMonth = ref(String(now.getMonth() + 1).padStart(2, '0'));
-const selectedDay = ref(String(now.getDate()).padStart(2, '0'));
-const selectedAgentId = ref<string | null>(null);
-
-const yearKeys = computed(() => Object.keys(tree.value).sort((a, b) => Number(b) - Number(a)));
-
-const monthKeys = computed(() => {
-    const months = tree.value[selectedYear.value];
-    return months ? Object.keys(months).sort((a, b) => Number(b) - Number(a)) : [];
+const treeRoot = computed<TreeNode>(() => {
+    return {
+        id: 'root',
+        label: 'Dossiers Comptables',
+        kind: 'root',
+        children: [...DEPT_ORDER].map((dept) => ({
+            id: `dept-${dept}`,
+            label: deptLabel(dept),
+            kind: 'dept' as const,
+            children: Object.keys(tree.value[dept] ?? {})
+                .sort((a, b) => Number(b) - Number(a))
+                .map((year) => ({
+                    id: `dept-${dept}-y-${year}`,
+                    label: year,
+                    kind: 'year' as const,
+                    children: Object.keys(tree.value[dept]?.[year] ?? {})
+                        .sort((a, b) => Number(b) - Number(a))
+                        .map((month) => ({
+                            id: `dept-${dept}-y-${year}-m-${month}`,
+                            label: monthFolderLabel(dept, year, month),
+                            kind: 'month' as const,
+                            children: Object.keys(tree.value[dept]?.[year]?.[month] ?? {})
+                                .sort((a, b) => Number(b) - Number(a))
+                                .map((day) => ({
+                                    id: `dept-${dept}-y-${year}-m-${month}-d-${day}`,
+                                    label: dayFolderLabel(dept, year, month, day),
+                                    kind: 'day' as const,
+                                    children: Object.values(tree.value[dept]?.[year]?.[month]?.[day] ?? {})
+                                        .sort((a, b) => a.agent.name.localeCompare(b.agent.name))
+                                        .map((node) => ({
+                                            id: `dept-${dept}-y-${year}-m-${month}-d-${day}-a-${node.agent.id}`,
+                                            label: node.agent.name,
+                                            kind: 'agent' as const,
+                                            children: node.classeurs.map((c) => ({
+                                                id: `p-${c.id}`,
+                                                label: c.piece_display_name ?? c.nom_classeur,
+                                                kind: 'piece' as const,
+                                                children: [],
+                                                piece: c,
+                                            })),
+                                        })),
+                                })),
+                        })),
+                })),
+        })),
+    };
 });
 
-const dayKeys = computed(() => {
-    const days = tree.value[selectedYear.value]?.[selectedMonth.value];
-    return days ? Object.keys(days).sort((a, b) => Number(b) - Number(a)) : [];
-});
+const flatTree = computed<FlatNode[]>(() => flattenVisible(treeRoot.value, expanded.value));
 
-const agentNodes = computed<ArchiveAgentNode[]>(() => {
-    const day = tree.value[selectedYear.value]?.[selectedMonth.value]?.[selectedDay.value];
-    if (!day) {
-        return [];
+function flattenVisible(node: TreeNode, expandedSet: Set<string>, depth = 0): FlatNode[] {
+    const rows: FlatNode[] = [{ ...node, depth }];
+    if (!node.children.length || !expandedSet.has(node.id)) {
+        return rows;
     }
-    return Object.values(day).sort((a, b) => a.agent.name.localeCompare(b.agent.name));
-});
-
-const currentAgentNode = computed(() =>
-    agentNodes.value.find((n) => String(n.agent.id) === selectedAgentId.value) ?? null,
-);
-
-const currentClasseurs = computed<ArchiveFolder[]>(() => currentAgentNode.value?.classeurs ?? []);
-
-function initSelectionFromTree() {
-    const y = yearKeys.value[0];
-    if (!y) {
-        return;
+    for (const child of node.children) {
+        rows.push(...flattenVisible(child, expandedSet, depth + 1));
     }
-    selectedYear.value = y;
-    const m = Object.keys(tree.value[y] ?? {}).sort((a, b) => Number(b) - Number(a))[0];
-    if (!m) {
-        return;
-    }
-    selectedMonth.value = m;
-    const d = Object.keys(tree.value[y][m] ?? {}).sort((a, b) => Number(b) - Number(a))[0];
-    if (!d) {
-        return;
-    }
-    selectedDay.value = d;
-    const agents = Object.values(tree.value[y][m][d] ?? {});
-    if (agents.length > 0) {
-        selectedAgentId.value = String(agents[0].agent.id);
-    }
+    return rows;
 }
 
-onMounted(initSelectionFromTree);
-
-watch(tree, initSelectionFromTree);
-
-watch([selectedYear, selectedMonth, selectedDay], () => {
-    const agents = agentNodes.value;
-    if (agents.length === 0) {
-        selectedAgentId.value = null;
-        return;
-    }
-    const still = agents.some((n) => String(n.agent.id) === selectedAgentId.value);
-    if (!still) {
-        selectedAgentId.value = String(agents[0].agent.id);
-    }
-});
-
-const breadcrumbPath = computed(() => {
-    const m = MONTHS_FR[parseInt(selectedMonth.value, 10) - 1] ?? selectedMonth.value;
-    const agent = currentAgentNode.value?.agent.name ?? '—';
-    return `${selectedYear.value} › ${m} › ${selectedDay.value} › ${agent}`;
-});
-
-function monthLabel(m: string): string {
-    const idx = parseInt(m, 10) - 1;
-    return MONTHS_FR[idx] ?? m;
+function monthFolderLabel(dept: string, year: string, month: string): string {
+    const node = tree.value[dept]?.[year]?.[month];
+    const fallback = (MONTHS_FR[parseInt(month, 10) - 1] ?? month).toUpperCase();
+    if (!node) return fallback;
+    const first = Object.values(Object.values(node)[0] ?? {})[0];
+    return first?.folder_labels?.month ?? fallback;
 }
 
-function agentClasseurCount(node: ArchiveAgentNode): number {
-    return node.classeurs.length;
+function dayFolderLabel(dept: string, year: string, month: string, day: string): string {
+    const node = tree.value[dept]?.[year]?.[month]?.[day];
+    const fallback = `Journée du ${day.padStart(2, '0')}`;
+    if (!node) return fallback;
+    const first = Object.values(node)[0];
+    return first?.folder_labels?.day ?? fallback;
+}
+
+function toggleExpand(id: string) {
+    const next = new Set(expanded.value);
+    if (next.has(id)) {
+        next.delete(id);
+    } else {
+        next.add(id);
+    }
+    expanded.value = next;
+}
+
+function expandAll() {
+    const ids = new Set<string>();
+    const walk = (node: TreeNode) => {
+        if (node.children.length) {
+            ids.add(node.id);
+            node.children.forEach(walk);
+        }
+    };
+    walk(treeRoot.value);
+    expanded.value = ids;
+}
+
+function collapseAll() {
+    expanded.value = new Set(['root']);
+}
+
+function selectNode(node: FlatNode) {
+    selectedId.value = node.id;
+    if (node.kind === 'piece' && node.piece) {
+        selectedPiece.value = node.piece;
+        return;
+    }
+    selectedPiece.value = null;
+}
+
+function onNodeClick(node: FlatNode) {
+    if (node.kind === 'piece') {
+        selectNode(node);
+        return;
+    }
+    if (node.children.length) {
+        if (!expanded.value.has(node.id)) {
+            const next = new Set(expanded.value);
+            next.add(node.id);
+            expanded.value = next;
+        }
+    }
+    selectNode(node);
+}
+
+function expandPathIds(...ids: string[]) {
+    const next = new Set(expanded.value);
+    ids.forEach((id) => next.add(id));
+    expanded.value = next;
 }
 
 function horodatage(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
-    const d = new Date(iso);
-    return d.toLocaleString('fr-FR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('fr-FR', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
     });
 }
 
 function dateValeurFmt(iso: string | null): string {
-    if (!iso) {
-        return '—';
-    }
+    if (!iso) return '—';
     const [y, m, d] = iso.split('-');
     return `${d}/${m}/${y}`;
 }
 
 function applySearch() {
     const params: Record<string, string> = {};
-    Object.entries(searchForm.value).forEach(([k, v]) => {
-        if (v) {
-            params[k] = v;
-        }
-    });
-
-    router.get('/operations-diverses/archivage', params, {
-        preserveScroll: true,
-        preserveState: true,
-    });
-}
-
-function validerClasseur(id: number) {
-    if (validerEnCours.value !== null) {
-        return;
-    }
-    validerEnCours.value = id;
-    router.post(`/operations-diverses/piece-comptable/${id}/valider`, {}, {
-        preserveScroll: true,
-        onFinish: () => {
-            validerEnCours.value = null;
-        },
-    });
+    Object.entries(searchForm.value).forEach(([k, v]) => { if (v) params[k] = v; });
+    router.get('/operations-diverses/archivage', params, { preserveScroll: true, preserveState: true });
 }
 
 function resetSearch() {
     searchForm.value = {
-        q: '',
-        nom_classeur: '',
-        numero_batch: '',
-        statut: '',
-        user_id: '',
-        archive_du: '',
-        archive_au: '',
-        date_valeur_du: '',
-        date_valeur_au: '',
+        q: '', nom_classeur: '', numero_batch: '', user_id: '',
+        archive_du: '', archive_au: '',
     };
     router.get('/operations-diverses/archivage', {}, { preserveScroll: true });
 }
+
+function openSearchResult(row: SearchResultRow) {
+    const dept = row.dept ?? 'operations';
+    expandPathIds(
+        'root',
+        `dept-${dept}`,
+        `dept-${dept}-y-${row.year}`,
+        `dept-${dept}-y-${row.year}-m-${row.month}`,
+        `dept-${dept}-y-${row.year}-m-${row.month}-d-${row.day}`,
+        `dept-${dept}-y-${row.year}-m-${row.month}-d-${row.day}-a-${row.agent_id}`,
+    );
+    selectedId.value = `p-${row.classeur.id}`;
+    selectedPiece.value = row.classeur;
+    router.get('/operations-diverses/archivage', {}, { preserveScroll: true, preserveState: true, replace: true });
+}
+
+function hasChildren(node: FlatNode): boolean {
+    return node.children.length > 0;
+}
+
+function isExpanded(node: FlatNode): boolean {
+    return expanded.value.has(node.id);
+}
+
+watch(
+    tree,
+    () => {
+        if (expanded.value.size <= 1) {
+            expanded.value = new Set(['root', 'dept-finance', 'dept-operations']);
+        }
+    },
+    { immediate: true, deep: true },
+);
 </script>
 
 <template>
-    <div class="flex flex-col gap-6">
-        <div v-if="flash?.success" class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
-            {{ flash.success }}
-        </div>
-        <div v-if="flash?.warning" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            {{ flash.warning }}
-        </div>
-        <div v-if="flash?.error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-            {{ flash.error }}
+    <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+        <!-- Flash -->
+        <div v-if="flash?.success" class="shrink-0 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">{{ flash.success }}</div>
+        <div v-if="flash?.warning" class="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ flash.warning }}</div>
+        <div v-if="flash?.error" class="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{{ flash.error }}</div>
+
+        <!-- En-tête -->
+        <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <h1 class="text-2xl font-semibold tracking-tight text-foreground">Archivage</h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Intégrations validées — Dossiers Comptables → Finance / Operations → Année → Mois → Journée → Agent → Pièce
+                </p>
+            </div>
+            <div class="inline-flex items-center gap-2 rounded-lg border border-green-200/80 bg-green-50/80 px-3 py-1.5 text-sm text-green-800">
+                <Archive class="size-3.5" />
+                <span class="font-medium">{{ stats.total }}</span>
+                <span>pièce(s) archivée(s)</span>
+            </div>
         </div>
 
-        <!-- En-tête sécurité / horodatage -->
-        <div class="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
-            <div class="flex items-start gap-2">
-                <Shield class="size-5 shrink-0 text-violet-600 dark:text-violet-400" />
-                <div>
-                    <p class="text-sm font-semibold text-foreground">Archivage électronique sécurisé</p>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        Classement automatique année › mois › journée › agent. Chaque enregistrement est horodaté à la création.
-                    </p>
+        <!-- Recherche -->
+        <div class="shrink-0 rounded-xl border border-border bg-card shadow-sm">
+            <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+                <div class="relative flex-1">
+                    <Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        v-model="searchForm.q"
+                        class="h-9 border-0 bg-muted/40 pl-9 shadow-none focus-visible:ring-1"
+                        placeholder="Rechercher par classeur, batch, agent…"
+                        @keydown.enter="applySearch"
+                    />
+                </div>
+                <div class="flex shrink-0 gap-2">
+                    <Button variant="outline" size="sm" class="h-9" @click="showFilters = !showFilters">
+                        <SlidersHorizontal class="size-4" />
+                        Filtres
+                        <span v-if="searchActive" class="ml-0.5 size-1.5 rounded-full bg-red-600" />
+                    </Button>
+                    <Button size="sm" class="h-9" @click="applySearch">Rechercher</Button>
                 </div>
             </div>
-            <span class="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-                {{ totalClasseurs ?? 0 }} classeur(s) archivé(s)
-            </span>
-        </div>
 
-        <!-- Recherche multicritère -->
-        <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-            <button
-                type="button"
-                class="flex w-full items-center justify-between border-b border-border bg-muted/50 px-4 py-3 text-left"
-                @click="showSearch = !showSearch"
-            >
-                <span class="flex items-center gap-2 text-sm font-semibold text-foreground">
-                    <Search class="size-4" />
-                    Moteur de recherche multicritère
-                </span>
-                <span v-if="searchActive" class="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-                    Filtres actifs
-                </span>
-            </button>
-
-            <div v-show="showSearch" class="space-y-4 p-4">
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div class="space-y-1.5 sm:col-span-2">
-                        <Label for="search-q">Recherche globale</Label>
-                        <Input id="search-q" v-model="searchForm.q" placeholder="Classeur, batch, agent, fichier…" />
+            <div v-show="showFilters" class="space-y-4 border-t border-border px-4 py-4">
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div class="space-y-1.5">
+                        <Label for="filtre-nom-classeur" class="text-xs text-muted-foreground">Nom du classeur</Label>
+                        <Input id="filtre-nom-classeur" v-model="searchForm.nom_classeur" placeholder="Nom du classeur" class="h-9" />
                     </div>
                     <div class="space-y-1.5">
-                        <Label for="search-nom">Nom du classeur</Label>
-                        <Input id="search-nom" v-model="searchForm.nom_classeur" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="search-batch">N° batch</Label>
-                        <Input id="search-batch" v-model="searchForm.numero_batch" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="search-statut">Statut</Label>
-                        <select
-                            id="search-statut"
-                            v-model="searchForm.statut"
-                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
-                        >
-                            <option value="">Tous</option>
-                            <option value="brouillon">Brouillon</option>
-                            <option value="integre">Intégré</option>
-                        </select>
+                        <Label for="filtre-batch" class="text-xs text-muted-foreground">N° batch</Label>
+                        <Input id="filtre-batch" v-model="searchForm.numero_batch" placeholder="N° batch" class="h-9" />
                     </div>
                     <div v-if="canViewAllAgents" class="space-y-1.5">
-                        <Label for="search-agent">Agent</Label>
-                        <select
-                            id="search-agent"
-                            v-model="searchForm.user_id"
-                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs"
-                        >
-                            <option value="">Tous les agents</option>
-                            <option v-for="a in agents" :key="a.id" :value="String(a.id)">
-                                {{ a.name }}{{ a.flex_id ? ` (${a.flex_id})` : '' }}
-                            </option>
+                        <Label for="filtre-agent" class="text-xs text-muted-foreground">Agent</Label>
+                        <select id="filtre-agent" v-model="searchForm.user_id" class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
+                            <option value="">Tous agents</option>
+                            <option v-for="a in agents" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
                         </select>
                     </div>
-                    <div class="space-y-1.5">
-                        <Label for="search-archive-du">Archivage du</Label>
-                        <Input id="search-archive-du" v-model="searchForm.archive_du" type="date" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="search-archive-au">Archivage au</Label>
-                        <Input id="search-archive-au" v-model="searchForm.archive_au" type="date" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="search-dv-du">Date valeur du</Label>
-                        <Input id="search-dv-du" v-model="searchForm.date_valeur_du" type="date" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="search-dv-au">Date valeur au</Label>
-                        <Input id="search-dv-au" v-model="searchForm.date_valeur_au" type="date" />
-                    </div>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <Button type="button" class="bg-violet-700 text-white hover:bg-violet-800" @click="applySearch">
-                        <Search class="size-4" />
-                        Rechercher
-                    </Button>
-                    <Button v-if="searchActive" type="button" variant="outline" @click="resetSearch">
-                        <X class="size-4" />
-                        Effacer les filtres
-                    </Button>
+
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div class="space-y-1.5">
+                        <Label for="filtre-archive-du" class="text-xs text-muted-foreground">Archivé du</Label>
+                        <Input id="filtre-archive-du" v-model="searchForm.archive_du" type="date" class="h-9" />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="filtre-archive-au" class="text-xs text-muted-foreground">Archivé au</Label>
+                        <Input id="filtre-archive-au" v-model="searchForm.archive_au" type="date" class="h-9" />
+                    </div>
+                    <div v-if="searchActive" class="flex items-end sm:col-span-2">
+                        <Button variant="ghost" size="sm" class="h-9" @click="resetSearch">
+                            <X class="size-4" /> Effacer les filtres
+                        </Button>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Résultats recherche -->
-        <div v-if="searchActive && searchResults && searchResults.length > 0" class="rounded-lg border border-border bg-card shadow-sm">
+        <div v-if="searchActive" class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div class="border-b border-border px-4 py-3">
-                <p class="text-sm font-semibold text-foreground">{{ searchResults.length }} résultat(s)</p>
+                <p class="text-sm font-medium">{{ searchResults?.length ?? 0 }} résultat(s)</p>
             </div>
-            <div class="divide-y divide-border">
-                <div v-for="(row, i) in searchResults" :key="i" class="px-4 py-3">
-                    <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span>{{ row.year }} › {{ monthLabel(row.month) }} › {{ row.day }}</span>
-                        <span>› {{ row.agent_name }}</span>
-                    </div>
-                    <div class="mt-2 flex flex-wrap items-center gap-2">
-                        <Folder class="size-4 text-violet-600" />
-                        <span class="font-medium text-foreground">{{ row.classeur.nom_classeur }}</span>
-                        <span class="text-xs text-muted-foreground">Date valeur : {{ dateValeurFmt(row.classeur.date_valeur) }}</span>
-                        <span class="text-xs text-muted-foreground">Archivé : {{ horodatage(row.classeur.archived_at) }}</span>
-                    </div>
-                    <div class="mt-2 flex flex-wrap gap-2">
-                        <a
-                            :href="row.classeur.pdf_url"
-                            class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
-                        >
-                            <Download class="size-3.5" /> Pièce comptable
-                        </a>
-                        <template v-if="row.classeur.statut !== 'integre'">
-                            <Link
-                                :href="row.classeur.resume_url"
-                                class="inline-flex items-center gap-1 text-xs font-medium text-foreground hover:underline"
-                            >
-                                <FileSearch class="size-3.5" /> Résumé
-                            </Link>
-                            <Button
-                                type="button"
-                                size="sm"
-                                class="h-7 bg-violet-700 text-xs text-white hover:bg-violet-800"
-                                :disabled="validerEnCours === row.classeur.id"
-                                @click="validerClasseur(row.classeur.id)"
-                            >
-                                <ShieldCheck class="size-3.5" />
-                                {{ validerEnCours === row.classeur.id ? 'Validation…' : 'Valider' }}
-                            </Button>
-                        </template>
-                    </div>
-                </div>
+            <div v-if="!searchResults?.length" class="py-20 text-center text-sm text-muted-foreground">
+                Aucun résultat pour ces critères.
             </div>
-        </div>
-
-        <div v-else-if="searchActive" class="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
-            Aucun résultat pour ces critères.
-        </div>
-
-        <!-- Navigateur hiérarchique -->
-        <div class="rounded-lg border border-border bg-card text-card-foreground shadow-sm">
-            <div class="border-b border-border px-4 py-3">
-                <div class="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                    <FolderArchive class="size-4 shrink-0" />
-                    <span>Classement :</span>
-                    <span class="font-medium text-foreground">{{ breadcrumbPath }}</span>
-                </div>
-            </div>
-
-            <div class="grid divide-border md:grid-cols-4 md:divide-x">
-                <!-- Année -->
-                <div class="flex max-h-80 flex-col border-b border-border md:border-b-0">
-                    <div class="sticky top-0 border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <Calendar class="mr-1 inline size-3.5" /> Année
-                    </div>
-                    <div class="max-h-64 overflow-y-auto p-2">
-                        <Button
-                            v-for="y in yearKeys"
-                            :key="y"
-                            variant="ghost"
-                            size="sm"
-                            class="mb-0.5 h-9 w-full justify-between px-3 font-normal"
-                            :class="selectedYear === y ? 'bg-primary/10 font-medium text-primary' : ''"
-                            @click="selectedYear = y"
-                        >
-                            {{ y }}
-                            <ChevronRight v-if="selectedYear === y" class="size-4 opacity-70" />
-                        </Button>
-                        <p v-if="yearKeys.length === 0" class="px-2 py-4 text-center text-xs text-muted-foreground">Aucune année</p>
-                    </div>
-                </div>
-
-                <!-- Mois -->
-                <div class="flex max-h-80 flex-col border-b border-border md:border-b-0">
-                    <div class="sticky top-0 border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Mois
-                    </div>
-                    <div class="max-h-64 overflow-y-auto p-2">
-                        <Button
-                            v-for="m in monthKeys"
-                            :key="m"
-                            variant="ghost"
-                            size="sm"
-                            class="mb-0.5 h-9 w-full justify-between px-3 font-normal"
-                            :class="selectedMonth === m ? 'bg-primary/10 font-medium text-primary' : ''"
-                            @click="selectedMonth = m"
-                        >
-                            {{ monthLabel(m) }}
-                            <ChevronRight v-if="selectedMonth === m" class="size-4 opacity-70" />
-                        </Button>
-                        <p v-if="monthKeys.length === 0" class="px-2 py-4 text-center text-xs text-muted-foreground">Aucun mois</p>
-                    </div>
-                </div>
-
-                <!-- Journée -->
-                <div class="flex max-h-80 flex-col border-b border-border md:border-b-0">
-                    <div class="sticky top-0 border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Journée
-                    </div>
-                    <div class="max-h-64 overflow-y-auto p-2">
-                        <Button
-                            v-for="d in dayKeys"
-                            :key="d"
-                            variant="ghost"
-                            size="sm"
-                            class="mb-0.5 h-9 w-full justify-between px-3 font-normal tabular-nums"
-                            :class="selectedDay === d ? 'bg-primary/10 font-medium text-primary' : ''"
-                            @click="selectedDay = d"
-                        >
-                            {{ d }}
-                            <ChevronRight v-if="selectedDay === d" class="size-4 opacity-70" />
-                        </Button>
-                        <p v-if="dayKeys.length === 0" class="px-2 py-4 text-center text-xs text-muted-foreground">Aucun jour</p>
-                    </div>
-                </div>
-
-                <!-- Agent -->
-                <div class="flex max-h-80 flex-col">
-                    <div class="sticky top-0 border-b border-border bg-muted/50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        <User class="mr-1 inline size-3.5" /> Agent
-                    </div>
-                    <div class="max-h-64 overflow-y-auto p-2">
-                        <Button
-                            v-for="node in agentNodes"
-                            :key="node.agent.id"
-                            variant="ghost"
-                            size="sm"
-                            class="mb-0.5 h-auto min-h-9 w-full justify-between px-3 py-2 font-normal"
-                            :class="selectedAgentId === String(node.agent.id) ? 'bg-primary/10 font-medium text-primary' : ''"
-                            @click="selectedAgentId = String(node.agent.id)"
-                        >
-                            <span class="truncate text-left">
-                                <span class="block truncate">{{ node.agent.name }}</span>
-                                <span v-if="node.agent.flex_id" class="block truncate text-[10px] text-muted-foreground">{{ node.agent.flex_id }}</span>
-                            </span>
-                            <span class="ml-2 shrink-0 rounded bg-muted px-1.5 text-[10px] tabular-nums">{{ agentClasseurCount(node) }}</span>
-                        </Button>
-                        <p v-if="agentNodes.length === 0" class="px-2 py-4 text-center text-xs text-muted-foreground">Aucun agent</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Classeurs de l'agent (date valeur pointée) -->
-        <div class="rounded-lg border border-border bg-card p-4 shadow-sm">
-            <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                    <p class="text-sm font-medium text-foreground">
-                        Classeurs — {{ currentAgentNode?.agent.name ?? 'Sélectionnez un agent' }}
-                    </p>
-                    <p v-if="currentAgentNode" class="text-xs text-muted-foreground">
-                        {{ currentClasseurs.length }} classeur(s) pour le {{ selectedDay }}/{{ selectedMonth }}/{{ selectedYear }}
-                    </p>
-                </div>
-            </div>
-
-            <div v-if="currentClasseurs.length === 0" class="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center">
-                <p class="text-sm text-muted-foreground">Aucun classeur pour cette sélection.</p>
-            </div>
-
-            <div v-else class="grid gap-3">
-                <div
-                    v-for="folder in currentClasseurs"
-                    :key="folder.id"
-                    class="overflow-hidden rounded-lg border border-border bg-background dark:bg-card/40"
+            <div v-else class="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
+                <button
+                    v-for="(row, i) in searchResults"
+                    :key="i"
+                    type="button"
+                    class="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-muted/40"
+                    @click="openSearchResult(row)"
                 >
-                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/40 px-4 py-2.5">
-                        <div class="flex flex-wrap items-center gap-2">
-                            <Folder class="size-4 text-violet-600 dark:text-violet-400" />
-                            <span class="text-sm font-semibold text-foreground">{{ folder.nom_classeur }}</span>
-                            <span class="rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:bg-violet-950 dark:text-violet-300">
-                                N° {{ folder.numero_piece ?? folder.numero_batch }}
-                            </span>
+                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600">
+                        <FileText class="size-4" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-medium">{{ row.classeur.nom_classeur }}</p>
+                        <p class="truncate text-xs text-muted-foreground">
+                            {{ row.agent_name }} · {{ row.classeur.piece_display_name ?? row.classeur.nom_classeur }}
+                        </p>
+                    </div>
+                    <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
+                </button>
+            </div>
+        </div>
+
+        <!-- Explorateur arbre + aperçu -->
+        <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:flex-row">
+            <!-- Arbre dossiers -->
+            <div class="flex min-h-0 w-full flex-col border-b border-border lg:w-[min(420px,35%)] lg:shrink-0 lg:border-b-0 lg:border-r">
+                <div class="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2.5">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Arborescence</p>
+                    <div class="flex gap-1">
+                        <button type="button" class="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground" @click="expandAll">
+                            Tout déplier
+                        </button>
+                        <button type="button" class="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground" @click="collapseAll">
+                            Replier
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-y-auto py-1 font-mono text-[13px]">
+                    <div v-if="treeRoot.children.length === 0" class="px-4 py-16 text-center text-sm text-muted-foreground">
+                        Aucun dossier archivé.
+                    </div>
+                    <div
+                        v-for="node in flatTree"
+                        v-else
+                        :key="node.id"
+                        class="group flex w-full min-w-0 items-center gap-0.5 pr-2 transition"
+                        :class="selectedId === node.id ? 'bg-amber-50/90 dark:bg-amber-950/30' : 'hover:bg-muted/40'"
+                        :style="{ paddingLeft: `${8 + node.depth * 18}px` }"
+                    >
+                        <!-- Chevron -->
+                        <button
+                            v-if="hasChildren(node)"
+                            type="button"
+                            class="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                            @click.stop="toggleExpand(node.id)"
+                        >
+                            <ChevronDown v-if="isExpanded(node)" class="size-3.5" />
+                            <ChevronRight v-else class="size-3.5" />
+                        </button>
+                        <span v-else class="inline-block w-5 shrink-0" />
+
+                        <!-- Ligne -->
+                        <button
+                            type="button"
+                            class="flex min-w-0 flex-1 items-center gap-2 rounded py-1.5 text-left"
+                            @click="onNodeClick(node)"
+                        >
+                            <FolderOpen
+                                v-if="node.kind !== 'piece' && isExpanded(node) && hasChildren(node)"
+                                class="size-4 shrink-0 text-amber-500"
+                            />
+                            <Folder
+                                v-else-if="node.kind !== 'piece'"
+                                class="size-4 shrink-0 text-amber-500"
+                            />
+                            <FileText
+                                v-else
+                                class="size-4 shrink-0 text-red-500"
+                            />
                             <span
-                                class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-                                :class="folder.statut === 'integre'
-                                    ? 'bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300'
-                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'"
+                                class="truncate"
+                                :class="node.kind === 'root' ? 'font-semibold text-foreground' : 'text-foreground/90'"
                             >
-                                {{ folder.statut === 'integre' ? 'Intégré' : 'Brouillon' }}
+                                {{ node.label }}
                             </span>
-                        </div>
-                        <div class="flex flex-col items-end text-xs">
-                            <span class="font-medium text-foreground">Date valeur : {{ dateValeurFmt(folder.date_valeur) }}</span>
-                            <span class="text-muted-foreground">Archivé le {{ horodatage(folder.archived_at) }}</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panneau aperçu -->
+            <div class="flex min-h-0 flex-1 flex-col bg-muted/10">
+                <div
+                    v-if="!selectedPiece"
+                    class="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center"
+                >
+                    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-100/60">
+                        <FolderOpen class="size-8 text-amber-500/60" />
+                    </div>
+                    <p class="text-sm font-medium text-foreground">Sélectionnez un dossier ou une pièce comptable</p>
+                    <p class="mt-1 max-w-sm text-xs text-muted-foreground">
+                        Dépliez l'arborescence à gauche puis cliquez sur une pièce comptable.
+                    </p>
+                    <p class="mt-4 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
+                        Finance / Operations → Année → Mois → Journée → Agent → Pièce
+                    </p>
+                </div>
+
+                <div v-else class="flex flex-1 flex-col overflow-y-auto">
+                    <div class="border-b border-border bg-card px-6 py-5">
+                        <div class="flex flex-wrap items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <div class="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600">
+                                    <FileText class="size-5" />
+                                </div>
+                                <h2 class="text-lg font-semibold leading-tight">{{ selectedPiece.nom_classeur }}</h2>
+                                <p class="mt-1 font-mono text-xs text-muted-foreground">
+                                    {{ selectedPiece.piece_display_name ?? selectedPiece.piece_folder_name }}
+                                </p>
+                            </div>
+                            <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">
+                                Intégré
+                            </span>
                         </div>
                     </div>
 
-                    <div class="flex flex-col gap-2 px-4 py-3">
-                        <div class="flex flex-wrap gap-2">
-                            <a
-                                :href="folder.pdf_url"
-                                class="inline-flex items-center gap-1.5 rounded-md border border-violet-200 bg-background px-2.5 py-1.5 text-xs font-medium text-violet-800 hover:bg-violet-50 dark:border-violet-900 dark:text-violet-200"
-                            >
-                                <Download class="size-3.5" /> Pièce comptable (PDF)
-                            </a>
-                            <template v-if="folder.statut !== 'integre'">
-                                <Link
-                                    :href="folder.resume_url"
-                                    class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
-                                >
-                                    <FileSearch class="size-3.5" /> Voir le résumé
-                                </Link>
-                                <Button
-                                    type="button"
-                                    class="h-8 bg-violet-700 text-xs text-white hover:bg-violet-800 dark:bg-violet-600"
-                                    :disabled="validerEnCours === folder.id"
-                                    @click="validerClasseur(folder.id)"
-                                >
-                                    <ShieldCheck class="size-3.5" />
-                                    {{ validerEnCours === folder.id ? 'Validation…' : 'Valider l’intégration' }}
-                                </Button>
-                            </template>
+                    <div class="grid gap-px bg-border sm:grid-cols-2">
+                        <div class="bg-card px-6 py-4">
+                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">N° batch</p>
+                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                <Hash class="size-3.5 text-muted-foreground" />
+                                {{ selectedPiece.numero_batch }}
+                            </p>
                         </div>
-                        <p
-                            v-if="folder.statut !== 'integre' && comptableImportApiConfigured === false"
-                            class="text-xs text-amber-700 dark:text-amber-300"
-                        >
-                            API plateforme non configurée : la validation échouera tant que l’URL n’est pas accessible.
-                        </p>
+                        <div class="bg-card px-6 py-4">
+                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Date valeur</p>
+                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                <CalendarDays class="size-3.5 text-muted-foreground" />
+                                {{ dateValeurFmt(selectedPiece.date_valeur) }}
+                            </p>
+                        </div>
+                        <div class="bg-card px-6 py-4">
+                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Agent</p>
+                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                <User class="size-3.5 text-muted-foreground" />
+                                {{ selectedPiece.user_name }}
+                            </p>
+                        </div>
+                        <div class="bg-card px-6 py-4">
+                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Archivé le</p>
+                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                <Clock class="size-3.5 text-muted-foreground" />
+                                {{ horodatage(selectedPiece.archived_at) }}
+                            </p>
+                        </div>
+                    </div>
 
-                        <div v-if="folder.pieces.length" class="mt-1 space-y-1">
-                            <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Pièces justificatives</p>
+                    <div class="flex flex-wrap gap-2 border-b border-border bg-card px-6 py-4">
+                        <Link
+                            :href="selectedPiece.resume_url"
+                            class="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
+                        >
+                            <FileSearch class="size-4" />
+                            Voir le résumé
+                        </Link>
+                    </div>
+
+                    <div v-if="selectedPiece.pieces.length" class="flex-1 bg-card px-6 py-4">
+                        <p class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Justificatifs ({{ selectedPiece.pieces.length }})
+                        </p>
+                        <div class="space-y-1">
                             <a
-                                v-for="p in folder.pieces"
+                                v-for="p in selectedPiece.pieces"
                                 :key="p.id"
                                 :href="p.url"
-                                class="flex items-center gap-2 rounded px-2 py-1 text-xs text-foreground hover:bg-muted/50"
+                                class="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition hover:border-border hover:bg-muted/30"
                             >
-                                <FileText class="size-3.5 text-muted-foreground" />
-                                <span>{{ p.description || p.original_name }}</span>
-                                <Download class="ml-auto size-3.5 text-muted-foreground" />
+                                <FileText class="size-4 shrink-0" :class="p.is_piece_comptable ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'" />
+                                <span class="min-w-0 flex-1 truncate">{{ p.description || p.original_name }}</span>
+                                <Download class="size-4 shrink-0 text-muted-foreground" />
                             </a>
                         </div>
                     </div>

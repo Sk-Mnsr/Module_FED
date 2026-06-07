@@ -44,7 +44,6 @@ class FortifyServiceProvider extends ServiceProvider
 
             $user = User::query()
                 ->where($username, $request->{$username})
-                ->with('profil')
                 ->first();
 
             if (! $user || ! Hash::check((string) $request->password, $user->password)) {
@@ -54,12 +53,6 @@ class FortifyServiceProvider extends ServiceProvider
             if (! $user->activated) {
                 throw ValidationException::withMessages([
                     $username => __('Ce compte est désactivé. Contactez l’administrateur.'),
-                ]);
-            }
-
-            if (! User::annuaireProfilAllowsLogin($user->profil)) {
-                throw ValidationException::withMessages([
-                    $username => __('Votre fiche annuaire n’est pas active. Contactez l’administrateur.'),
                 ]);
             }
 

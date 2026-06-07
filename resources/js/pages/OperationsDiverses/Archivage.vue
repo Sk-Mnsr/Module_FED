@@ -28,8 +28,9 @@ const breadcrumbs = [
 <template>
     <Head title="Archivage — OD" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="p-6">
+        <div class="flex h-[calc(100svh-4rem)] min-h-0 flex-col overflow-hidden p-3 sm:p-4">
             <ArchivageDateClassifier
+                class="min-h-0 flex-1"
                 :tree="tree ?? {}"
                 :agents="agents ?? []"
                 :filters="filters"

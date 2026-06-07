@@ -6,12 +6,14 @@ use App\Exports\UserTemplateExport;
 use App\Imports\UserImport;
 use App\Models\Agence;
 use App\Models\Department;
-use App\Models\Profil;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\ModuleAccess;
+use App\Support\RoleAccessProfile;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 
@@ -24,7 +26,7 @@ class UserController extends Controller
     {
         $perPage = (int) $request->get('per_page', 5);
 
-        $query = User::with(['profil', 'roles', 'agence', 'department']);
+        $query = User::with(['roles', 'agence', 'department', 'nPlus1']);
 
         // Filtre par recherche (nom, email, et autres champs pertinents)
         if ($request->has('search') && $request->search) {
@@ -37,14 +39,7 @@ class UserController extends Controller
                         $subQ->where('nom', 'like', "%{$search}%")
                             ->orWhere('code', 'like', "%{$search}%");
                     })
-                    ->orWhereHas('profil', function ($subQ) use ($search) {
-                        $subQ->where('nom', 'like', "%{$search}%")
-                            ->orWhere('prenom', 'like', "%{$search}%")
-                            ->orWhere('matricule', 'like', "%{$search}%")
-                            ->orWhere('email', 'like', "%{$search}%")
-                            ->orWhere('telephone', 'like', "%{$search}%")
-                            ->orWhere('site', 'like', "%{$search}%");
-                    });
+                    ->orWhere('fonction', 'like', "%{$search}%");
             });
         }
 
@@ -63,11 +58,12 @@ class UserController extends Controller
         $users = $query->orderBy('name')->paginate($perPage);
 
         // Récupérer les données pour les filtres
-        $roles = Role::where('actif', true)->orderBy('nom')->get(['id', 'nom']);
+        $roles = Role::where('actif', true)->orderBy('module')->orderBy('nom')->get(['id', 'nom', 'module']);
 
         return Inertia::render('users/Index', [
             'users' => $users,
             'roles' => $roles,
+            'modules' => ModuleAccess::moduleOptions(),
         ]);
     }
 
@@ -76,15 +72,7 @@ class UserController extends Controller
      */
     public function create()
     {
-        $roles = Role::where('actif', true)->orderBy('nom')->get();
-        $departments = Department::orderBy('name')->get(['id', 'name']);
-        $agences = Agence::orderBy('nom')->get(['id', 'code', 'nom']);
-
-        return Inertia::render('users/Create', [
-            'roles' => $roles,
-            'departments' => $departments,
-            'agences' => $agences,
-        ]);
+        return Inertia::render('users/Create', $this->userFormProps());
     }
 
     /**
@@ -101,7 +89,8 @@ class UserController extends Controller
             'fonction' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
-            'role_id' => 'required|integer|exists:roles,id',
+            'role_ids' => ['required', 'array', 'min:1'],
+            'role_ids.*' => ['integer', 'exists:roles,id'],
             'department_id' => 'nullable|integer|exists:departments,id',
             'agence_id' => 'nullable|integer|exists:agences,id',
             'matricule' => [
@@ -109,13 +98,16 @@ class UserController extends Controller
                 'string',
                 'max:128',
                 Rule::unique('users', 'matricule'),
-                Rule::unique('profiles', 'matricule'),
             ],
+            'n_plus_1_user_id' => 'nullable|integer|exists:users,id',
+            'n_plus_2_user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $rawMatricule = $validated['matricule'] ?? null;
         $matricule = $rawMatricule !== null ? trim((string) $rawMatricule) : '';
         $matricule = $matricule === '' ? null : $matricule;
+
+        $roleIds = $this->validatedRoleIds($validated['role_ids']);
 
         $user = User::create([
             'name' => $validated['name'],
@@ -125,15 +117,15 @@ class UserController extends Controller
             'agence_id' => $validated['agence_id'] ?? null,
             'matricule' => $matricule,
             'department_id' => $validated['department_id'] ?? null,
+            'n_plus_1_user_id' => $validated['n_plus_1_user_id'] ?? null,
+            'n_plus_2_user_id' => $validated['n_plus_2_user_id'] ?? null,
             'password_change_required' => true,
         ]);
 
-        // Attacher le rôle unique
-        $user->roles()->sync([$validated['role_id']]);
-        $this->syncUserProfileType($user, $validated['role_id']);
+        // Attacher les rôles (un par module)
+        $user->roles()->sync($roleIds);
+        $user->profile = RoleAccessProfile::forRoleIds($roleIds);
         $user->save();
-
-        $this->syncUserProfil($user);
 
         return redirect()->route('users.index')
             ->with('success', 'Utilisateur créé avec succès !');
@@ -144,10 +136,12 @@ class UserController extends Controller
      */
     public function show(User $user)
     {
-        $user->load(['profil', 'roles', 'agence', 'department']);
+        $user->load(['roles', 'agence', 'department', 'nPlus1', 'nPlus2']);
 
         return Inertia::render('users/Show', [
             'user' => $user,
+            'modules' => ModuleAccess::moduleOptions(),
+            'accessibleModules' => ModuleAccess::accessibleModuleKeys($user),
         ]);
     }
 
@@ -156,16 +150,12 @@ class UserController extends Controller
      */
     public function edit(User $user)
     {
-        $roles = Role::where('actif', true)->orderBy('nom')->get();
-        $departments = Department::orderBy('name')->get(['id', 'name']);
-        $user->load(['roles', 'profil', 'agence', 'department']);
-        $agences = Agence::orderBy('nom')->get(['id', 'code', 'nom']);
+        $user->load(['roles', 'agence', 'department', 'nPlus1', 'nPlus2']);
 
         return Inertia::render('users/Edit', [
+            ...$this->userFormProps(),
             'user' => $user,
-            'roles' => $roles,
-            'departments' => $departments,
-            'agences' => $agences,
+            'supervisors' => $this->supervisorOptions($user->id),
         ]);
     }
 
@@ -174,10 +164,6 @@ class UserController extends Controller
      */
     public function update(Request $request, User $user)
     {
-        $user->load('profil');
-
-        $linkedProfile = Profil::resolveForUser($user);
-
         if (! $request->filled('matricule')) {
             $request->merge(['matricule' => null]);
         }
@@ -187,7 +173,8 @@ class UserController extends Controller
             'fonction' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'password' => 'nullable|string|min:8|confirmed',
-            'role_id' => 'required|integer|exists:roles,id',
+            'role_ids' => ['required', 'array', 'min:1'],
+            'role_ids.*' => ['integer', 'exists:roles,id'],
             'department_id' => 'nullable|integer|exists:departments,id',
             'agence_id' => 'nullable|integer|exists:agences,id',
             'matricule' => [
@@ -195,13 +182,16 @@ class UserController extends Controller
                 'string',
                 'max:128',
                 Rule::unique('users', 'matricule')->ignore($user->id),
-                Rule::unique('profiles', 'matricule')->ignore($linkedProfile->id),
             ],
+            'n_plus_1_user_id' => 'nullable|integer|exists:users,id|not_in:'.$user->id,
+            'n_plus_2_user_id' => 'nullable|integer|exists:users,id|not_in:'.$user->id,
         ]);
 
         $rawMatricule = $validated['matricule'] ?? null;
         $matricule = $rawMatricule !== null ? trim((string) $rawMatricule) : '';
         $matricule = $matricule === '' ? null : $matricule;
+
+        $roleIds = $this->validatedRoleIds($validated['role_ids']);
 
         $data = [
             'name' => $validated['name'],
@@ -210,6 +200,8 @@ class UserController extends Controller
             'agence_id' => $validated['agence_id'] ?? null,
             'matricule' => $matricule,
             'department_id' => $validated['department_id'] ?? null,
+            'n_plus_1_user_id' => $validated['n_plus_1_user_id'] ?? null,
+            'n_plus_2_user_id' => $validated['n_plus_2_user_id'] ?? null,
         ];
 
         // Mettre à jour le mot de passe seulement s'il est fourni
@@ -220,12 +212,10 @@ class UserController extends Controller
 
         $user->update($data);
 
-        // Synchroniser le rôle unique
-        $user->roles()->sync([$validated['role_id']]);
-        $this->syncUserProfileType($user, $validated['role_id']);
+        // Synchroniser les rôles (un par module)
+        $user->roles()->sync($roleIds);
+        $user->profile = RoleAccessProfile::forRoleIds($roleIds);
         $user->save();
-
-        $this->syncUserProfil($user);
 
         return redirect()->route('users.index')
             ->with('success', 'Utilisateur mis à jour avec succès !');
@@ -269,8 +259,6 @@ class UserController extends Controller
         $user->activated = ! $user->activated;
         $user->save();
 
-        Profil::where('email', $user->email)->update(['statut' => $user->activated ? 'actif' : 'inactif']);
-
         $status = $user->activated ? 'activé' : 'désactivé';
 
         return redirect()->route('users.index')
@@ -278,57 +266,63 @@ class UserController extends Controller
     }
 
     /**
-     * Copie matricule / département vers l’annuaire profiles (N+1, budgets, FED…) pour compatibilité.
+     * @param  list<int>  $roleIds
+     * @return list<int>
      */
-    private function syncUserProfil(User $user): void
+    private function validatedRoleIds(array $roleIds): array
     {
-        $user->refresh();
+        $roleIds = array_values(array_unique(array_map('intval', $roleIds)));
+        $roles = Role::whereIn('id', $roleIds)->get(['id', 'module', 'slug', 'access_profile']);
 
-        $profile = Profil::resolveForUser($user);
-
-        if (! $profile->prenom || ! $profile->nom) {
-            $parts = preg_split('/\s+/', trim($user->name));
-            $profile->prenom = $profile->prenom ?: ($parts[0] ?? null);
-            $profile->nom = $profile->nom ?: (count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : null);
+        if ($roles->count() !== count($roleIds)) {
+            throw ValidationException::withMessages([
+                'role_ids' => 'Un ou plusieurs rôles sélectionnés sont invalides.',
+            ]);
         }
 
-        $profile->fonction = $user->fonction;
-        $profile->email = $user->email;
-
-        if ($user->department_id) {
-            $department = Department::find($user->department_id);
-            if ($department) {
-                $profile->departement = $department->name;
-                $profile->department_id = $department->id;
-            }
-        } else {
-            $profile->departement = null;
-            $profile->department_id = null;
+        $modules = $roles->pluck('module')->filter()->values();
+        if ($modules->count() !== $modules->unique()->count()) {
+            throw ValidationException::withMessages([
+                'role_ids' => 'Un seul rôle par module est autorisé.',
+            ]);
         }
 
-        $profile->matricule = $user->matricule;
-        $profile->statut = $user->activated ? 'actif' : 'inactif';
-
-        $profile->save();
+        return $roleIds;
     }
 
-    private function syncUserProfileType(User $user, int $roleId): void
+    /**
+     * @return array<string, mixed>
+     */
+    private function userFormProps(): array
     {
-        $role = Role::find($roleId);
-        $adminSlugs = ['it', 'admin'];
+        return [
+            'roles' => Role::where('actif', true)
+                ->orderBy('module')
+                ->orderBy('nom')
+                ->get(['id', 'nom', 'slug', 'module', 'access_profile', 'description']),
+            'modules' => ModuleAccess::moduleOptions(),
+            'departments' => Department::orderBy('name')->get(['id', 'name']),
+            'agences' => Agence::orderBy('nom')->get(['id', 'code', 'nom']),
+            'supervisors' => $this->supervisorOptions(),
+        ];
+    }
 
-        if ($role && in_array($role->slug, $adminSlugs, true)) {
-            $user->profile = 'admin';
-
-            return;
-        }
-
-        if ($role && in_array($role->slug, ['monetique', 'monetique_ops', 'ca', 'cc', 'caissier'], true)) {
-            $user->profile = 'monetique';
-
-            return;
-        }
-
-        $user->profile = 'other';
+    /**
+     * @return list<array{id: int, name: string, email: string}>
+     */
+    private function supervisorOptions(?int $excludeUserId = null): array
+    {
+        return User::query()
+            ->when($excludeUserId !== null, fn ($q) => $q->where('id', '!=', $excludeUserId))
+            ->where('activated', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email'])
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ])
+            ->values()
+            ->all();
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ModuleAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
@@ -30,6 +31,8 @@ class User extends AuthenticatableBase
         'agence_id',
         'matricule',
         'department_id',
+        'n_plus_1_user_id',
+        'n_plus_2_user_id',
     ];
 
     /**
@@ -138,32 +141,35 @@ class User extends AuthenticatableBase
         return $this->belongsTo(Department::class);
     }
 
-    /**
-     * Annuaire RH : la connexion est refusée si le statut du profil indique une désactivation.
-     */
-    public static function annuaireProfilAllowsLogin(?Profil $profil): bool
+    public function nPlus1()
     {
-        if ($profil === null) {
-            return true;
-        }
+        return $this->belongsTo(self::class, 'n_plus_1_user_id');
+    }
 
-        $s = $profil->statut;
-        if ($s === null || $s === '') {
-            return true;
-        }
+    public function nPlus2()
+    {
+        return $this->belongsTo(self::class, 'n_plus_2_user_id');
+    }
 
-        $normalized = strtolower(trim((string) $s));
-        $blocked = ['inactif', 'inactive', 'désactivé', 'desactive', 'suspendu', 'licencié', 'licencie'];
-
-        return ! in_array($normalized, $blocked, true);
+    public function subordonnes()
+    {
+        return $this->hasMany(self::class, 'n_plus_1_user_id');
     }
 
     /**
-     * Relation avec le profil (via email)
+     * N+1 direct ou, à défaut, manager du département.
      */
-    public function profil()
+    public function resolveNPlus1(): ?self
     {
-        return $this->hasOne(Profil::class, 'email', 'email');
+        if ($this->n_plus_1_user_id !== null) {
+            return $this->relationLoaded('nPlus1') ? $this->nPlus1 : $this->nPlus1()->first();
+        }
+
+        $department = $this->relationLoaded('department')
+            ? $this->department
+            : $this->department()->with('manager')->first();
+
+        return $department?->manager;
     }
 
     public function agence()
@@ -192,12 +198,9 @@ class User extends AuthenticatableBase
         return $this->belongsToMany(Role::class, 'user_role', 'user_id', 'role_id');
     }
 
-    /**
-     * Vérifie si l'utilisateur a un rôle spécifique
-     */
     public function hasRole(string $roleSlug): bool
     {
-        return $this->roles()->where('slug', $roleSlug)->exists();
+        return ModuleAccess::userHasAnyRole($this, [$roleSlug]);
     }
 
     /**
@@ -205,7 +208,20 @@ class User extends AuthenticatableBase
      */
     public function hasAnyRole(array $roleSlugs): bool
     {
-        return $this->roles()->whereIn('slug', $roleSlugs)->exists();
+        return ModuleAccess::userHasAnyRole($this, $roleSlugs);
+    }
+
+    public function canAccessModule(string $module): bool
+    {
+        return ModuleAccess::userCanAccess($this, $module);
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function accessibleModules(): array
+    {
+        return ModuleAccess::accessibleModuleKeys($this);
     }
 
     /**
@@ -236,17 +252,13 @@ class User extends AuthenticatableBase
     }
 
     /**
-     * Valeur à mettre dans la colonne « user_id » des exports / API Flex (IDFLEX = matricule du profil).
+     * Valeur à mettre dans la colonne « user_id » des exports / API Flex (IDFLEX).
      */
     public function flexComptaUserIdentifier(): string
     {
         $m = $this->matricule;
-        if ($m === null || trim((string) $m) === '') {
-            $this->loadMissing('profil');
-            $m = $this->profil?->matricule;
-        }
 
-        if ($m === null) {
+        if ($m === null || trim((string) $m) === '') {
             return '';
         }
 

@@ -133,7 +133,67 @@ final class OdIntegrationCsv
         ];
     }
 
+    /**
+     * Vérifie que le CSV respecte le format Flex attendu à l'envoi plateforme.
+     */
+    public static function validateForImport(?string $contents): ?string
+    {
+        if ($contents === null || trim($contents) === '') {
+            return 'Le fichier CSV est vide.';
+        }
+
+        $c = config('services.ecritures_comptables_import', []);
+        $expectedDelimiter = (string) ($c['csv_delimiter'] ?? ';');
+        $contentsWithoutBom = preg_replace('/^\xEF\xBB\xBF/', '', $contents) ?? $contents;
+
+        $firstLine = '';
+        foreach (preg_split('/\r\n|\r|\n/', $contentsWithoutBom) ?: [] as $line) {
+            if (trim($line) !== '') {
+                $firstLine = $line;
+                break;
+            }
+        }
+
+        if ($firstLine === '') {
+            return 'Le fichier CSV ne contient aucune ligne.';
+        }
+
+        $detected = self::detectDelimiter($contentsWithoutBom, $expectedDelimiter);
+        if ($detected !== $expectedDelimiter) {
+            $sep = $expectedDelimiter === ';' ? 'point-virgule (;)' : $expectedDelimiter;
+
+            return "Format incorrect : utilisez le modèle fourni avec le séparateur {$sep}.";
+        }
+
+        $parsed = self::parse($contents);
+        if ($parsed['error'] !== null) {
+            return $parsed['error'];
+        }
+
+        $expectedHeader = array_map('strtolower', EcritureComptableFlexCsv::headerRow());
+        $actualHeader = array_map('strtolower', $parsed['header']);
+        $missing = array_diff($expectedHeader, $actualHeader);
+        if ($missing !== []) {
+            return 'En-tête CSV invalide : colonnes manquantes ('.implode(', ', $missing).'). Téléchargez le modèle.';
+        }
+
+        if ($parsed['rows'] === []) {
+            return 'Le fichier ne contient aucune écriture.';
+        }
+
+        if ($parsed['nb_credit'] === 0 && $parsed['nb_debit'] === 0) {
+            return 'Aucune ligne avec sens C ou D détectée.';
+        }
+
+        return null;
+    }
+
     private static function detectDelimiter(string $contents, string $fallback): string
+    {
+        return self::detectDelimiterPublic($contents, $fallback);
+    }
+
+    public static function detectDelimiterPublic(string $contents, string $fallback): string
     {
         // Première ligne non vide.
         $firstLine = '';

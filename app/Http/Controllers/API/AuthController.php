@@ -32,7 +32,7 @@ class AuthController extends APIController
         if ($validator->fails()) {
             return $this->responseError($validator->errors(), 400);
         } else {
-            $user = User::where('email', $request->email)->with('profil')->first();
+            $user = User::where('email', $request->email)->first();
 
             if (! $user || ! Hash::check($request->password, $user->password)) {
                 return $this->responseError(['password' => ['Mot de passe incorrect']], 400);
@@ -40,10 +40,6 @@ class AuthController extends APIController
 
             if (! $user->activated) {
                 return $this->responseError(['email' => ['Compte désactivé']], 403);
-            }
-
-            if (! User::annuaireProfilAllowsLogin($user->profil)) {
-                return $this->responseError(['email' => ['Fiche annuaire inactive']], 403);
             }
 
             return $this->responseOk([

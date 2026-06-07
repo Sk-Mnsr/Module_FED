@@ -6,11 +6,36 @@ export function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
 }
 
+export function normalizeUrlPath(url: string): string {
+    const withoutQuery = url.split('?')[0] ?? url;
+
+    return withoutQuery.split('#')[0] ?? withoutQuery;
+}
+
+/** Score de correspondance menu ↔ URL (plus long = plus spécifique). -1 si aucune. */
+export function navUrlMatchScore(
+    urlToCheck: NonNullable<InertiaLinkProps['href']>,
+    currentUrl: string,
+): number {
+    const path = normalizeUrlPath(currentUrl);
+    const target = normalizeUrlPath(toUrl(urlToCheck));
+
+    if (path === target) {
+        return target.length;
+    }
+
+    if (target !== '/' && path.startsWith(`${target}/`)) {
+        return target.length;
+    }
+
+    return -1;
+}
+
 export function urlIsActive(
     urlToCheck: NonNullable<InertiaLinkProps['href']>,
     currentUrl: string,
 ) {
-    return toUrl(urlToCheck) === currentUrl;
+    return navUrlMatchScore(urlToCheck, currentUrl) >= 0;
 }
 
 export function toUrl(href: NonNullable<InertiaLinkProps['href']>) {

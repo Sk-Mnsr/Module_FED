@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Department;
-use App\Models\Profil;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -24,10 +24,8 @@ class DepartmentController extends Controller
 
     public function create()
     {
-        $profiles = Profil::orderBy('prenom')->orderBy('nom')->get(['id', 'prenom', 'nom', 'email']);
-
         return Inertia::render('departments/Create', [
-            'profiles' => $profiles,
+            'managers' => $this->managerOptions(),
         ]);
     }
 
@@ -36,7 +34,7 @@ class DepartmentController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:departments,name',
             'code' => 'required|string|max:50|unique:departments,code',
-            'manager_profile_id' => 'nullable|integer|exists:profiles,id',
+            'manager_user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         Department::create($validated);
@@ -47,26 +45,24 @@ class DepartmentController extends Controller
 
     public function edit(Department $department)
     {
-        $profiles = Profil::orderBy('prenom')->orderBy('nom')->get(['id', 'prenom', 'nom', 'email']);
-
         return Inertia::render('departments/Edit', [
             'department' => $department->load('manager'),
-            'profiles' => $profiles,
+            'managers' => $this->managerOptions(),
         ]);
     }
 
     public function update(Request $request, Department $department)
     {
         $validated = $request->validate([
-            'name' => 'required|string|max:255|unique:departments,name,' . $department->id,
-            'code' => 'required|string|max:50|unique:departments,code,' . $department->id,
-            'manager_profile_id' => 'nullable|integer|exists:profiles,id',
+            'name' => 'required|string|max:255|unique:departments,name,'.$department->id,
+            'code' => 'required|string|max:50|unique:departments,code,'.$department->id,
+            'manager_user_id' => 'nullable|integer|exists:users,id',
         ]);
 
         $department->update($validated);
 
         return redirect()->route('departments.index')
-            ->with('success', 'Département mis à jour.');
+            ->with('success', 'Département mis à jour avec succès.');
     }
 
     public function destroy(Department $department)
@@ -75,5 +71,23 @@ class DepartmentController extends Controller
 
         return redirect()->route('departments.index')
             ->with('success', 'Département supprimé.');
+    }
+
+    /**
+     * @return list<array{id: int, name: string, email: string}>
+     */
+    private function managerOptions(): array
+    {
+        return User::query()
+            ->where('activated', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'email'])
+            ->map(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ])
+            ->values()
+            ->all();
     }
 }

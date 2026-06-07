@@ -59,6 +59,7 @@ use App\Http\Controllers\N1FedController;
 use App\Http\Controllers\OffreController;
 use App\Http\Controllers\OperationDiverseController;
 use App\Http\Controllers\PublicSoumissionController;
+use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StockController;
 use App\Http\Controllers\TypeDepenseController;
 use App\Http\Controllers\TypologieDepenseController;
@@ -72,6 +73,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('users', UserController::class)->middleware('role:it');
     Route::post('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle')->middleware('role:it');
     Route::resource('departments', DepartmentController::class)->middleware('role:it');
+    Route::resource('roles', RoleController::class)->middleware('role:it')->except(['show']);
     Route::get('budgets', [BudgetController::class, 'index'])->name('budgets.index');
     Route::get('budgets/n1', [BudgetController::class, 'indexForN1'])
         ->name('budgets.n1')
@@ -199,21 +201,34 @@ Route::middleware(['auth'])->group(function () {
     Route::get('bons-de-commande', [BonDeCommandeController::class, 'index'])->name('bons-de-commande.index');
     Route::get('bons-de-commande/{fed}', [BonDeCommandeController::class, 'show'])->name('bons-de-commande.show');
 
-    // Routes pour les écritures comptables
-    Route::get('ecritures-comptables/export', [EcritureComptableController::class, 'export'])->name('ecritures-comptables.export');
-    Route::get('ecritures-comptables', [EcritureComptableController::class, 'index'])->name('ecritures-comptables.index');
-    Route::post('ecritures-comptables/push', [EcritureComptableController::class, 'push'])
-        ->name('ecritures-comptables.push')
-        ->middleware('role:it');
+    // Écritures comptables
+    Route::middleware('module:ecritures')->group(function () {
+        Route::get('ecritures-comptables/export', [EcritureComptableController::class, 'export'])->name('ecritures-comptables.export');
+        Route::get('ecritures-comptables', [EcritureComptableController::class, 'index'])->name('ecritures-comptables.index');
+        Route::post('ecritures-comptables/push', [EcritureComptableController::class, 'push'])
+            ->name('ecritures-comptables.push')
+            ->middleware('role:it');
+    });
 
-    Route::get('operations-diverses', [OperationDiverseController::class, 'index'])->name('operations-diverses.index');
-    Route::post('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptableStore'])->name('operations-diverses.piece-comptable.store');
-    Route::get('operations-diverses/piece-comptable/{classeur}/resume', [OperationDiverseController::class, 'pieceComptableResume'])->name('operations-diverses.piece-comptable.resume');
-    Route::post('operations-diverses/piece-comptable/{classeur}/valider', [OperationDiverseController::class, 'pieceComptableValider'])->name('operations-diverses.piece-comptable.valider');
-    Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
-    Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');
-    Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
-    Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
+    // Opérations diverses
+    Route::middleware('module:od')->group(function () {
+        Route::get('operations-diverses', [OperationDiverseController::class, 'index'])->name('operations-diverses.index');
+        Route::get('operations-diverses/piece-comptable/template-csv', [OperationDiverseController::class, 'pieceComptableTemplateCsv'])->name('operations-diverses.piece-comptable.template-csv');
+        Route::post('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptableStore'])->name('operations-diverses.piece-comptable.store');
+        Route::get('operations-diverses/piece-comptable/manuelle', [OperationDiverseController::class, 'pieceComptableManuelle'])->name('operations-diverses.piece-comptable.manuelle');
+        Route::post('operations-diverses/piece-comptable/manuelle', [OperationDiverseController::class, 'pieceComptableManuelleStore'])->name('operations-diverses.piece-comptable.manuelle.store');
+        Route::get('operations-diverses/piece-comptable/{classeur}/modifier', [OperationDiverseController::class, 'pieceComptableModifier'])->name('operations-diverses.piece-comptable.modifier');
+        Route::put('operations-diverses/piece-comptable/{classeur}', [OperationDiverseController::class, 'pieceComptableUpdate'])->name('operations-diverses.piece-comptable.update');
+        Route::put('operations-diverses/piece-comptable/{classeur}/manuelle', [OperationDiverseController::class, 'pieceComptableManuelleUpdate'])->name('operations-diverses.piece-comptable.manuelle.update');
+        Route::get('operations-diverses/piece-comptable/{classeur}/resume', [OperationDiverseController::class, 'pieceComptableResume'])->name('operations-diverses.piece-comptable.resume');
+        Route::post('operations-diverses/piece-comptable/{classeur}/valider', [OperationDiverseController::class, 'pieceComptableValider'])->name('operations-diverses.piece-comptable.valider');
+        Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
+        Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');
+        Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/preview', [OperationDiverseController::class, 'justificatifPreview'])->name('operations-diverses.justificatif.preview');
+        Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
+        Route::get('operations-diverses/integrations', [OperationDiverseController::class, 'integrations'])->name('operations-diverses.integrations');
+        Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
+    });
 
     // Routes pour les FED (demandeur)
     Route::resource('feds', FedController::class)->only(['index', 'show', 'create', 'store', 'edit', 'update', 'destroy']);
@@ -257,7 +272,7 @@ Route::middleware(['auth'])->group(function () {
     ]);
 
     // Module Monétique
-    Route::middleware('role:monetique,chef_agence_ca,charge_clientele_cc,caissier')->prefix('monetique')->group(function () {
+    Route::middleware('module:monetique')->prefix('monetique')->group(function () {
         Route::get('coficarte', [CoficarteController::class, 'index'])->name('monetique.coficarte');
 
         Route::get('pilotage', [PilotageController::class, 'index'])->name('monetique.pilotage');
@@ -295,7 +310,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('{coficarte_transfer}', [TransfertController::class, 'show'])->name('monetique.transferts.show');
         });
 
-        Route::middleware('role:chef_agence_ca')->prefix('agence')->group(function () {
+        Route::middleware('role:ca')->prefix('agence')->group(function () {
             Route::get('retour-cartes', [ChefAgenceController::class, 'retourCartes'])->name('monetique.agence.retour-cartes');
             Route::post('retour-cartes', [ChefAgenceController::class, 'retourCartesStore'])->name('monetique.agence.retour-cartes.store');
             Route::get('approvisionnement-cc', [ChefAgenceController::class, 'approvisionnementCc'])->name('monetique.agence.approvisionnement-cc');
@@ -310,7 +325,7 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('apporteurs/{coficarte_apporteur}', [ApporteurController::class, 'destroy'])->name('monetique.agence.apporteurs.destroy');
         });
 
-        Route::middleware('role:charge_clientele_cc')->prefix('cc')->group(function () {
+        Route::middleware('role:cc')->prefix('cc')->group(function () {
             Route::get('delester-chef-agence', [ChefAgenceController::class, 'delesterCcVersChefAgence'])->name('monetique.cc.delester-chef-agence');
             Route::post('delester-chef-agence', [ChefAgenceController::class, 'delesterCcVersChefAgenceStore'])->name('monetique.cc.delester-chef-agence.store');
             Route::permanentRedirect('retour-chef-agence', '/monetique/cc/delester-chef-agence');

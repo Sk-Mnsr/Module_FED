@@ -5,13 +5,40 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Plus, Trash2, Eraser, Save, Hash, CalendarDays } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    ChevronDown,
+    ChevronUp,
+    Download,
+    Eraser,
+    FileSpreadsheet,
+    FileText,
+    Hash,
+    ListOrdered,
+    Plus,
+    Save,
+    Trash2,
+    X,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+
+type OdLigne = {
+    date_de_valeur: string;
+    code_agence: string;
+    no_compte: string;
+    related_account: string;
+    montant: string;
+    sens: string;
+    libelle_ecriture: string;
+    code_operation: string;
+};
 
 type JustificatifLigne = {
     description: string;
     file: File | null;
 };
+
+type Agence = { id: number; code: string; nom: string };
 
 type EditPiece = {
     id: number | string;
@@ -24,16 +51,16 @@ type EditPiece = {
 type EditClasseur = {
     id: number;
     numero_batch: string;
-    date_valeur: string | null;
     nom_classeur: string;
-    fichier: string | null;
+    lignes: OdLigne[];
     resume_url: string;
     pieces: EditPiece[];
 };
 
 const props = defineProps<{
+    agences?: Agence[];
+    codesOperation?: string[];
     comptableImportApiConfigured?: boolean;
-    templateCsvUrl?: string;
     editing?: boolean;
     classeur?: EditClasseur;
 }>();
@@ -41,7 +68,7 @@ const props = defineProps<{
 const breadcrumbs = [
     { title: 'Opérations diverses', href: '/operations-diverses/piece-comptable' },
     { title: 'Intégration', href: '/operations-diverses/integrations' },
-    { title: 'Automatique', href: '/operations-diverses/piece-comptable' },
+    { title: 'Manuelle', href: '/operations-diverses/piece-comptable/manuelle' },
 ];
 
 const page = usePage();
@@ -49,78 +76,107 @@ const flash = computed(() => page.props.flash as { success?: string; error?: str
 const flashSuccess = computed(() => flash.value?.success);
 const flashError = computed(() => flash.value?.error);
 const flashWarning = computed(() => flash.value?.warning);
+const justificatifListKey = ref(0);
+
+const selectClass =
+    'flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-400/40';
+
+const ligneVide = (): OdLigne => ({
+    date_de_valeur: new Date().toISOString().slice(0, 10),
+    code_agence: '',
+    no_compte: '',
+    related_account: '',
+    montant: '',
+    sens: '',
+    libelle_ecriture: '',
+    code_operation: '',
+});
 
 const form = useForm<{
     numero_batch: string;
-    date_valeur: string;
     nom_classeur: string;
-    fichier_integration: File | null;
+    lignes: OdLigne[];
     justificatifs: JustificatifLigne[];
 }>({
     numero_batch: props.classeur?.numero_batch ?? '',
-    date_valeur: props.classeur?.date_valeur ?? new Date().toISOString().slice(0, 10),
     nom_classeur: props.classeur?.nom_classeur ?? '',
-    fichier_integration: null,
+    lignes: props.classeur?.lignes?.length ? props.classeur.lignes : [ligneVide()],
     justificatifs: props.editing ? [] : [{ description: 'Email', file: null }],
 });
 
-/** Incrémenté pour réinitialiser les champs fichier HTML après « Effacer ». */
-const justificatifListKey = ref(0);
+function ajouterLigne() {
+    form.lignes.push(ligneVide());
+}
 
-function onIntegrationFile(e: Event) {
-    const t = e.target as HTMLInputElement;
-    form.fichier_integration = t.files?.[0] ?? null;
+function retirerLigne(index: number) {
+    if (form.lignes.length <= 1) return;
+    form.lignes.splice(index, 1);
+}
+
+function monterLigne(index: number) {
+    if (index <= 0) return;
+    const tmp = form.lignes[index - 1];
+    form.lignes[index - 1] = form.lignes[index];
+    form.lignes[index] = tmp;
+}
+
+function descendreLigne(index: number) {
+    if (index >= form.lignes.length - 1) return;
+    const tmp = form.lignes[index + 1];
+    form.lignes[index + 1] = form.lignes[index];
+    form.lignes[index] = tmp;
 }
 
 function onJustificatifFile(index: number, e: Event) {
     const t = e.target as HTMLInputElement;
-    const f = t.files?.[0] ?? null;
-    form.justificatifs[index].file = f;
+    form.justificatifs[index].file = t.files?.[0] ?? null;
 }
 
 function ajouterJustificatif() {
-    form.justificatifs.push({
-        description: '',
-        file: null,
-    });
+    form.justificatifs.push({ description: '', file: null });
 }
 
 function retirerJustificatif(index: number) {
-    if (!props.editing && form.justificatifs.length <= 1) {
-        return;
-    }
+    if (!props.editing && form.justificatifs.length <= 1) return;
     form.justificatifs.splice(index, 1);
 }
 
 function effacerTout() {
     form.reset();
+    form.lignes = [ligneVide()];
     form.justificatifs = [{ description: 'Email', file: null }];
     justificatifListKey.value += 1;
 }
 
 function submit() {
     if (props.editing && props.classeur) {
+        const hasNewJustificatifs = form.justificatifs.some((j) => j.file !== null);
         form
             .transform((data) => ({
                 ...data,
                 justificatifs: data.justificatifs.filter((j) => j.file !== null),
             }))
-            .put(`/operations-diverses/piece-comptable/${props.classeur.id}`, {
-                forceFormData: true,
+            .put(`/operations-diverses/piece-comptable/${props.classeur.id}/manuelle`, {
+                forceFormData: hasNewJustificatifs,
                 preserveScroll: true,
             });
         return;
     }
 
-    form.post('/operations-diverses/piece-comptable', {
+    form.post('/operations-diverses/piece-comptable/manuelle', {
         forceFormData: true,
         preserveScroll: true,
     });
 }
+
+function ligneError(index: number, field: string): string | undefined {
+    return (form.errors as Record<string, string>)[`lignes.${index}.${field}`]
+        ?? (form.errors as Record<string, string>).lignes;
+}
 </script>
 
 <template>
-    <Head title="Pièce comptable — OD" />
+    <Head title="Intégration manuelle — OD" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
             <div v-if="flashSuccess" class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
@@ -139,14 +195,14 @@ function submit() {
                 </div>
                 <div>
                     <h1 class="text-xl font-semibold text-foreground">
-                        {{ editing ? 'Modifier l’intégration automatique' : 'Intégration automatique' }}
+                        {{ editing ? 'Modifier l’intégration manuelle' : 'Intégration manuelle' }}
                     </h1>
                     <p class="mt-1 text-sm text-muted-foreground">
                         <template v-if="editing">
-                            Corrigez les données d’intégration. Les pièces existantes sont conservées.
+                            Corrigez les lignes OD. Les pièces existantes sont conservées et vous pouvez en ajouter d’autres.
                         </template>
                         <template v-else>
-                            Téléchargez le modèle CSV, remplissez-le puis importez-le avec les pièces justificatives.
+                            Saisissez les lignes OD une à une, puis joignez les pièces justificatives.
                         </template>
                     </p>
                 </div>
@@ -160,17 +216,14 @@ function submit() {
                 <ArrowLeft class="size-4" /> Retour au résumé
             </Link>
 
-            <form id="form-integration-od" class="space-y-8" @submit.prevent="submit">
+            <form id="form-integration-manuelle-od" class="space-y-8" @submit.prevent="submit">
+                <!-- Données d'intégration -->
                 <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                     <div class="border-b border-border bg-gradient-to-r from-violet-50/90 to-transparent px-5 py-3 dark:from-violet-950/40 dark:to-transparent">
-                        <h2 class="text-sm font-semibold text-foreground">Données d’intégration</h2>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            Numéro batch, date valeur et fichier CSV à importer.
-                        </p>
+                        <h2 class="text-sm font-semibold text-foreground">Données d'intégration</h2>
                     </div>
 
                     <div class="space-y-5 p-5">
-                        <!-- Champs mis en valeur : Numéro batch & Date valeur -->
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div class="rounded-xl border border-violet-200/80 bg-violet-50/50 p-4 shadow-xs dark:border-violet-900/60 dark:bg-violet-950/20">
                                 <div class="flex items-center gap-2">
@@ -195,67 +248,147 @@ function submit() {
                             <div class="rounded-xl border border-violet-200/80 bg-violet-50/50 p-4 shadow-xs dark:border-violet-900/60 dark:bg-violet-950/20">
                                 <div class="flex items-center gap-2">
                                     <div class="rounded-lg bg-violet-600 p-1.5 text-white">
-                                        <CalendarDays class="size-4" />
+                                        <ListOrdered class="size-4" />
                                     </div>
-                                    <Label for="date_valeur" class="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-300">
-                                        Date valeur <span class="text-red-600">*</span>
+                                    <Label for="nom_classeur" class="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-300">
+                                        Nom du classeur <span class="text-red-600">*</span>
                                     </Label>
                                 </div>
-                                <Input
-                                    id="date_valeur"
-                                    v-model="form.date_valeur"
-                                    type="date"
-                                    class="mt-3 h-11 border-violet-200 bg-white text-base font-semibold focus-visible:ring-violet-400/40 dark:border-violet-900 dark:bg-card"
-                                />
-                                <InputError :message="form.errors.date_valeur" />
-                            </div>
-                        </div>
-
-                        <!-- Champs secondaires -->
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <div class="space-y-2">
-                                <Label for="nom_classeur">Nom du classeur <span class="text-red-600">*</span></Label>
                                 <Input
                                     id="nom_classeur"
                                     v-model="form.nom_classeur"
                                     type="text"
                                     placeholder="Libellé du classeur"
+                                    class="mt-3 h-11 border-violet-200 bg-white text-base font-semibold focus-visible:ring-violet-400/40 dark:border-violet-900 dark:bg-card"
                                 />
                                 <InputError :message="form.errors.nom_classeur" />
                             </div>
-                            <div class="space-y-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <Label for="fichier_integration">
-                                        Fichier CSV
-                                        <span v-if="!editing" class="text-red-600">*</span>
-                                    </Label>
-                                    <a
-                                        v-if="templateCsvUrl"
-                                        :href="templateCsvUrl"
-                                        class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
-                                    >
-                                        <Download class="size-3.5" />
-                                        Modèle CSV
-                                    </a>
+                        </div>
+
+                        <p
+                            v-if="comptableImportApiConfigured === false"
+                            class="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                        >
+                            Non intégré : les lignes seront enregistrées en brouillon mais non transmises à la plateforme.
+                        </p>
+
+                        <!-- Lignes OD -->
+                        <div class="overflow-hidden rounded-lg border border-border">
+                            <div class="border-b border-border bg-muted/70 px-4 py-3 dark:bg-muted/40">
+                                <h3 class="text-sm font-semibold text-foreground">Lignes des OD</h3>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Renseignez chaque écriture. Utilisez
+                                    <span class="font-medium text-foreground">+ Ajouter</span> pour plusieurs lignes.
+                                </p>
+                            </div>
+
+                            <div class="space-y-4 bg-muted/10 p-4 dark:bg-muted/5">
+                                <div
+                                    v-for="(ligne, index) in form.lignes"
+                                    :key="index"
+                                    class="relative rounded-lg border border-border bg-background p-4 pr-14 shadow-xs dark:bg-card/50"
+                                >
+                                    <div class="absolute right-2 top-2 flex flex-col gap-0.5">
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            class="size-7 text-muted-foreground"
+                                            :disabled="index === 0"
+                                            @click="monterLigne(index)"
+                                        >
+                                            <ChevronUp class="size-4" />
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            class="size-7 text-muted-foreground"
+                                            :disabled="index === form.lignes.length - 1"
+                                            @click="descendreLigne(index)"
+                                        >
+                                            <ChevronDown class="size-4" />
+                                        </Button>
+                                        <Button
+                                            v-if="form.lignes.length > 1"
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            class="size-7 text-muted-foreground hover:text-destructive"
+                                            @click="retirerLigne(index)"
+                                        >
+                                            <X class="size-4" />
+                                        </Button>
+                                    </div>
+
+                                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Date <span class="text-red-600">*</span></Label>
+                                            <Input v-model="ligne.date_de_valeur" type="date" class="h-9" />
+                                            <InputError :message="ligneError(index, 'date_de_valeur')" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Agence <span class="text-red-600">*</span></Label>
+                                            <select v-model="ligne.code_agence" :class="selectClass">
+                                                <option value="">Agence</option>
+                                                <option v-for="a in agences" :key="a.id" :value="a.code">
+                                                    {{ a.code }} — {{ a.nom }}
+                                                </option>
+                                            </select>
+                                            <InputError :message="ligneError(index, 'code_agence')" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">N° CPT <span class="text-red-600">*</span></Label>
+                                            <Input v-model="ligne.no_compte" placeholder="N° CPT" class="h-9" />
+                                            <InputError :message="ligneError(index, 'no_compte')" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Related Account</Label>
+                                            <Input v-model="ligne.related_account" placeholder="Related Account" class="h-9" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Montant <span class="text-red-600">*</span></Label>
+                                            <Input v-model="ligne.montant" type="number" min="0" step="0.01" placeholder="Montant" class="h-9" />
+                                            <InputError :message="ligneError(index, 'montant')" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Sens <span class="text-red-600">*</span></Label>
+                                            <select v-model="ligne.sens" :class="selectClass">
+                                                <option value="">Sens</option>
+                                                <option value="D">D — Débit</option>
+                                                <option value="C">C — Crédit</option>
+                                            </select>
+                                            <InputError :message="ligneError(index, 'sens')" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Libellé <span class="text-red-600">*</span></Label>
+                                            <Input v-model="ligne.libelle_ecriture" placeholder="Libellé" class="h-9" />
+                                            <InputError :message="ligneError(index, 'libelle_ecriture')" />
+                                        </div>
+                                        <div class="space-y-1.5">
+                                            <Label class="text-xs font-medium text-muted-foreground">Code <span class="text-red-600">*</span></Label>
+                                            <Input
+                                                v-model="ligne.code_operation"
+                                                list="codes-operation"
+                                                placeholder="Code"
+                                                class="h-9"
+                                            />
+                                            <datalist id="codes-operation">
+                                                <option v-for="code in codesOperation" :key="code" :value="code" />
+                                            </datalist>
+                                            <InputError :message="ligneError(index, 'code_operation')" />
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <Input
-                                    id="fichier_integration"
-                                    type="file"
-                                    accept=".csv,.txt,text/csv"
-                                    class="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-violet-800 hover:file:bg-violet-200 dark:file:bg-violet-950 dark:file:text-violet-200"
-                                    @change="onIntegrationFile"
-                                />
-                                <p v-if="editing && classeur?.fichier" class="text-xs text-muted-foreground">
-                                    Actuel : {{ classeur.fichier }} — laissez vide pour conserver.
-                                </p>
-                                <p
-                                    v-if="comptableImportApiConfigured === false"
-                                    class="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                <Button
+                                    type="button"
+                                    class="bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
+                                    @click="ajouterLigne"
                                 >
-                                   Non intégré : le fichier sera enregistré mais non transmis.
-                                </p>
-                                <InputError :message="form.errors.fichier_integration" />
+                                    <Plus class="size-4" />
+                                    Ajouter
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -267,10 +400,12 @@ function submit() {
                         <h2 class="text-sm font-semibold text-foreground">Pièces justificatives</h2>
                         <p class="mt-0.5 text-xs text-muted-foreground">
                             <template v-if="editing">
-                                Documents déjà joints — utilisez + Ajouter pour en joindre d’autres.
+                                Documents déjà joints. Utilisez
+                                <span class="font-medium text-foreground">+ Ajouter</span> pour joindre d’autres pièces.
                             </template>
                             <template v-else>
-                                Libellé et document à joindre. Utilisez + Ajouter pour plusieurs pièces.
+                                Renseignez le libellé affiché et joignez le document. Utilisez
+                                <span class="font-medium text-foreground">+ Ajouter</span> pour plusieurs pièces.
                             </template>
                         </p>
                     </div>
@@ -289,6 +424,9 @@ function submit() {
                     </ul>
 
                     <div class="space-y-4 p-4" :class="{ 'border-t border-border': editing && classeur?.pieces?.length }">
+                        <p v-if="editing" class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            {{ form.justificatifs.length ? 'Nouvelles pièces' : 'Ajouter des pièces supplémentaires' }}
+                        </p>
                         <div
                             v-for="(ligne, index) in form.justificatifs"
                             :key="`${justificatifListKey}-${index}`"

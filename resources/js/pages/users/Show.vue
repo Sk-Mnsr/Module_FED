@@ -3,6 +3,19 @@ import { Head, Link } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
+import { computed } from 'vue';
+
+interface Role {
+    id: number;
+    nom: string;
+    slug: string;
+    module?: string | null;
+}
+
+interface ModuleOption {
+    key: string;
+    label: string;
+}
 
 interface Props {
     user: {
@@ -11,11 +24,7 @@ interface Props {
         email: string;
         created_at: string;
         updated_at: string;
-        roles?: {
-            id: number;
-            nom: string;
-            slug: string;
-        }[];
+        roles?: Role[];
         agence?: {
             id: number;
             code: string;
@@ -24,20 +33,20 @@ interface Props {
         matricule?: string | null;
         department_id?: number | null;
         department?: { id: number; name: string } | null;
-        profil?: {
-            id: number;
-            nom: string;
-            prenom: string;
-            matricule: string;
-            fonction?: string;
-            departement?: string;
-            email?: string;
-            telephone?: string;
-        };
+        n_plus1?: { id: number; name: string; email: string } | null;
+        n_plus2?: { id: number; name: string; email: string } | null;
     };
+    modules: ModuleOption[];
+    accessibleModules: string[];
 }
 
 const props = defineProps<Props>();
+
+const moduleLabels = computed(() =>
+    props.accessibleModules
+        .map((key) => props.modules.find((module) => module.key === key)?.label ?? key)
+        .join(', '),
+);
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -82,12 +91,12 @@ const breadcrumbs: BreadcrumbItem[] = [
                         </div>
                         <div>
                             <dt class="text-muted-foreground text-sm font-medium">IDFLEX</dt>
-                            <dd class="mt-1 text-sm">{{ user.matricule || user.profil?.matricule || '—' }}</dd>
+                            <dd class="mt-1 text-sm">{{ user.matricule || '—' }}</dd>
                         </div>
                         <div>
                             <dt class="text-muted-foreground text-sm font-medium">Département</dt>
                             <dd class="mt-1 text-sm">
-                                {{ user.department?.name || user.profil?.departement || '—' }}
+                                {{ user.department?.name || '—' }}
                             </dd>
                         </div>
                         <div>
@@ -121,6 +130,10 @@ const breadcrumbs: BreadcrumbItem[] = [
                                 }) }}
                             </dd>
                         </div>
+                        <div v-if="accessibleModules.length > 0">
+                            <dt class="text-muted-foreground text-sm font-medium">Modules accessibles</dt>
+                            <dd class="mt-1 text-sm">{{ moduleLabels }}</dd>
+                        </div>
                         <div v-if="user.roles && user.roles.length > 0">
                             <dt class="text-muted-foreground text-sm font-medium">Rôles</dt>
                             <dd class="mt-1">
@@ -142,34 +155,24 @@ const breadcrumbs: BreadcrumbItem[] = [
                     </dl>
                 </div>
 
-                <div v-if="user.profil" class="rounded-lg border border-sidebar-border bg-card p-6">
-                    <h2 class="mb-4 text-lg font-semibold">Annuaire RH (synchronisé)</h2>
-                    <p class="mb-3 text-muted-foreground text-xs">
-                        Copie des champs utilisateur pour les modules (FED, budgets, N+1).
-                    </p>
+                <div class="rounded-lg border border-sidebar-border bg-card p-6">
+                    <h2 class="mb-4 text-lg font-semibold">Hiérarchie</h2>
                     <dl class="space-y-3">
                         <div>
-                            <dt class="text-muted-foreground text-sm font-medium">Nom annuaire</dt>
+                            <dt class="text-muted-foreground text-sm font-medium">N+1</dt>
                             <dd class="mt-1 text-sm">
-                                {{ user.profil.prenom }} {{ user.profil.nom }}
+                                <template v-if="user.n_plus1">{{ user.n_plus1.name }} ({{ user.n_plus1.email }})</template>
+                                <template v-else>Manager du département ou non défini</template>
                             </dd>
                         </div>
-                        <div v-if="user.profil.fonction">
-                            <dt class="text-muted-foreground text-sm font-medium">Fonction</dt>
-                            <dd class="mt-1 text-sm">{{ user.profil.fonction }}</dd>
-                        </div>
-                        <div v-if="user.profil.telephone">
-                            <dt class="text-muted-foreground text-sm font-medium">Téléphone</dt>
-                            <dd class="mt-1 text-sm">{{ user.profil.telephone }}</dd>
+                        <div>
+                            <dt class="text-muted-foreground text-sm font-medium">N+2</dt>
+                            <dd class="mt-1 text-sm">
+                                <template v-if="user.n_plus2">{{ user.n_plus2.name }} ({{ user.n_plus2.email }})</template>
+                                <template v-else>—</template>
+                            </dd>
                         </div>
                     </dl>
-                </div>
-
-                <div v-else class="rounded-lg border border-sidebar-border bg-card p-6">
-                    <h2 class="mb-4 text-lg font-semibold">Annuaire RH</h2>
-                    <p class="text-muted-foreground text-sm">
-                        Aucune fiche annuaire pour l’instant. Elle est créée ou mise à jour lors de l’enregistrement de l’utilisateur.
-                    </p>
                 </div>
             </div>
         </div>

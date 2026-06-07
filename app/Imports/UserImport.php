@@ -4,9 +4,9 @@ namespace App\Imports;
 
 use App\Models\Agence;
 use App\Models\Department;
-use App\Models\Profil;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\RoleAccessProfile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -24,17 +24,11 @@ class UserImport implements ToCollection, WithHeadingRow
     /** @var array<string, int> */
     private array $departmentsByKey = [];
 
-    /** @var array<int, string> */
-    private array $departmentNamesById = [];
-
     /** @var array<string, User> */
     private array $usersByEmail = [];
 
     /** @var array<string, User> */
     private array $usersByMatricule = [];
-
-    /** @var array<string, Profil> */
-    private array $profilesByEmail = [];
 
     private ?string $defaultPasswordHash = null;
 
@@ -72,6 +66,7 @@ class UserImport implements ToCollection, WithHeadingRow
                 'agence_id' => $agenceId,
                 'department_id' => $departmentId,
                 'activated' => true,
+                'profile' => RoleAccessProfile::forRole($role),
             ];
 
             if ($matricule !== null) {
@@ -97,13 +92,11 @@ class UserImport implements ToCollection, WithHeadingRow
                 $user->email = $email;
             }
 
-            $this->syncUserProfileType($user, $role);
             $user->fill($attributes);
             $user->save();
 
             $user->roles()->sync([$role->id]);
             $this->registerUserInCache($user);
-            $this->syncUserProfil($user, $departmentId);
         }
     }
 
@@ -121,23 +114,15 @@ class UserImport implements ToCollection, WithHeadingRow
 
         foreach (Department::query()->get(['id', 'name']) as $department) {
             $this->departmentsByKey[Str::lower($department->name)] = $department->id;
-            $this->departmentNamesById[$department->id] = $department->name;
         }
 
         foreach (User::query()->get() as $user) {
             $this->registerUserInCache($user);
         }
-
-        foreach (Profil::query()->get() as $profile) {
-            if ($profile->email) {
-                $this->profilesByEmail[Str::lower($profile->email)] = $profile;
-            }
-        }
     }
 
     private function defaultPasswordHash(): string
     {
-        // Un seul bcrypt pour tous les nouveaux sans mot de passe (changement obligé à la 1re connexion).
         return $this->defaultPasswordHash ??= Hash::make(Str::password(16));
     }
 
@@ -212,54 +197,5 @@ class UserImport implements ToCollection, WithHeadingRow
         return $this->agencesByKey[$value]
             ?? $this->agencesByKey[Str::lower($value)]
             ?? null;
-    }
-
-    private function syncUserProfil(User $user, ?int $departmentId): void
-    {
-        $emailKey = Str::lower($user->email);
-        $profile = Profil::resolveForUser($user);
-
-        if (! $profile->exists) {
-            $this->profilesByEmail[$emailKey] = $profile;
-        }
-
-        if (! $profile->prenom || ! $profile->nom) {
-            $parts = preg_split('/\s+/', trim($user->name));
-            $profile->prenom = $profile->prenom ?: ($parts[0] ?? null);
-            $profile->nom = $profile->nom ?: (count($parts) > 1 ? implode(' ', array_slice($parts, 1)) : null);
-        }
-
-        $profile->fonction = $user->fonction;
-        $profile->email = $user->email;
-        $profile->matricule = $user->matricule;
-        $profile->statut = $user->activated ? 'actif' : 'inactif';
-
-        if ($departmentId) {
-            $profile->departement = $this->departmentNamesById[$departmentId] ?? null;
-            $profile->department_id = $departmentId;
-        } else {
-            $profile->departement = null;
-            $profile->department_id = null;
-        }
-
-        $profile->save();
-        $this->profilesByEmail[$emailKey] = $profile;
-    }
-
-    private function syncUserProfileType(User $user, Role $role): void
-    {
-        if (in_array($role->slug, ['it', 'admin'], true)) {
-            $user->profile = 'admin';
-
-            return;
-        }
-
-        if (in_array($role->slug, ['monetique', 'monetique_ops', 'ca', 'cc', 'caissier'], true)) {
-            $user->profile = 'monetique';
-
-            return;
-        }
-
-        $user->profile = 'other';
     }
 }

@@ -134,7 +134,7 @@
                   {{ ecriture.libelle_ecriture || '-' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" :title="'Id interne: ' + (ecriture.user_id ?? '-')">
-                  {{ ecriture.user?.profil?.matricule || '-' }}
+                  {{ ecriture.user?.matricule || '-' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {{ ecriture.annee_comptable || '-' }}

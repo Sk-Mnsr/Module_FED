@@ -21,7 +21,7 @@ export interface BreadcrumbItem {
 export interface NavItem {
     title: string;
     href?: NonNullable<InertiaLinkProps['href']>;
-    icon?: LucideIcon;
+    icon?: LucideIcon | string;
     isActive?: boolean;
     items?: NavItem[];
     onClick?: () => void;
@@ -41,6 +41,9 @@ export type AppPageProps<
     quote: { message: string; author: string };
     auth: Auth;
     sidebarOpen: boolean;
+    navigation: {
+        groups: NavGroup[];
+    };
 };
 
 export interface User {
