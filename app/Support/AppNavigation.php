@@ -93,41 +93,33 @@ final class AppNavigation
             ]),
         ];
 
-        if ($canSee('n_plus_1')) {
-            $items[] = self::link('Validations', '/feds/n1', 'shield');
+        $validationItems = self::compact([
+            $canSee('n_plus_1') ? self::link('N+1', '/feds/n1') : null,
+            $canSee('responsable_facilities') ? self::link('Facilities', '/feds/facilities') : null,
+            $canSee('controle_de_gestion') ? self::link('Contrôle de gestion', '/feds/cg') : null,
+            $canSee('daf') ? self::link('DAF', '/feds/daf') : null,
+            $canSee('dga') ? self::link('DGA', '/feds/dga') : null,
+        ]);
+
+        if ($validationItems !== []) {
+            $items[] = self::section('Validations', 'shield', $validationItems);
         }
 
-        if ($canSee('responsable_achats')) {
-            $items = array_merge($items, [
-                self::link('Demandes en cours', '/feds/achats', 'shopping-cart'),
-                self::link('TDR', '/appel-offres', 'file-text'),
-                self::link('Tableaux comparatifs', '/achats/tableaux-comparatifs', 'table-2'),
-                self::link('Fournisseurs', '/fournisseurs', 'users'),
-                self::link('Bons de commande', '/bons-de-commande', 'file-text'),
-            ]);
-        }
+        $achatsItems = self::compact([
+            $canSee('responsable_achats') ? self::link('Demandes en cours', '/feds/achats') : null,
+            $canSee('responsable_achats') ? self::link('TDR', '/appel-offres') : null,
+            $canSee('responsable_achats') ? self::link('Tableaux comparatifs', '/achats/tableaux-comparatifs') : null,
+            $canSee('responsable_achats') ? self::link('Fournisseurs', '/fournisseurs') : null,
+            ($canSee('responsable_achats') || $canSee('dga'))
+                ? self::link('Bons de commande', '/bons-de-commande')
+                : null,
+            ($canSee('responsable_achats') || $isInCommittee || $hasConfigAccess)
+                ? self::link('Comité', '/comites')
+                : null,
+        ]);
 
-        if ($canSee('responsable_facilities')) {
-            $items[] = self::link('Facilities', '/feds/facilities', 'link-2');
-        }
-
-        if ($canSee('controle_de_gestion')) {
-            $items[] = self::link('Contrôle de Gestion', '/feds/cg', 'calculator');
-        }
-
-        if ($canSee('daf')) {
-            $items[] = self::link('Validations DAF', '/feds/daf', 'shield');
-        }
-
-        if ($canSee('dga')) {
-            $items[] = self::link('Validations DGA', '/feds/dga', 'shield');
-            if (! $canSee('responsable_achats')) {
-                $items[] = self::link('Bons de commande', '/bons-de-commande', 'file-text');
-            }
-        }
-
-        if ($canSee('responsable_achats') || $isInCommittee || $hasConfigAccess) {
-            $items[] = self::link('Comité', '/comites', 'users');
+        if ($achatsItems !== []) {
+            $items[] = self::section('Achats & consultations', 'shopping-cart', $achatsItems);
         }
 
         return $items;

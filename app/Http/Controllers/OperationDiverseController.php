@@ -9,6 +9,7 @@ use App\Models\OdClasseurPiece;
 use App\Services\Integrations\EcritureComptableImportApiClient;
 use App\Support\OdArchivage;
 use App\Support\OdIntegrationCsv;
+use App\Support\OdIntegrationCsvTemplate;
 use App\Support\OdSimpleIntegrationCsv;
 use App\Support\OdManualIntegrationCsv;
 use Barryvdh\DomPDF\Facade\Pdf;
