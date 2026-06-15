@@ -19,8 +19,8 @@ class EnsureStorageCommand extends Command
 
         if (! is_writable(storage_path('logs'))) {
             $this->warn('storage/logs n’est pas inscriptible par l’utilisateur courant.');
-            $this->line('Sur le serveur : sudo chown -R www-data:www-data storage bootstrap/cache');
-            $this->line('             sudo chmod -R ug+rwx storage bootstrap/cache');
+            $this->line('Sur le serveur : sudo DEPLOY_USER=support bash scripts/fix-storage-permissions.sh');
+            $this->line('             sudo usermod -aG www-data support  # puis reconnexion SSH');
         }
 
         return self::SUCCESS;
