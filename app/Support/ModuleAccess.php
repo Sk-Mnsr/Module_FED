@@ -81,7 +81,7 @@ final class ModuleAccess
             return false;
         }
 
-        if ($user->profile === 'admin' || $user->isSuperAdmin()) {
+        if ($user->profile === 'admin') {
             return true;
         }
 

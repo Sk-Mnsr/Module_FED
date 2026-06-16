@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 final class AppNavigation
 {
@@ -22,7 +23,7 @@ final class AppNavigation
         $modules = ModuleAccess::accessibleModuleKeys($user);
         $hasConfigAccess = ModuleAccess::isAdminUser($user);
         $profileType = $user->profile;
-        $isInCommittee = DB::table('comite_user')->where('user_id', $user->id)->exists();
+        $isInCommittee = self::userIsInCommittee($user->id);
         $hasModule = fn (string $module): bool => in_array($module, $modules, true);
 
         $groups = [
@@ -448,5 +449,14 @@ final class AppNavigation
     private static function compact(array $items): array
     {
         return array_values(array_filter($items, fn ($item) => $item !== null));
+    }
+
+    private static function userIsInCommittee(int $userId): bool
+    {
+        if (! Schema::hasTable('comite_user')) {
+            return false;
+        }
+
+        return DB::table('comite_user')->where('user_id', $userId)->exists();
     }
 }

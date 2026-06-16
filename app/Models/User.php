@@ -229,7 +229,11 @@ class User extends AuthenticatableBase
      */
     public function isSuperAdmin(): bool
     {
-        return $this->hasRole('it');
+        if ($this->profile === 'admin') {
+            return true;
+        }
+
+        return in_array('it', ModuleAccess::normalizedRoleSlugs($this), true);
     }
 
     /**

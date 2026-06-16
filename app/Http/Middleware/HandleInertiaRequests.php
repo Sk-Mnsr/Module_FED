@@ -10,6 +10,7 @@ use App\Support\ModuleAccess;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -109,7 +110,7 @@ class HandleInertiaRequests extends Middleware
                 'normalizedRoles' => $user ? ModuleAccess::normalizedRoleSlugs($user) : [],
                 'modules' => $user ? ModuleAccess::accessibleModuleKeys($user) : [],
                 'isSuperAdmin' => $user ? $user->isSuperAdmin() : false,
-                'isInCommittee' => $user ? DB::table('comite_user')->where('user_id', $user->id)->exists() : false,
+                'isInCommittee' => $user ? self::userIsInCommittee($user->id) : false,
                 'canMonetiqueCentral' => $user ? CoficarteAgenceAccess::canViewAll($user) : false,
                 'canResponsableMonetique' => $user ? CoficarteAgenceAccess::canResponsableMonetique($user) : false,
                 'canInitiateCoficarteVente' => $user ? CoficarteAgenceAccess::canInitiateCoficarteVente($user) : false,
@@ -121,5 +122,14 @@ class HandleInertiaRequests extends Middleware
             ],
             'coficarteAlerts' => $coficarteAlerts,
         ];
+    }
+
+    private static function userIsInCommittee(int $userId): bool
+    {
+        if (! Schema::hasTable('comite_user')) {
+            return false;
+        }
+
+        return DB::table('comite_user')->where('user_id', $userId)->exists();
     }
 }
