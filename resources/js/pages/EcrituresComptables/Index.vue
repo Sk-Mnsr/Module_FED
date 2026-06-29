@@ -72,9 +72,6 @@
       <div v-if="page.props.flash?.success" class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
         {{ page.props.flash.success }}
       </div>
-      <div v-if="page.props.flash?.error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-        {{ page.props.flash.error }}
-      </div>
 
       <!-- Data Table -->
       <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

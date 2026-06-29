@@ -3,8 +3,19 @@ import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     ArrowLeft,
     CheckCircle2,
+    ChevronDown,
+    ChevronUp,
+    Clock,
     Download,
     FileSpreadsheet,
     FileText,
@@ -14,6 +25,8 @@ import {
     Eye,
     Pencil,
     ShieldCheck,
+    Trash2,
+    UserCheck,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -34,11 +47,22 @@ type Classeur = {
     date_valeur: string | null;
     statut: string;
     integrated_at: string | null;
+    validated_at: string | null;
     user_name: string | null;
+    integrated_by_name: string | null;
+    assigned_checker_name: string | null;
+    validated_by_name: string | null;
     fichier: string | null;
+    can_integrate: boolean;
+    can_validate_checker: boolean;
+    integrer_url: string;
+    valider_checker_url: string;
     modifier_url: string | null;
+    supprimer_url: string | null;
     pieces: Piece[];
 };
+
+type Checker = { id: number; name: string };
 
 type ApercuRow = {
     numero: string;
@@ -66,6 +90,8 @@ type Apercu = {
 const props = defineProps<{
     classeur: Classeur;
     apercu: Apercu;
+    eligibleCheckers?: Checker[];
+    checkerPole?: string;
     comptableImportApiConfigured?: boolean;
 }>();
 
@@ -78,11 +104,37 @@ const breadcrumbs = [
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 const flashSuccess = computed(() => flash.value?.success);
-const flashError = computed(() => flash.value?.error);
 const flashWarning = computed(() => flash.value?.warning);
 
+const isBrouillon = computed(() => props.classeur.statut === 'brouillon');
+const isAttenteValidation = computed(() => props.classeur.statut === 'attente_validation');
 const isIntegre = computed(() => props.classeur.statut === 'integre');
 const processing = ref(false);
+const deleting = ref(false);
+const showIntegrerModal = ref(false);
+const selectedCheckerId = ref('');
+const apercuExpanded = ref(
+    (props.apercu.rows?.length ?? 0) <= 5 && !props.apercu.error,
+);
+const hasMultipleApercuRows = computed(
+    () => (props.apercu.total_rows ?? props.apercu.rows?.length ?? 0) > 1,
+);
+
+const statutLabel = computed(() => {
+    if (isIntegre.value) return 'Archivé';
+    if (isAttenteValidation.value) return 'Attente de validation';
+    return 'Brouillon';
+});
+
+const statutClass = computed(() => {
+    if (isIntegre.value) {
+        return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300';
+    }
+    if (isAttenteValidation.value) {
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
+    }
+    return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+});
 
 const difference = computed(() => props.apercu.difference ?? props.apercu.total_debit - props.apercu.total_credit);
 const isEquilibre = computed(() => Math.abs(difference.value) < 0.01);
@@ -98,21 +150,58 @@ function montantFmt(v: number): string {
     }).format(v);
 }
 
-function valider() {
-    if (processing.value || isIntegre.value) {
+function ouvrirIntegrer() {
+    if (processing.value || !props.classeur.can_integrate) return;
+    selectedCheckerId.value = '';
+    showIntegrerModal.value = true;
+}
+
+function confirmerIntegrer() {
+    if (processing.value || !props.classeur.can_integrate) return;
+    if (!selectedCheckerId.value) {
         return;
     }
     processing.value = true;
     router.post(
-        `/operations-diverses/piece-comptable/${props.classeur.id}/valider`,
-        {},
+        props.classeur.integrer_url,
+        { assigned_checker_user_id: selectedCheckerId.value },
         {
             preserveScroll: true,
             onFinish: () => {
                 processing.value = false;
+                showIntegrerModal.value = false;
             },
         },
     );
+}
+
+function validerChecker() {
+    if (processing.value || !props.classeur.can_validate_checker) return;
+    if (!window.confirm('Valider et archiver cette intégration ?')) return;
+    processing.value = true;
+    router.post(
+        props.classeur.valider_checker_url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => { processing.value = false; },
+        },
+    );
+}
+
+function supprimer() {
+    if (deleting.value || !isBrouillon.value || !props.classeur.supprimer_url) {
+        return;
+    }
+    if (!window.confirm(`Supprimer le brouillon « ${props.classeur.nom_classeur} » ? Cette action est irréversible.`)) {
+        return;
+    }
+    deleting.value = true;
+    router.delete(props.classeur.supprimer_url, {
+        onFinish: () => {
+            deleting.value = false;
+        },
+    });
 }
 </script>
 
@@ -126,9 +215,6 @@ function valider() {
             <div v-if="flashWarning" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 {{ flashWarning }}
             </div>
-            <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-                {{ flashError }}
-            </div>
 
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="flex items-start gap-3">
@@ -138,18 +224,17 @@ function valider() {
                     <div>
                         <h1 class="text-xl font-semibold text-foreground">Résumé de l’intégration</h1>
                         <p class="mt-1 text-sm text-muted-foreground">
-                            Vérifiez l’aperçu du fichier puis validez pour transmettre à la plateforme et générer la pièce comptable.
+                            Vérifiez l’aperçu puis intégrez (maker) ou validez (checker) selon votre rôle.
                         </p>
                     </div>
                 </div>
                 <span
                     class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-                    :class="isIntegre
-                        ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-                        : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'"
+                    :class="statutClass"
                 >
                     <CheckCircle2 v-if="isIntegre" class="size-3.5" />
-                    {{ isIntegre ? 'Intégré' : 'Brouillon — à valider' }}
+                    <Clock v-else-if="isAttenteValidation" class="size-3.5" />
+                    {{ statutLabel }}
                 </span>
             </div>
 
@@ -169,7 +254,7 @@ function valider() {
                 </div>
             </div>
 
-            <div class="grid gap-3 rounded-lg border border-border bg-card p-4 text-sm sm:grid-cols-3">
+            <div class="grid gap-3 rounded-lg border border-border bg-card p-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <div>
                     <p class="text-xs text-muted-foreground">Nom du classeur</p>
                     <p class="font-medium text-foreground">{{ classeur.nom_classeur }}</p>
@@ -179,8 +264,16 @@ function valider() {
                     <p class="font-medium text-foreground">{{ classeur.fichier ?? '—' }}</p>
                 </div>
                 <div>
-                    <p class="text-xs text-muted-foreground">Initiateur</p>
-                    <p class="font-medium text-foreground">{{ classeur.user_name ?? '—' }}</p>
+                    <p class="text-xs text-muted-foreground">Maker</p>
+                    <p class="font-medium text-foreground">{{ classeur.integrated_by_name ?? classeur.user_name ?? '—' }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-muted-foreground">Checker désigné</p>
+                    <p class="font-medium text-foreground">{{ classeur.assigned_checker_name ?? '—' }}</p>
+                </div>
+                <div v-if="classeur.validated_by_name">
+                    <p class="text-xs text-muted-foreground">Validé par</p>
+                    <p class="font-medium text-foreground">{{ classeur.validated_by_name }}</p>
                 </div>
             </div>
 
@@ -227,18 +320,39 @@ function valider() {
 
             <!-- Aperçu CSV -->
             <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-                <div class="flex items-center justify-between border-b border-border bg-muted/60 px-4 py-3">
+                <div
+                    class="flex items-center justify-between border-b border-border bg-muted/60 px-4 py-3"
+                    :class="hasMultipleApercuRows && !apercu.error ? 'cursor-pointer select-none hover:bg-muted/80' : ''"
+                    @click="hasMultipleApercuRows && !apercu.error ? (apercuExpanded = !apercuExpanded) : undefined"
+                >
                     <div>
                         <h2 class="text-sm font-semibold text-foreground">Aperçu du fichier d’intégration</h2>
-                        <p class="text-xs text-muted-foreground">{{ apercu.total_rows }} écriture(s) au total</p>
+                        <p class="text-xs text-muted-foreground">
+                            {{ apercu.total_rows }} écriture(s) au total
+                            <span v-if="hasMultipleApercuRows && !apercuExpanded && !apercu.error">
+                                — replié
+                            </span>
+                        </p>
                     </div>
+                    <Button
+                        v-if="hasMultipleApercuRows && !apercu.error"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 shrink-0 gap-1 text-xs text-muted-foreground"
+                        @click.stop="apercuExpanded = !apercuExpanded"
+                    >
+                        <ChevronUp v-if="apercuExpanded" class="size-4" />
+                        <ChevronDown v-else class="size-4" />
+                        {{ apercuExpanded ? 'Replier' : 'Déplier' }}
+                    </Button>
                 </div>
 
                 <div v-if="apercu.error" class="px-4 py-4 text-sm text-red-700 dark:text-red-300">
                     {{ apercu.error }}
                 </div>
 
-                <div v-else class="overflow-x-auto">
+                <div v-else-if="apercuExpanded" class="overflow-x-auto">
                     <table class="w-full text-left text-xs">
                         <thead class="bg-muted/40 text-muted-foreground">
                             <tr>
@@ -322,11 +436,18 @@ function valider() {
 
                 <div class="flex flex-wrap items-center gap-2">
                     <Link
-                        v-if="!isIntegre"
+                        v-if="isBrouillon"
                         href="/operations-diverses/integrations"
                         class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
                     >
-                        <FolderArchive class="size-4" /> Voir les intégrations
+                        <FolderArchive class="size-4" /> Voir les brouillons
+                    </Link>
+                    <Link
+                        v-else-if="isAttenteValidation"
+                        href="/operations-diverses/attente-validation"
+                        class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+                    >
+                        <UserCheck class="size-4" /> File d’attente
                     </Link>
                     <Link
                         v-else
@@ -335,7 +456,7 @@ function valider() {
                     >
                         <FolderArchive class="size-4" /> Voir l’archivage
                     </Link>
-                    <template v-if="!isIntegre">
+                    <template v-if="isBrouillon">
                         <Link
                             v-if="classeur.modifier_url"
                             :href="classeur.modifier_url"
@@ -343,21 +464,92 @@ function valider() {
                         >
                             <Pencil class="size-4" /> Modifier
                         </Link>
-                        <p v-if="comptableImportApiConfigured === false" class="text-xs text-amber-700 dark:text-amber-300">
-                            API plateforme non configurée : la validation échouera.
+                        <Button
+                            v-if="classeur.supprimer_url"
+                            type="button"
+                            variant="outline"
+                            class="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
+                            :disabled="deleting || processing"
+                            @click="supprimer"
+                        >
+                            <Trash2 class="size-4" />
+                            {{ deleting ? 'Suppression…' : 'Supprimer' }}
+                        </Button>
+                        <p v-if="comptableImportApiConfigured === false && classeur.can_integrate" class="text-xs text-amber-700 dark:text-amber-300">
+                            API plateforme non configurée : l’intégration échouera.
+                        </p>
+                        <p v-if="classeur.can_integrate && !(eligibleCheckers?.length ?? 0)" class="text-xs text-amber-700 dark:text-amber-300">
+                            Aucun autre agent du pôle {{ checkerPole ?? 'Operations' }} disponible comme validateur.
                         </p>
                         <Button
+                            v-if="classeur.can_integrate"
                             type="button"
                             class="bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500"
-                            :disabled="processing"
-                            @click="valider"
+                            :disabled="processing || !(eligibleCheckers?.length ?? 0)"
+                            :title="(eligibleCheckers?.length ?? 0) ? 'Intégrer et désigner un checker' : 'Aucun checker disponible dans votre pôle'"
+                            @click="ouvrirIntegrer"
                         >
                             <ShieldCheck class="size-4" />
-                            {{ processing ? 'Validation…' : 'Valider l’intégration' }}
+                            {{ processing ? 'Intégration…' : 'Intégrer (maker)' }}
                         </Button>
                     </template>
+                    <template v-if="isAttenteValidation && classeur.can_validate_checker">
+                        <Button
+                            type="button"
+                            class="bg-green-600 text-white hover:bg-green-700"
+                            :disabled="processing"
+                            @click="validerChecker"
+                        >
+                            <ShieldCheck class="size-4" />
+                            {{ processing ? 'Validation…' : 'Valider et archiver (checker)' }}
+                        </Button>
+                    </template>
+                    <p v-if="isAttenteValidation && !classeur.can_validate_checker" class="text-xs text-muted-foreground">
+                        En attente de validation par {{ classeur.assigned_checker_name ?? 'le checker désigné' }}.
+                    </p>
                 </div>
             </div>
+
+            <Dialog v-model:open="showIntegrerModal">
+                <DialogContent class="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Intégrer le brouillon</DialogTitle>
+                        <DialogDescription>
+                            Choisissez votre validateur après enregistrement.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div class="py-2">
+                        <label for="checker-resume" class="mb-1.5 block text-sm font-medium text-foreground">
+                            Validateur (checker)
+                        </label>
+                        <select
+                            id="checker-resume"
+                            v-model="selectedCheckerId"
+                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                            <option value="">Choisir un agent…</option>
+                            <option v-for="c in eligibleCheckers" :key="c.id" :value="String(c.id)">
+                                {{ c.name }}
+                            </option>
+                        </select>
+                        <p v-if="!(eligibleCheckers?.length ?? 0)" class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                            Aucun autre agent disponible dans votre pôle pour valider.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" :disabled="processing" @click="showIntegrerModal = false">
+                            Annuler
+                        </Button>
+                        <Button
+                            class="bg-violet-600 text-white hover:bg-violet-700"
+                            :disabled="processing || !selectedCheckerId"
+                            @click="confirmerIntegrer"
+                        >
+                            {{ processing ? 'Intégration…' : 'Confirmer l’intégration' }}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     </AppLayout>
 </template>

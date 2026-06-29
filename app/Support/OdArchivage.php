@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\OdClasseur;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -69,23 +70,98 @@ final class OdArchivage
         return 'PC_'.$year.'_'.str_pad($month, 2, '0', STR_PAD_LEFT).'_'.str_pad($day, 2, '0', STR_PAD_LEFT).'_'.$seq.'_'.$type.'_'.$ref;
     }
 
-    /** Libellé court pour l'arborescence (sans date ni séquence). */
+    /** Libellé affiché dans l'arborescence (nom du classeur). */
     public static function pieceDisplayName(OdClasseur $classeur): string
     {
-        $type = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '_', (string) $classeur->nom_classeur) ?? 'OD');
-        $type = trim($type, '_') ?: 'OD';
-        $ref = strtoupper(preg_replace('/[^A-Za-z0-9]+/', '', (string) ($classeur->numero_batch ?? $classeur->numero_piece ?? $classeur->id)) ?? (string) $classeur->id);
+        $name = trim((string) $classeur->nom_classeur);
 
-        return 'PC_'.$type.'_'.$ref;
+        return $name !== '' ? $name : 'Classeur #'.$classeur->id;
     }
 
     public static function departmentKey(?\App\Models\User $user): string
     {
+        if ($user !== null && $user->hasRole('ops')) {
+            return self::DEPT_OPERATIONS;
+        }
+
         if ($user !== null && $user->hasRole('finance')) {
             return self::DEPT_FINANCE;
         }
 
         return self::DEPT_OPERATIONS;
+    }
+
+    /**
+     * Visibilité archivage : IT tout voir ; ops/finance voient les pièces de leur pôle.
+     */
+    public static function applyPoleVisibility(Builder $query, User $viewer): Builder
+    {
+        if ($viewer->isSuperAdmin() || $viewer->hasRole('it') || $viewer->hasRole('admin')) {
+            return $query;
+        }
+
+        if ($viewer->hasRole(OdChecker::ROLE_OPS)) {
+            return $query->whereHas('user', fn (Builder $q) => $q->whereHas(
+                'roles',
+                fn (Builder $r) => $r->where('slug', OdChecker::ROLE_OPS)
+            ));
+        }
+
+        if ($viewer->hasRole(OdChecker::ROLE_FINANCE)) {
+            return $query->whereHas('user', fn (Builder $q) => $q->whereHas(
+                'roles',
+                fn (Builder $r) => $r->where('slug', OdChecker::ROLE_FINANCE)
+            ));
+        }
+
+        return $query->where('user_id', $viewer->id);
+    }
+
+    public static function canViewClasseur(User $viewer, OdClasseur $classeur): bool
+    {
+        if ($viewer->isSuperAdmin() || $viewer->hasRole('it') || $viewer->hasRole('admin')) {
+            return true;
+        }
+
+        if ((int) $classeur->user_id === (int) $viewer->id) {
+            return true;
+        }
+
+        if ($classeur->isAttenteValidation() && (int) $classeur->assigned_checker_user_id === (int) $viewer->id) {
+            return true;
+        }
+
+        if ($classeur->isIntegre() && (int) $classeur->validated_by_user_id === (int) $viewer->id) {
+            return true;
+        }
+
+        if ($classeur->isIntegre() && (int) $classeur->integrated_by_user_id === (int) $viewer->id) {
+            return true;
+        }
+
+        $creator = $classeur->user;
+        if ($creator === null) {
+            return false;
+        }
+
+        if ($viewer->hasRole(OdChecker::ROLE_OPS) && $creator->hasRole(OdChecker::ROLE_OPS)) {
+            return true;
+        }
+
+        if ($viewer->hasRole(OdChecker::ROLE_FINANCE) && $creator->hasRole(OdChecker::ROLE_FINANCE)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static function viewerCanFilterByAgent(User $viewer): bool
+    {
+        return $viewer->isSuperAdmin()
+            || $viewer->hasRole('it')
+            || $viewer->hasRole('admin')
+            || $viewer->hasRole(OdChecker::ROLE_OPS)
+            || $viewer->hasRole(OdChecker::ROLE_FINANCE);
     }
 
     public static function departmentLabel(string $key): string

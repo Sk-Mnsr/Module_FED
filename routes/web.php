@@ -12,8 +12,14 @@ Route::get('/', function () {
 })->name('home');
 
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\PortalController;
 
 Route::get('dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('portal', [PortalController::class, 'index'])->name('portal');
+    Route::get('portal/modules/{module}', [PortalController::class, 'enter'])->name('portal.enter');
+});
 
 require __DIR__.'/settings.php';
 
@@ -221,12 +227,15 @@ Route::middleware(['auth'])->group(function () {
         Route::put('operations-diverses/piece-comptable/{classeur}', [OperationDiverseController::class, 'pieceComptableUpdate'])->name('operations-diverses.piece-comptable.update');
         Route::put('operations-diverses/piece-comptable/{classeur}/manuelle', [OperationDiverseController::class, 'pieceComptableManuelleUpdate'])->name('operations-diverses.piece-comptable.manuelle.update');
         Route::get('operations-diverses/piece-comptable/{classeur}/resume', [OperationDiverseController::class, 'pieceComptableResume'])->name('operations-diverses.piece-comptable.resume');
-        Route::post('operations-diverses/piece-comptable/{classeur}/valider', [OperationDiverseController::class, 'pieceComptableValider'])->name('operations-diverses.piece-comptable.valider');
+        Route::post('operations-diverses/piece-comptable/{classeur}/integrer', [OperationDiverseController::class, 'pieceComptableIntegrer'])->name('operations-diverses.piece-comptable.integrer');
+        Route::post('operations-diverses/piece-comptable/{classeur}/valider-checker', [OperationDiverseController::class, 'pieceComptableValiderChecker'])->name('operations-diverses.piece-comptable.valider-checker');
+        Route::delete('operations-diverses/piece-comptable/{classeur}', [OperationDiverseController::class, 'pieceComptableDestroy'])->name('operations-diverses.piece-comptable.destroy');
         Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
         Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');
         Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/preview', [OperationDiverseController::class, 'justificatifPreview'])->name('operations-diverses.justificatif.preview');
         Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
         Route::get('operations-diverses/integrations', [OperationDiverseController::class, 'integrations'])->name('operations-diverses.integrations');
+        Route::get('operations-diverses/attente-validation', [OperationDiverseController::class, 'attenteValidation'])->name('operations-diverses.attente-validation');
         Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
     });
 

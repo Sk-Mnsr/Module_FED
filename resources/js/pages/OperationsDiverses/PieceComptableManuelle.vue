@@ -10,6 +10,7 @@ import {
     ChevronDown,
     ChevronUp,
     Download,
+    Eye,
     Eraser,
     FileSpreadsheet,
     FileText,
@@ -21,6 +22,7 @@ import {
     X,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { odFileTooLarge } from '@/lib/odUpload';
 
 type OdLigne = {
     date_de_valeur: string;
@@ -45,6 +47,7 @@ type EditPiece = {
     description: string | null;
     original_name: string;
     url: string;
+    preview_url?: string | null;
     is_piece_comptable?: boolean;
 };
 
@@ -61,6 +64,7 @@ const props = defineProps<{
     agences?: Agence[];
     codesOperation?: string[];
     comptableImportApiConfigured?: boolean;
+    maxUploadMo?: number;
     editing?: boolean;
     classeur?: EditClasseur;
 }>();
@@ -74,9 +78,9 @@ const breadcrumbs = [
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 const flashSuccess = computed(() => flash.value?.success);
-const flashError = computed(() => flash.value?.error);
 const flashWarning = computed(() => flash.value?.warning);
 const justificatifListKey = ref(0);
+const maxUploadMo = computed(() => props.maxUploadMo ?? 25);
 
 const selectClass =
     'flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-400/40';
@@ -129,7 +133,16 @@ function descendreLigne(index: number) {
 
 function onJustificatifFile(index: number, e: Event) {
     const t = e.target as HTMLInputElement;
-    form.justificatifs[index].file = t.files?.[0] ?? null;
+    const f = t.files?.[0] ?? null;
+    const tooLarge = odFileTooLarge(f, maxUploadMo.value);
+    if (tooLarge) {
+        form.setError(`justificatifs.${index}.file`, tooLarge);
+        form.justificatifs[index].file = null;
+        t.value = '';
+        return;
+    }
+    form.clearErrors(`justificatifs.${index}.file`);
+    form.justificatifs[index].file = f;
 }
 
 function ajouterJustificatif() {
@@ -184,9 +197,6 @@ function ligneError(index: number, field: string): string | undefined {
             </div>
             <div v-if="flashWarning" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 {{ flashWarning }}
-            </div>
-            <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-                {{ flashError }}
             </div>
 
             <div class="flex items-start gap-3">
@@ -417,9 +427,21 @@ function ligneError(index: number, field: string): string | undefined {
                                 <span class="font-medium text-foreground">{{ p.description || p.original_name }}</span>
                                 <span class="text-xs text-muted-foreground">({{ p.original_name }})</span>
                             </div>
-                            <a :href="p.url" class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300">
-                                <Download class="size-3.5" /> Télécharger
-                            </a>
+                            <div class="flex items-center gap-3">
+                                <a
+                                    v-if="p.preview_url"
+                                    :href="p.preview_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
+                                    title="Visualiser"
+                                >
+                                    <Eye class="size-3.5" /> Voir
+                                </a>
+                                <a :href="p.url" class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+                                    <Download class="size-3.5" /> Télécharger
+                                </a>
+                            </div>
                         </li>
                     </ul>
 
@@ -461,7 +483,7 @@ function ligneError(index: number, field: string): string | undefined {
                                     <Input
                                         :id="'pj-file-' + index"
                                         type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml,message/rfc822"
+                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml"
                                         class="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-violet-800 hover:file:bg-violet-200 dark:file:bg-violet-950 dark:file:text-violet-200"
                                         @change="onJustificatifFile(index, $event)"
                                     />

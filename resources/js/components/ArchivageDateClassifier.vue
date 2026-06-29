@@ -4,6 +4,7 @@ export type ArchivePiece = {
     description: string | null;
     original_name: string;
     url: string;
+    preview_url?: string | null;
     is_piece_comptable?: boolean;
 };
 
@@ -92,6 +93,7 @@ import {
     ChevronDown,
     ChevronRight,
     Download,
+    Eye,
     FileText,
     Folder,
     FolderOpen,
@@ -208,7 +210,7 @@ const treeRoot = computed<TreeNode>(() => {
                                             kind: 'agent' as const,
                                             children: node.classeurs.map((c) => ({
                                                 id: `p-${c.id}`,
-                                                label: c.piece_display_name ?? c.nom_classeur,
+                                                label: c.nom_classeur,
                                                 kind: 'piece' as const,
                                                 children: [],
                                                 piece: c,
@@ -356,10 +358,23 @@ function isExpanded(node: FlatNode): boolean {
     return expanded.value.has(node.id);
 }
 
+function collectExpandableIds(node: TreeNode, ids: string[] = []): string[] {
+    if (node.children.length > 0) {
+        ids.push(node.id);
+        for (const child of node.children) {
+            collectExpandableIds(child, ids);
+        }
+    }
+
+    return ids;
+}
+
 watch(
-    tree,
-    () => {
-        if (expanded.value.size <= 1) {
+    treeRoot,
+    (root) => {
+        if ((props.totalClasseurs ?? 0) > 0) {
+            expanded.value = new Set(collectExpandableIds(root));
+        } else if (expanded.value.size <= 1) {
             expanded.value = new Set(['root', 'dept-finance', 'dept-operations']);
         }
     },
@@ -372,14 +387,13 @@ watch(
         <!-- Flash -->
         <div v-if="flash?.success" class="shrink-0 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">{{ flash.success }}</div>
         <div v-if="flash?.warning" class="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ flash.warning }}</div>
-        <div v-if="flash?.error" class="shrink-0 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-800">{{ flash.error }}</div>
 
         <!-- En-tête -->
         <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
                 <h1 class="text-2xl font-semibold tracking-tight text-foreground">Archivage</h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    Intégrations validées — Dossiers Comptables → Finance / Operations → Année → Mois → Journée → Agent → Pièce
+                    Intégrations validées — les agents OPS voient toutes les pièces OPS ; Finance voit toutes les pièces Finance.
                 </p>
             </div>
             <div class="inline-flex items-center gap-2 rounded-lg border border-green-200/80 bg-green-50/80 px-3 py-1.5 text-sm text-green-800">
@@ -470,7 +484,7 @@ watch(
                     <div class="min-w-0 flex-1">
                         <p class="truncate text-sm font-medium">{{ row.classeur.nom_classeur }}</p>
                         <p class="truncate text-xs text-muted-foreground">
-                            {{ row.agent_name }} · {{ row.classeur.piece_display_name ?? row.classeur.nom_classeur }}
+                            {{ row.agent_name }} · {{ row.classeur.numero_batch }}
                         </p>
                     </div>
                     <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
@@ -573,12 +587,12 @@ watch(
                                     <FileText class="size-5" />
                                 </div>
                                 <h2 class="text-lg font-semibold leading-tight">{{ selectedPiece.nom_classeur }}</h2>
-                                <p class="mt-1 font-mono text-xs text-muted-foreground">
-                                    {{ selectedPiece.piece_display_name ?? selectedPiece.piece_folder_name }}
+                                <p v-if="selectedPiece.numero_batch" class="mt-1 text-xs text-muted-foreground">
+                                    N° batch {{ selectedPiece.numero_batch }}
                                 </p>
                             </div>
                             <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">
-                                Intégré
+                                Intégré · Archivé
                             </span>
                         </div>
                     </div>
@@ -629,16 +643,33 @@ watch(
                             Justificatifs ({{ selectedPiece.pieces.length }})
                         </p>
                         <div class="space-y-1">
-                            <a
+                            <div
                                 v-for="p in selectedPiece.pieces"
                                 :key="p.id"
-                                :href="p.url"
                                 class="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition hover:border-border hover:bg-muted/30"
                             >
                                 <FileText class="size-4 shrink-0" :class="p.is_piece_comptable ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'" />
                                 <span class="min-w-0 flex-1 truncate">{{ p.description || p.original_name }}</span>
-                                <Download class="size-4 shrink-0 text-muted-foreground" />
-                            </a>
+                                <div class="flex shrink-0 items-center gap-2">
+                                    <a
+                                        v-if="p.preview_url"
+                                        :href="p.preview_url"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
+                                        title="Visualiser"
+                                    >
+                                        <Eye class="size-3.5" /> Voir
+                                    </a>
+                                    <a
+                                        :href="p.url"
+                                        class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                                        title="Télécharger"
+                                    >
+                                        <Download class="size-3.5" /> Télécharger
+                                    </a>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

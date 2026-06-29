@@ -16,7 +16,6 @@ const emit = defineEmits<{
     'update:modelValue': [value: string | null];
 }>();
 
-/** Afficher la signature enregistrée si elle existe */
 const useSaved = ref(!!props.savedSignature);
 const mode = ref<'upload' | 'draw'>('draw');
 const canvasRef = ref<HTMLCanvasElement | null>(null);
@@ -26,7 +25,6 @@ const uploadError = ref<string | null>(null);
 
 const hasSignature = ref(false);
 
-/** Signature actuellement affichée : enregistrée ou nouvelle (dessin/upload) */
 const currentSignature = computed(() => {
     if (!useSaved.value && mode.value === 'upload') return uploadedPreview.value;
     if (!useSaved.value && mode.value === 'draw') {
@@ -43,7 +41,7 @@ const initSignaturePad = () => {
     if (!canvasRef.value) return;
     signaturePad.value = new SignaturePad(canvasRef.value, {
         backgroundColor: 'rgb(255, 255, 255)',
-        penColor: 'rgb(0, 0, 0)',
+        penColor: 'rgb(17, 24, 39)',
     });
     signaturePad.value.addEventListener('endStroke', () => {
         hasSignature.value = !signaturePad.value?.isEmpty();
@@ -67,8 +65,10 @@ const resizeCanvas = () => {
 
 onMounted(async () => {
     await nextTick();
-    initSignaturePad();
-    setTimeout(resizeCanvas, 100);
+    if (!useSaved.value) {
+        initSignaturePad();
+        setTimeout(resizeCanvas, 100);
+    }
     window.addEventListener('resize', resizeCanvas);
 });
 
@@ -127,14 +127,6 @@ const getDrawSignature = (): string | null => {
     return signaturePad.value.toDataURL('image/png');
 };
 
-const confirmDraw = () => {
-    const data = getDrawSignature();
-    if (data) {
-        hasSignature.value = true;
-        emit('update:modelValue', data);
-    }
-};
-
 const switchToSignAgain = () => {
     useSaved.value = false;
     hasSignature.value = false;
@@ -167,75 +159,77 @@ defineExpose({
 
 <template>
     <div class="space-y-4">
-        <!-- Signature enregistrée affichée automatiquement -->
-        <div v-if="savedSignature && useSaved" class="space-y-2">
-            <Label>Votre signature</Label>
-            <div class="w-full max-w-md rounded-md border border-gray-300 bg-white p-4">
+        <!-- Signature enregistrée -->
+        <div v-if="savedSignature && useSaved" class="space-y-3">
+            <Label class="text-sm font-medium">Signature actuelle</Label>
+            <div class="flex min-h-[140px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-6">
                 <img
                     :src="savedSignature"
                     alt="Signature enregistrée"
-                    class="mx-auto max-h-32 object-contain"
+                    class="max-h-28 max-w-full object-contain"
                 />
             </div>
             <Button type="button" variant="outline" size="sm" @click="switchToSignAgain">
-                <RefreshCw class="mr-2 h-4 w-4" /> Signer à nouveau
+                <RefreshCw class="mr-2 size-4" /> Modifier la signature
             </Button>
         </div>
 
-        <!-- Zone dessin / téléversement -->
+        <!-- Création / remplacement -->
         <div v-else class="space-y-4">
-            <div class="flex gap-2">
-                <Button
+            <div class="inline-flex rounded-lg border border-border bg-muted/40 p-1">
+                <button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    :class="{ 'bg-gray-100': mode === 'draw' }"
+                    class="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                    :class="mode === 'draw'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'"
                     @click="mode = 'draw'"
                 >
-                    <Pen class="mr-2 h-4 w-4" /> Signer
-                </Button>
-                <Button
+                    <Pen class="size-4" /> Dessiner
+                </button>
+                <button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    :class="{ 'bg-gray-100': mode === 'upload' }"
+                    class="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors"
+                    :class="mode === 'upload'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'"
                     @click="mode = 'upload'"
                 >
-                    <Upload class="mr-2 h-4 w-4" /> Téléverser
-                </Button>
+                    <Upload class="size-4" /> Importer
+                </button>
             </div>
 
-            <div v-if="mode === 'draw'" class="space-y-2">
-                <Label>Zone de signature</Label>
-                <div class="w-full max-w-md rounded-md border border-gray-300 bg-white">
+            <div v-if="mode === 'draw'" class="space-y-3">
+                <Label class="text-sm font-medium">Zone de signature</Label>
+                <div class="overflow-hidden rounded-xl border border-border bg-white shadow-inner dark:bg-background">
                     <canvas
                         ref="canvasRef"
                         class="block w-full touch-none"
-                        style="height: 180px; width: 100%"
+                        style="height: 200px; width: 100%"
                     />
                 </div>
-                <div class="flex gap-2">
-                    <Button type="button" variant="outline" size="sm" @click="clearDraw">
-                        Effacer
-                    </Button>
-                </div>
+                <Button type="button" variant="ghost" size="sm" class="text-muted-foreground" @click="clearDraw">
+                    Effacer
+                </Button>
             </div>
 
-            <div v-else class="space-y-2">
-                <Label>Téléverser une image de signature</Label>
+            <div v-else class="space-y-3">
+                <Label class="text-sm font-medium">Fichier image</Label>
                 <Input
                     type="file"
                     accept="image/png,image/jpeg,image/jpg,image/webp"
-                    class="cursor-pointer"
+                    class="cursor-pointer border-dashed bg-muted/20 file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-violet-800"
                     @change="onFileChange"
                 />
-                <p v-if="uploadError" class="text-sm text-red-600">{{ uploadError }}</p>
-                <div v-if="uploadedPreview" class="mt-2">
-                    <p class="mb-1 text-sm text-gray-600">Aperçu :</p>
+                <p v-if="uploadError" class="text-sm text-destructive">{{ uploadError }}</p>
+                <div
+                    v-if="uploadedPreview"
+                    class="flex min-h-[120px] items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 p-4"
+                >
                     <img
                         :src="uploadedPreview"
-                        alt="Signature"
-                        class="max-h-32 rounded border border-gray-200 object-contain"
+                        alt="Aperçu signature"
+                        class="max-h-28 max-w-full object-contain"
                     />
                 </div>
             </div>

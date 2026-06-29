@@ -3,6 +3,7 @@ import AppContent from '@/components/AppContent.vue';
 import AppShell from '@/components/AppShell.vue';
 import AppSidebar from '@/components/AppSidebar.vue';
 import AppSidebarHeader from '@/components/AppSidebarHeader.vue';
+import FlashErrorDialog from '@/components/FlashErrorDialog.vue';
 import type { BreadcrumbItemType } from '@/types';
 import { usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
@@ -40,5 +41,6 @@ const coficarteAlerts = computed(() => (page.props.coficarteAlerts as CoficarteA
                 <slot />
             </div>
         </AppContent>
+        <FlashErrorDialog />
     </AppShell>
 </template>

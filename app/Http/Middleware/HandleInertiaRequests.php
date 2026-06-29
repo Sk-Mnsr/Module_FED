@@ -7,6 +7,7 @@ use App\Models\CoficarteStockThreshold;
 use App\Support\AppNavigation;
 use App\Support\CoficarteAgenceAccess;
 use App\Support\ModuleAccess;
+use App\Support\NavModuleContext;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -93,6 +94,9 @@ class HandleInertiaRequests extends Middleware
             }
         }
 
+        $activeModule = NavModuleContext::resolve($request);
+        $onPortal = $request->routeIs('portal');
+
         return [
             ...parent::share($request),
             'flash' => [
@@ -118,7 +122,9 @@ class HandleInertiaRequests extends Middleware
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'navigation' => [
-                'groups' => AppNavigation::groups($user),
+                'groups' => AppNavigation::groups($user, $activeModule, $onPortal),
+                'activeModule' => $activeModule,
+                'onPortal' => $onPortal,
             ],
             'coficarteAlerts' => $coficarteAlerts,
         ];

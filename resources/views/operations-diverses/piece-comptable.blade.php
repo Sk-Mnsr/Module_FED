@@ -121,8 +121,8 @@
 
     <table class="footer">
         <tr>
-            <td style="width:50%;">Maker :</td>
-            <td style="width:50%; text-align:right;">Checker :</td>
+            <td style="width:50%;">Maker : {{ $makerName ?? '' }}</td>
+            <td style="width:50%; text-align:right;">Checker : {{ $checkerName ?? '' }}</td>
         </tr>
     </table>
 </body>

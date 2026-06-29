@@ -1,71 +1,61 @@
 <script setup lang="ts">
 import Heading from '@/components/Heading.vue';
-import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { toUrl, urlIsActive } from '@/lib/utils';
+import { cn, toUrl, urlIsActive } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit as editProfile } from '@/routes/profile';
 import { show } from '@/routes/two-factor';
 import { edit as editPassword } from '@/routes/user-password';
 import { type NavItem } from '@/types';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { KeyRound, Palette, ShieldCheck, UserRound } from 'lucide-vue-next';
 
 const sidebarNavItems: NavItem[] = [
-    {
-        title: 'Profil',
-        href: editProfile(),
-    },
-    {
-        title: 'Mot de passe',
-        href: editPassword(),
-    },
-    {
-        title: 'Double authentification',
-        href: show(),
-    },
-    {
-        title: 'Apparence',
-        href: editAppearance(),
-    },
+    { title: 'Profil', href: editProfile(), icon: UserRound },
+    { title: 'Mot de passe', href: editPassword(), icon: KeyRound },
+    { title: 'Double authentification', href: show(), icon: ShieldCheck },
+    { title: 'Apparence', href: editAppearance(), icon: Palette },
 ];
 
-const currentPath = typeof window !== undefined ? window.location.pathname : '';
+const page = usePage();
+const currentPath = computed(() => page.url.split('?')[0] ?? '');
 </script>
 
 <template>
-    <div class="w-full px-4 py-6 lg:px-8">
+    <div class="mx-auto w-full max-w-6xl px-4 py-6 lg:px-8">
         <Heading
             title="Paramètres"
-            description="Gérez votre profil et la sécurité de votre compte"
+            description="Profil, sécurité et préférences de votre compte"
         />
 
-        <div class="flex flex-col lg:flex-row lg:space-x-12">
-            <aside class="w-full max-w-xl lg:w-48">
-                <nav class="flex flex-col space-y-1 space-x-0">
-                    <Button
+        <div class="mt-2 flex flex-col gap-6 lg:flex-row lg:gap-10">
+            <aside class="lg:w-56 lg:shrink-0">
+                <nav
+                    class="flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1 lg:flex-col lg:overflow-visible lg:p-1.5"
+                    aria-label="Navigation paramètres"
+                >
+                    <Link
                         v-for="item in sidebarNavItems"
-                        :key="toUrl(item.href)"
-                        variant="ghost"
-                        :class="[
-                            'w-full justify-start',
-                            { 'bg-muted': urlIsActive(item.href, currentPath) },
-                        ]"
-                        as-child
+                        :key="toUrl(item.href!)"
+                        :href="item.href!"
+                        :class="cn(
+                            'inline-flex min-w-max items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors lg:w-full',
+                            urlIsActive(item.href, currentPath)
+                                ? 'bg-violet-100 text-violet-900 dark:bg-violet-950/50 dark:text-violet-100'
+                                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                        )"
                     >
-                        <Link :href="item.href">
-                            <component :is="item.icon" class="h-4 w-4" />
-                            {{ item.title }}
-                        </Link>
-                    </Button>
+                        <component :is="item.icon" class="size-4 shrink-0" />
+                        {{ item.title }}
+                    </Link>
                 </nav>
             </aside>
 
-            <Separator class="my-6 lg:hidden" />
+            <Separator class="lg:hidden" />
 
             <div class="min-w-0 flex-1">
-                <section class="w-full space-y-8">
-                    <slot />
-                </section>
+                <slot />
             </div>
         </div>
     </div>

@@ -5,8 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
-import { ArrowLeft, Download, FileSpreadsheet, FileText, Plus, Trash2, Eraser, Save, Hash, CalendarDays } from 'lucide-vue-next';
+import { ArrowLeft, Download, Eye, FileSpreadsheet, FileText, Plus, Trash2, Eraser, Save, Hash, CalendarDays } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
+import { odFileTooLarge } from '@/lib/odUpload';
 
 type JustificatifLigne = {
     description: string;
@@ -18,6 +19,7 @@ type EditPiece = {
     description: string | null;
     original_name: string;
     url: string;
+    preview_url?: string | null;
     is_piece_comptable?: boolean;
 };
 
@@ -34,6 +36,7 @@ type EditClasseur = {
 const props = defineProps<{
     comptableImportApiConfigured?: boolean;
     templateCsvUrl?: string;
+    maxUploadMo?: number;
     editing?: boolean;
     classeur?: EditClasseur;
 }>();
@@ -47,8 +50,9 @@ const breadcrumbs = [
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 const flashSuccess = computed(() => flash.value?.success);
-const flashError = computed(() => flash.value?.error);
 const flashWarning = computed(() => flash.value?.warning);
+
+const maxUploadMo = computed(() => props.maxUploadMo ?? 25);
 
 const form = useForm<{
     numero_batch: string;
@@ -69,12 +73,29 @@ const justificatifListKey = ref(0);
 
 function onIntegrationFile(e: Event) {
     const t = e.target as HTMLInputElement;
-    form.fichier_integration = t.files?.[0] ?? null;
+    const f = t.files?.[0] ?? null;
+    const tooLarge = odFileTooLarge(f, maxUploadMo.value);
+    if (tooLarge) {
+        form.setError('fichier_integration', tooLarge);
+        form.fichier_integration = null;
+        t.value = '';
+        return;
+    }
+    form.clearErrors('fichier_integration');
+    form.fichier_integration = f;
 }
 
 function onJustificatifFile(index: number, e: Event) {
     const t = e.target as HTMLInputElement;
     const f = t.files?.[0] ?? null;
+    const tooLarge = odFileTooLarge(f, maxUploadMo.value);
+    if (tooLarge) {
+        form.setError(`justificatifs.${index}.file`, tooLarge);
+        form.justificatifs[index].file = null;
+        t.value = '';
+        return;
+    }
+    form.clearErrors(`justificatifs.${index}.file`);
     form.justificatifs[index].file = f;
 }
 
@@ -100,13 +121,15 @@ function effacerTout() {
 
 function submit() {
     if (props.editing && props.classeur) {
+        const hasNewFiles = form.fichier_integration !== null
+            || form.justificatifs.some((j) => j.file !== null);
         form
             .transform((data) => ({
                 ...data,
                 justificatifs: data.justificatifs.filter((j) => j.file !== null),
             }))
             .put(`/operations-diverses/piece-comptable/${props.classeur.id}`, {
-                forceFormData: true,
+                forceFormData: hasNewFiles,
                 preserveScroll: true,
             });
         return;
@@ -128,9 +151,6 @@ function submit() {
             </div>
             <div v-if="flashWarning" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 {{ flashWarning }}
-            </div>
-            <div v-if="flashError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-                {{ flashError }}
             </div>
 
             <div class="flex items-start gap-3">
@@ -282,9 +302,21 @@ function submit() {
                                 <span class="font-medium text-foreground">{{ p.description || p.original_name }}</span>
                                 <span class="text-xs text-muted-foreground">({{ p.original_name }})</span>
                             </div>
-                            <a :href="p.url" class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300">
-                                <Download class="size-3.5" /> Télécharger
-                            </a>
+                            <div class="flex items-center gap-3">
+                                <a
+                                    v-if="p.preview_url"
+                                    :href="p.preview_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
+                                    title="Visualiser"
+                                >
+                                    <Eye class="size-3.5" /> Voir
+                                </a>
+                                <a :href="p.url" class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+                                    <Download class="size-3.5" /> Télécharger
+                                </a>
+                            </div>
                         </li>
                     </ul>
 
@@ -323,7 +355,7 @@ function submit() {
                                     <Input
                                         :id="'pj-file-' + index"
                                         type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml,message/rfc822"
+                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml"
                                         class="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-violet-800 hover:file:bg-violet-200 dark:file:bg-violet-950 dark:file:text-violet-200"
                                         @change="onJustificatifFile(index, $event)"
                                     />

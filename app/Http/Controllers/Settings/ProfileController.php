@@ -17,9 +17,18 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user = $request->user()->load('roles');
+
         return Inertia::render('settings/Profile', [
-            'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
+            'mustVerifyEmail' => $user instanceof MustVerifyEmail,
             'status' => $request->session()->get('status'),
+            'savedSignature' => $user->signature,
+            'roles' => $user->roles
+                ->map(fn ($role) => [
+                    'slug' => $role->slug,
+                    'label' => $role->nom ?: ucfirst(str_replace('_', ' ', (string) $role->slug)),
+                ])
+                ->values(),
         ]);
     }
 

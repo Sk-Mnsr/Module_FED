@@ -9,14 +9,95 @@ use Illuminate\Support\Facades\Schema;
 final class AppNavigation
 {
     /**
-     * @return list<array{label?: string, items: list<array<string, mixed>>}>
+     * @return list<array{label?: string, module?: string, items: list<array<string, mixed>>}>
      */
-    public static function groups(?User $user): array
+    public static function groups(?User $user, ?string $activeModule = null, bool $onPortal = false): array
     {
         if ($user === null) {
             return [];
         }
 
+        if ($onPortal) {
+            return [self::portalNavGroup()];
+        }
+
+        $nav = [self::portalNavGroup()];
+
+        if ($activeModule === null) {
+            return $nav;
+        }
+
+        $moduleGroups = self::moduleNavGroups($user, $activeModule);
+        if ($moduleGroups === []) {
+            return $nav;
+        }
+
+        return array_merge($nav, $moduleGroups);
+    }
+
+    /**
+     * @return list<array{label?: string, items: list<array<string, mixed>>}>
+     */
+    public static function moduleNavGroups(User $user, string $moduleKey): array
+    {
+        return array_map(
+            fn (array $group) => [
+                'label' => $group['label'] ?? null,
+                'items' => $group['items'],
+            ],
+            self::groupsForModuleKey($user, $moduleKey),
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function sectionTitlesForModule(User $user, string $moduleKey): array
+    {
+        $titles = [];
+
+        foreach (self::groupsForModuleKey($user, $moduleKey) as $group) {
+            foreach ($group['items'] as $item) {
+                if (! empty($item['items']) && ! empty($item['title'])) {
+                    $titles[] = (string) $item['title'];
+                } elseif (! empty($item['href']) && ! empty($item['title'])) {
+                    $titles[] = (string) $item['title'];
+                }
+            }
+        }
+
+        return array_values(array_unique($titles));
+    }
+
+    /**
+     * @return list<array{label?: string, module: string, items: list<array<string, mixed>>}>
+     */
+    private static function groupsForModuleKey(User $user, string $moduleKey): array
+    {
+        $groups = array_values(array_filter(
+            self::allTaggedGroups($user),
+            fn (array $group) => ($group['module'] ?? null) === $moduleKey,
+        ));
+
+        if (
+            $moduleKey === 'fed'
+            && ! in_array('stock', ModuleAccess::accessibleModuleKeys($user), true)
+        ) {
+            $stockGroups = array_values(array_filter(
+                self::allTaggedGroups($user),
+                fn (array $group) => ($group['module'] ?? null) === 'stock',
+            ));
+            $groups = array_merge($groups, $stockGroups);
+        }
+
+        return $groups;
+    }
+
+    /**
+     * @return list<array{label?: string, module: string, items: list<array<string, mixed>>}>
+     */
+    private static function allTaggedGroups(User $user): array
+    {
         $user->loadMissing('roles');
 
         $roleSlugs = ModuleAccess::normalizedRoleSlugs($user);
@@ -26,56 +107,66 @@ final class AppNavigation
         $isInCommittee = self::userIsInCommittee($user->id);
         $hasModule = fn (string $module): bool => in_array($module, $modules, true);
 
-        $groups = [
-            [
-                'items' => [
-                    self::link('Dashboard', route('dashboard'), 'layout-grid'),
-                ],
-            ],
-        ];
+        $groups = [];
 
         if ($hasModule('fed')) {
             $fedItems = self::fedItems($roleSlugs, $isInCommittee, $hasConfigAccess);
             if ($fedItems !== []) {
-                $groups[] = ['label' => 'FED', 'items' => $fedItems];
+                $groups[] = ['module' => 'fed', 'label' => 'FED', 'items' => $fedItems];
             }
         }
 
         if ($hasModule('budget')) {
             $budgetItems = self::budgetItems($roleSlugs, $hasConfigAccess);
             if ($budgetItems !== []) {
-                $groups[] = ['label' => 'Budget', 'items' => $budgetItems];
+                $groups[] = ['module' => 'budget', 'label' => 'Budget', 'items' => $budgetItems];
             }
         }
 
         if ($hasModule('stock') || $hasModule('fed')) {
             $stockItems = self::stockItems($roleSlugs, $hasConfigAccess, $hasModule('stock'));
             if ($stockItems !== []) {
-                $groups[] = ['label' => 'Gestion de stock', 'items' => $stockItems];
+                $groups[] = [
+                    'module' => 'stock',
+                    'label' => 'Gestion de stock',
+                    'items' => $stockItems,
+                ];
             }
         }
 
         $ecrituresItems = self::ecrituresItems($modules);
         if ($ecrituresItems !== []) {
-            $groups[] = ['label' => 'Écritures comptables', 'items' => $ecrituresItems];
+            $groups[] = ['module' => 'ecritures', 'label' => 'Écritures comptables', 'items' => $ecrituresItems];
         }
 
         $monetiqueItems = self::monetiqueItems($user, $roleSlugs, $modules, $profileType, $hasConfigAccess);
         if ($monetiqueItems !== []) {
-            $groups[] = ['label' => 'Monétique', 'items' => $monetiqueItems];
+            $groups[] = ['module' => 'monetique', 'label' => 'Monétique', 'items' => $monetiqueItems];
         }
 
         $odItems = self::odItems($modules);
         if ($odItems !== []) {
-            $groups[] = ['label' => 'OD', 'items' => $odItems];
+            $groups[] = ['module' => 'od', 'label' => 'OD', 'items' => $odItems];
         }
 
         $configItems = self::configItems($hasConfigAccess);
         if ($configItems !== []) {
-            $groups[] = ['label' => 'Configuration', 'items' => $configItems];
+            $groups[] = ['module' => 'config', 'label' => 'Configuration', 'items' => $configItems];
         }
 
         return $groups;
+    }
+
+    /**
+     * @return array{items: list<array<string, mixed>>}
+     */
+    private static function portalNavGroup(): array
+    {
+        return [
+            'items' => [
+                self::link('Modules', route('portal'), 'layout-grid'),
+            ],
+        ];
     }
 
     /**
@@ -374,7 +465,8 @@ final class AppNavigation
                 self::section('Intégration', null, [
                     self::link('Automatique', '/operations-diverses/piece-comptable'),
                     self::link('Manuelle', '/operations-diverses/piece-comptable/manuelle'),
-                    self::link('Historique', '/operations-diverses/integrations'),
+                    self::link('Mes brouillons', '/operations-diverses/integrations'),
+                    self::link('En attente de validation', '/operations-diverses/attente-validation'),
                 ]),
                 self::link('Archivage', '/operations-diverses/archivage'),
             ]),

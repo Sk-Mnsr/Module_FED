@@ -7,7 +7,9 @@ use App\Models\FicheIntegration;
 use App\Models\OdClasseur;
 use App\Models\OdClasseurPiece;
 use App\Services\Integrations\EcritureComptableImportApiClient;
+use App\Support\FlashDialog;
 use App\Support\OdArchivage;
+use App\Support\OdChecker;
 use App\Support\OdIntegrationCsv;
 use App\Support\OdIntegrationCsvTemplate;
 use App\Support\OdSimpleIntegrationCsv;
@@ -15,6 +17,7 @@ use App\Support\OdManualIntegrationCsv;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +29,16 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OperationDiverseController extends Controller
 {
+    private function maxUploadKb(): int
+    {
+        return max(1024, (int) config('od.max_upload_kb', 25600));
+    }
+
+    private function maxUploadMo(): int
+    {
+        return (int) floor($this->maxUploadKb() / 1024);
+    }
+
     public function index(): RedirectResponse
     {
         return redirect()->route('operations-diverses.piece-comptable');
@@ -36,6 +49,7 @@ class OperationDiverseController extends Controller
         return Inertia::render('OperationsDiverses/PieceComptableNouveau', [
             'comptableImportApiConfigured' => $importApi->isConfigured(),
             'templateCsvUrl' => route('operations-diverses.piece-comptable.template-csv'),
+            ...$this->odUploadProps(),
         ]);
     }
 
@@ -64,16 +78,21 @@ class OperationDiverseController extends Controller
                 ->map(fn ($c) => (string) $c)
                 ->values(),
             'comptableImportApiConfigured' => $importApi->isConfigured(),
+            ...$this->odUploadProps(),
         ]);
     }
 
     public function pieceComptableStore(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
+        if ($redirect = $this->validateOdStoreUploads($request)) {
+            return $redirect;
+        }
+
+        $validated = $this->validateOd($request, [
             'numero_batch' => ['required', 'string', 'max:100'],
             'date_valeur' => ['required', 'date'],
             'nom_classeur' => ['required', 'string', 'max:255'],
-            'fichier_integration' => ['required', 'file', 'mimes:csv,txt', 'max:15360'],
+            'fichier_integration' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKb()],
             'justificatifs' => ['required', 'array', 'min:1'],
             'justificatifs.*.description' => ['required', 'string', 'max:1000'],
             'justificatifs.*.file' => $this->justificatifFileRules(),
@@ -116,7 +135,11 @@ class OperationDiverseController extends Controller
 
     public function pieceComptableManuelleStore(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
+        if ($redirect = $this->validateOdStoreUploads($request)) {
+            return $redirect;
+        }
+
+        $validated = $this->validateOd($request, [
             'numero_batch' => ['required', 'string', 'max:100'],
             'nom_classeur' => ['required', 'string', 'max:255'],
             'lignes' => ['required', 'array', 'min:1'],
@@ -179,7 +202,7 @@ class OperationDiverseController extends Controller
     public function pieceComptableModifier(OdClasseur $classeur, EcritureComptableImportApiClient $importApi): InertiaResponse
     {
         $this->authorizeClasseur($classeur);
-        abort_unless(! $classeur->isIntegre(), 403, 'Impossible de modifier une intégration validée.');
+        abort_unless($classeur->isEditable(), 403, 'Impossible de modifier une intégration en cours de validation ou archivée.');
 
         $classeur->load(['pieces']);
 
@@ -209,6 +232,7 @@ class OperationDiverseController extends Controller
                 'comptableImportApiConfigured' => $importApi->isConfigured(),
                 'editing' => true,
                 'classeur' => $this->editPayloadManuelle($classeur, $lignes),
+                ...$this->odUploadProps(),
             ]);
         }
 
@@ -217,19 +241,20 @@ class OperationDiverseController extends Controller
             'templateCsvUrl' => route('operations-diverses.piece-comptable.template-csv'),
             'editing' => true,
             'classeur' => $this->editPayloadAutomatique($classeur),
+            ...$this->odUploadProps(),
         ]);
     }
 
     public function pieceComptableUpdate(Request $request, OdClasseur $classeur): RedirectResponse
     {
         $this->authorizeClasseur($classeur);
-        abort_unless(! $classeur->isIntegre(), 403, 'Impossible de modifier une intégration validée.');
+        abort_unless($classeur->isEditable(), 403, 'Impossible de modifier une intégration en cours de validation ou archivée.');
 
-        $validated = $request->validate([
+        $validated = $this->validateOd($request, [
             'numero_batch' => ['required', 'string', 'max:100'],
             'date_valeur' => ['required', 'date'],
             'nom_classeur' => ['required', 'string', 'max:255'],
-            'fichier_integration' => ['nullable', 'file', 'mimes:csv,txt', 'max:15360'],
+            'fichier_integration' => ['nullable', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKb()],
         ]);
 
         $batchOrDateChanged = $classeur->numero_batch !== $validated['numero_batch']
@@ -284,10 +309,10 @@ class OperationDiverseController extends Controller
     public function pieceComptableManuelleUpdate(Request $request, OdClasseur $classeur): RedirectResponse
     {
         $this->authorizeClasseur($classeur);
-        abort_unless(! $classeur->isIntegre(), 403, 'Impossible de modifier une intégration validée.');
+        abort_unless($classeur->isEditable(), 403, 'Impossible de modifier une intégration en cours de validation ou archivée.');
         abort_unless($this->isManuelleIntegration($classeur), 403, 'Cette intégration n’est pas une saisie manuelle.');
 
-        $validated = $request->validate([
+        $validated = $this->validateOd($request, [
             'numero_batch' => ['required', 'string', 'max:100'],
             'nom_classeur' => ['required', 'string', 'max:255'],
             'lignes' => ['required', 'array', 'min:1'],
@@ -345,34 +370,62 @@ class OperationDiverseController extends Controller
     public function pieceComptableResume(OdClasseur $classeur, EcritureComptableImportApiClient $importApi): InertiaResponse
     {
         $this->authorizeClasseur($classeur);
-        $classeur->load(['user', 'pieces']);
+        $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy']);
 
         $parsed = $this->parseIntegration($classeur);
+        $user = auth()->user();
 
         return Inertia::render('OperationsDiverses/PieceComptableResume', [
-            'classeur' => $this->classeurResumePayload($classeur),
+            'classeur' => $this->classeurResumePayload($classeur, $user),
             'apercu' => $this->apercuPayload($parsed),
             'comptableImportApiConfigured' => $importApi->isConfigured(),
+            'eligibleCheckers' => $classeur->canBeIntegratedBy($user)
+                ? OdChecker::eligibleFor($user)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values()
+                : [],
+            'checkerPole' => OdChecker::departmentLabelForUser($user),
         ]);
     }
 
-    public function pieceComptableValider(OdClasseur $classeur, EcritureComptableImportApiClient $importApi): RedirectResponse
+    public function pieceComptableIntegrer(Request $request, OdClasseur $classeur, EcritureComptableImportApiClient $importApi): RedirectResponse
     {
         $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless($classeur->canBeIntegratedBy($user), 403, 'Seul le créateur peut intégrer ce classeur.');
 
         $redirect = redirect()->back()->withInput();
 
-        if ($classeur->isIntegre()) {
-            return $redirect->with('warning', 'Cette intégration a déjà été validée.');
+        if (! $classeur->isBrouillon()) {
+            return $redirect->with('warning', 'Cette intégration a déjà été transmise.');
+        }
+
+        $validated = $request->validate([
+            'assigned_checker_user_id' => ['required', 'integer', 'exists:users,id'],
+        ], [
+            'assigned_checker_user_id.required' => 'Veuillez désigner un validateur.',
+            'assigned_checker_user_id.exists' => 'Le validateur sélectionné est invalide.',
+        ]);
+
+        $checker = \App\Models\User::query()->findOrFail((int) $validated['assigned_checker_user_id']);
+        if (! OdChecker::isEligibleChecker($user, $checker)) {
+            return $redirect->withErrors([
+                'assigned_checker_user_id' => 'Le validateur doit être un agent '.OdChecker::departmentLabelForUser($user).' autre que vous.',
+            ]);
         }
 
         $contents = $this->integrationContents($classeur);
         if ($contents === null) {
-            return $redirect->with('error', 'Fichier d’intégration introuvable : impossible de valider.');
+            return $redirect->with('error', FlashDialog::error(
+                'Le fichier d’intégration est introuvable. Vérifiez que le CSV est bien enregistré avant de réessayer.',
+                title: 'Intégration impossible',
+            ));
         }
 
         if (! $importApi->isConfigured()) {
-            return $redirect->with('error', 'L’API de la plateforme n’est pas configurée : intégration impossible.');
+            return $redirect->with('error', FlashDialog::error(
+                'L’URL ou la clé API de la plateforme comptable n’est pas configurée. Contactez l’équipe IT.',
+                title: 'Configuration manquante',
+            ));
         }
 
         $name = $classeur->fichier_integration_original_name
@@ -383,42 +436,105 @@ class OperationDiverseController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return $redirect->with('error', 'Envoi vers la plateforme échoué : '.$e->getMessage());
+            return $redirect->with('error', FlashDialog::fromThrowable('Envoi vers la plateforme', $e));
         }
 
         if (! $response->successful()) {
             return $redirect->with(
                 'error',
-                'La plateforme a rejeté le fichier (HTTP '.$response->status().') : '.Str::limit($response->body(), 600)
+                FlashDialog::httpRejected($response->status(), (string) $response->body()),
             );
         }
 
-        // Intégration réussie : on fige le classeur, on génère la pièce comptable et on l'archive du jour.
         $classeur->forceFill([
-            'statut' => 'integre',
+            'statut' => OdClasseur::STATUT_ATTENTE_VALIDATION,
             'integrated_at' => now(),
-            'archive_date' => now()->toDateString(),
-            'archived_at' => now(),
+            'integrated_by_user_id' => $user->id,
+            'assigned_checker_user_id' => $checker->id,
             'integration_status_code' => $response->status(),
         ])->save();
 
         try {
-            $this->genererPieceComptable($classeur->fresh(['user']));
+            $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy']));
         } catch (\Throwable $e) {
             report($e);
 
             return $redirect->with(
                 'warning',
-                'Intégration réussie et archivée, mais la génération du PDF de la pièce comptable a échoué : '.$e->getMessage()
+                'Intégration transmise, mais la génération du PDF de la pièce comptable a échoué : '.$e->getMessage()
             );
+        }
+
+        return redirect()
+            ->route('operations-diverses.piece-comptable.resume', $classeur)
+            ->with(
+                'success',
+                'Intégration transmise à la plateforme. En attente de validation par '.$checker->name.'.'
+            );
+    }
+
+    public function pieceComptableValiderChecker(OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless($classeur->canBeValidatedBy($user), 403, 'Vous n’êtes pas le validateur désigné pour ce classeur.');
+
+        $redirect = redirect()->back();
+
+        if ($classeur->isIntegre()) {
+            return $redirect->with('warning', 'Cette intégration a déjà été validée et archivée.');
+        }
+
+        if (! $classeur->isAttenteValidation()) {
+            return $redirect->with('error', FlashDialog::error(
+                'Ce classeur n’est pas en attente de validation checker.',
+                title: 'Validation impossible',
+            ));
+        }
+
+        $classeur->forceFill([
+            'statut' => OdClasseur::STATUT_INTEGRE,
+            'validated_at' => now(),
+            'validated_by_user_id' => $user->id,
+            'archive_date' => now()->toDateString(),
+            'archived_at' => now(),
+        ])->save();
+
+        try {
+            $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy']));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()
+                ->route('operations-diverses.archivage')
+                ->with(
+                    'warning',
+                    'Validation enregistrée, mais la régénération du PDF a échoué : '.$e->getMessage()
+                );
         }
 
         return redirect()
             ->route('operations-diverses.archivage')
             ->with(
                 'success',
-                'Intégration validée et transmise à la plateforme. Pièce comptable générée et archivée.'
+                'Intégration validée et archivée. Pièce comptable finalisée (maker / checker).'
             );
+    }
+
+    public function pieceComptableDestroy(OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        abort_unless($classeur->isBrouillon(), 403, 'Impossible de supprimer une intégration transmise ou archivée.');
+
+        DB::transaction(function () use ($classeur) {
+            $this->deleteClasseurStorage($classeur);
+            $classeur->delete();
+        });
+
+        return redirect()
+            ->route('operations-diverses.integrations')
+            ->with('success', 'Le brouillon a été supprimé.');
     }
 
     public function pieceComptablePdf(Request $request, OdClasseur $classeur): BinaryFileResponse|StreamedResponse
@@ -480,7 +596,6 @@ class OperationDiverseController extends Controller
     public function integrations(Request $request, EcritureComptableImportApiClient $importApi): InertiaResponse
     {
         $user = auth()->user();
-        $canViewAllAgents = $this->voitTousLesClasseurs($user);
 
         $filters = array_filter([
             'q' => $request->input('q'),
@@ -489,13 +604,12 @@ class OperationDiverseController extends Controller
             'user_id' => $request->input('user_id'),
         ], static fn ($v) => $v !== null && $v !== '');
 
+        unset($filters['user_id']);
+
         $query = OdClasseur::query()
             ->with(['user', 'pieces'])
-            ->where('statut', 'brouillon');
-
-        if (! $canViewAllAgents) {
-            $query->where('user_id', $user->id);
-        }
+            ->where('statut', OdClasseur::STATUT_BROUILLON)
+            ->where('user_id', $user->id);
 
         if (! empty($filters['q'])) {
             $term = '%'.trim((string) $filters['q']).'%';
@@ -514,32 +628,70 @@ class OperationDiverseController extends Controller
             $query->where('numero_batch', 'like', '%'.trim((string) $filters['numero_batch']).'%');
         }
 
-        if (! empty($filters['user_id'])) {
-            $query->where('user_id', (int) $filters['user_id']);
-        }
-
         $classeurs = $query
             ->orderByDesc('created_at')
             ->get()
-            ->map(fn (OdClasseur $c) => $this->integrationListPayload($c));
+            ->map(fn (OdClasseur $c) => $this->integrationListPayload($c, $user));
 
-        $agents = OdClasseur::query()
-            ->where('statut', 'brouillon')
-            ->when(! $canViewAllAgents, fn ($q) => $q->where('user_id', $user->id))
-            ->with('user')
-            ->get()
-            ->pluck('user')
-            ->filter()
-            ->unique('id')
-            ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])
-            ->sortBy('name')
-            ->values();
+        $agents = collect([['id' => $user->id, 'name' => $user->name]]);
 
         return Inertia::render('OperationsDiverses/Integrations', [
             'classeurs' => $classeurs,
             'agents' => $agents,
             'filters' => $filters,
-            'canViewAllAgents' => $canViewAllAgents,
+            'canViewAllAgents' => false,
+            'eligibleCheckers' => OdChecker::eligibleFor($user)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
+            'checkerPole' => OdChecker::departmentLabelForUser($user),
+            'comptableImportApiConfigured' => $importApi->isConfigured(),
+        ]);
+    }
+
+    public function attenteValidation(Request $request, EcritureComptableImportApiClient $importApi): InertiaResponse
+    {
+        $user = auth()->user();
+        $canViewAll = $this->voitTousLesClasseurs($user);
+
+        $filters = array_filter([
+            'q' => $request->input('q'),
+            'nom_classeur' => $request->input('nom_classeur'),
+            'numero_batch' => $request->input('numero_batch'),
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        $query = OdClasseur::query()
+            ->with(['user', 'integratedBy', 'assignedChecker', 'pieces'])
+            ->where('statut', OdClasseur::STATUT_ATTENTE_VALIDATION);
+
+        if (! $canViewAll) {
+            $query->where('assigned_checker_user_id', $user->id);
+        }
+
+        if (! empty($filters['q'])) {
+            $term = '%'.trim((string) $filters['q']).'%';
+            $query->where(function ($w) use ($term) {
+                $w->where('nom_classeur', 'like', $term)
+                    ->orWhere('numero_batch', 'like', $term)
+                    ->orWhereHas('user', fn ($u) => $u->where('name', 'like', $term))
+                    ->orWhereHas('assignedChecker', fn ($u) => $u->where('name', 'like', $term));
+            });
+        }
+
+        if (! empty($filters['nom_classeur'])) {
+            $query->where('nom_classeur', 'like', '%'.trim((string) $filters['nom_classeur']).'%');
+        }
+
+        if (! empty($filters['numero_batch'])) {
+            $query->where('numero_batch', 'like', '%'.trim((string) $filters['numero_batch']).'%');
+        }
+
+        $classeurs = $query
+            ->orderByDesc('integrated_at')
+            ->get()
+            ->map(fn (OdClasseur $c) => $this->attenteValidationListPayload($c, $user));
+
+        return Inertia::render('OperationsDiverses/AttenteValidation', [
+            'classeurs' => $classeurs,
+            'filters' => $filters,
+            'canViewAllAgents' => $canViewAll,
             'comptableImportApiConfigured' => $importApi->isConfigured(),
         ]);
     }
@@ -547,7 +699,7 @@ class OperationDiverseController extends Controller
     public function archivage(Request $request, EcritureComptableImportApiClient $importApi): InertiaResponse
     {
         $user = auth()->user();
-        $canViewAllAgents = $this->voitTousLesClasseurs($user);
+        $canViewAllAgents = OdArchivage::viewerCanFilterByAgent($user);
 
         $filters = OdArchivage::normalizeFilters($request->only([
             'q',
@@ -564,12 +716,10 @@ class OperationDiverseController extends Controller
         ]));
 
         $query = OdClasseur::query()
-            ->with(['user.roles', 'pieces'])
-            ->where('statut', 'integre');
+            ->with(['user.roles', 'pieces', 'integratedBy', 'validatedBy'])
+            ->where('statut', OdClasseur::STATUT_INTEGRE);
 
-        if (! $canViewAllAgents) {
-            $query->where('user_id', $user->id);
-        }
+        OdArchivage::applyPoleVisibility($query, $user);
 
         OdArchivage::applySearchFilters($query, $filters);
 
@@ -609,8 +759,10 @@ class OperationDiverseController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function classeurResumePayload(OdClasseur $classeur): array
+    private function classeurResumePayload(OdClasseur $classeur, ?\App\Models\User $viewer = null): array
     {
+        $viewer ??= auth()->user();
+
         return [
             'id' => $classeur->id,
             'numero_batch' => $classeur->numero_batch,
@@ -619,11 +771,22 @@ class OperationDiverseController extends Controller
             'date_valeur' => optional($classeur->date_valeur)->toDateString(),
             'statut' => $classeur->statut,
             'integrated_at' => optional($classeur->integrated_at)->toIso8601String(),
+            'validated_at' => optional($classeur->validated_at)->toIso8601String(),
             'user_name' => $classeur->user?->name,
+            'integrated_by_name' => $classeur->integratedBy?->name,
+            'assigned_checker_name' => $classeur->assignedChecker?->name,
+            'validated_by_name' => $classeur->validatedBy?->name,
             'fichier' => $classeur->fichier_integration_original_name,
-            'modifier_url' => $classeur->isIntegre()
-                ? null
-                : route('operations-diverses.piece-comptable.modifier', $classeur),
+            'can_integrate' => $viewer && $classeur->canBeIntegratedBy($viewer),
+            'can_validate_checker' => $viewer && $classeur->canBeValidatedBy($viewer),
+            'integrer_url' => route('operations-diverses.piece-comptable.integrer', $classeur),
+            'valider_checker_url' => route('operations-diverses.piece-comptable.valider-checker', $classeur),
+            'modifier_url' => $classeur->isEditable()
+                ? route('operations-diverses.piece-comptable.modifier', $classeur)
+                : null,
+            'supprimer_url' => $classeur->isBrouillon()
+                ? route('operations-diverses.piece-comptable.destroy', $classeur)
+                : null,
             'pieces' => $this->piecesJustificativesPayload($classeur),
         ];
     }
@@ -724,14 +887,123 @@ class OperationDiverseController extends Controller
     }
 
     /**
+     * @param  array<string, mixed>  $rules
+     * @return array<string, mixed>
+     */
+    private function validateOd(Request $request, array $rules): array
+    {
+        return $request->validate($rules, $this->odValidationMessages());
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function odValidationMessages(): array
+    {
+        $maxMo = $this->maxUploadMo();
+        $phpLimit = (string) ini_get('upload_max_filesize');
+
+        return [
+            'numero_batch.required' => 'Veuillez saisir le numéro de batch.',
+            'date_valeur.required' => 'Veuillez indiquer la date valeur.',
+            'date_valeur.date' => 'La date valeur n\'est pas valide.',
+            'nom_classeur.required' => 'Veuillez indiquer le nom du classeur.',
+            'fichier_integration.required' => 'Veuillez joindre le fichier CSV d\'intégration.',
+            'fichier_integration.file' => 'Le fichier d\'intégration doit être un fichier valide.',
+            'fichier_integration.mimes' => 'Le fichier d\'intégration doit être au format CSV ou TXT.',
+            'fichier_integration.uploaded' => "Le fichier CSV n'a pas pu être envoyé (max. {$maxMo} Mo, limite PHP : {$phpLimit}).",
+            'fichier_integration.max' => "Le fichier CSV ne doit pas dépasser {$maxMo} Mo.",
+            'justificatifs.required' => 'Veuillez ajouter au moins une pièce justificative.',
+            'justificatifs.min' => 'Veuillez ajouter au moins une pièce justificative.',
+            'justificatifs.*.description.required' => 'Veuillez indiquer le texte à afficher pour chaque pièce.',
+            'justificatifs.*.file.required' => 'Veuillez joindre un fichier pour chaque pièce justificative.',
+            'justificatifs.*.file.uploaded' => "Le fichier n'a pas pu être envoyé (max. {$maxMo} Mo, limite PHP : {$phpLimit}).",
+            'justificatifs.*.file.max' => "Chaque pièce ne doit pas dépasser {$maxMo} Mo.",
+            'justificatifs.*.file.mimes' => 'Format non accepté. Utilisez PDF, image, CSV, Excel, Word ou e-mail (.eml).',
+            'lignes.required' => 'Veuillez saisir au moins une ligne comptable.',
+            'lignes.min' => 'Veuillez saisir au moins une ligne comptable.',
+            'lignes.*.date_de_valeur.required' => 'Veuillez indiquer la date de valeur sur chaque ligne.',
+            'lignes.*.code_agence.required' => 'Veuillez indiquer le code agence sur chaque ligne.',
+            'lignes.*.no_compte.required' => 'Veuillez indiquer le numéro de compte sur chaque ligne.',
+            'lignes.*.montant.required' => 'Veuillez indiquer le montant sur chaque ligne.',
+            'lignes.*.montant.numeric' => 'Le montant doit être un nombre.',
+            'lignes.*.montant.min' => 'Le montant doit être supérieur à zéro.',
+            'lignes.*.sens.required' => 'Veuillez indiquer le sens (C ou D) sur chaque ligne.',
+            'lignes.*.sens.in' => 'Le sens doit être C (crédit) ou D (débit).',
+            'lignes.*.libelle_ecriture.required' => 'Veuillez indiquer le libellé sur chaque ligne.',
+            'lignes.*.code_operation.required' => 'Veuillez indiquer le code opération sur chaque ligne.',
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function odUploadProps(): array
+    {
+        return [
+            'maxUploadMo' => $this->maxUploadMo(),
+        ];
+    }
+
+    private function validateOdStoreUploads(Request $request): ?RedirectResponse
+    {
+        if ($request->hasFile('fichier_integration')) {
+            $redirect = $this->validatePhpUpload($request->file('fichier_integration'), 'fichier_integration');
+            if ($redirect !== null) {
+                return $redirect;
+            }
+        }
+
+        $rows = $request->input('justificatifs');
+        if (! is_array($rows)) {
+            return null;
+        }
+
+        foreach ($rows as $index => $_row) {
+            $file = $request->file('justificatifs.'.$index.'.file');
+            if ($file === null) {
+                continue;
+            }
+
+            $redirect = $this->validatePhpUpload($file, 'justificatifs.'.$index.'.file');
+            if ($redirect !== null) {
+                return $redirect;
+            }
+        }
+
+        return null;
+    }
+
+    private function validatePhpUpload(?UploadedFile $file, string $errorKey): ?RedirectResponse
+    {
+        if ($file === null || $file->isValid()) {
+            return null;
+        }
+
+        $maxMo = $this->maxUploadMo();
+        $phpLimit = (string) ini_get('upload_max_filesize');
+
+        $message = match ($file->getError()) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => "Fichier trop volumineux (max. application : {$maxMo} Mo, limite PHP : {$phpLimit}).",
+            UPLOAD_ERR_PARTIAL => 'Le fichier n\'a été que partiellement envoyé. Réessayez.',
+            UPLOAD_ERR_NO_FILE => 'Aucun fichier sélectionné.',
+            default => 'Échec de l\'envoi du fichier. Réessayez.',
+        };
+
+        return redirect()->back()->withInput()->withErrors([$errorKey => $message]);
+    }
+
+    /**
      * @return list<string|\Illuminate\Validation\Rules\File>
      */
     private function justificatifFileRules(bool $required = true): array
     {
+        // Extensions uniquement : ne pas mélanger message/rfc822 ici — Laravel exigerait
+        // ce MIME en plus des extensions (ET logique), ce qui rejette les PDF/images.
         $file = \Illuminate\Validation\Rules\File::types([
             'pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'csv', 'txt',
-            'xlsx', 'xls', 'doc', 'docx', 'eml', 'message/rfc822',
-        ])->max(15360);
+            'xlsx', 'xls', 'doc', 'docx', 'eml',
+        ])->max($this->maxUploadKb());
 
         return $required ? ['required', $file] : ['nullable', $file];
     }
@@ -756,7 +1028,7 @@ class OperationDiverseController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function integrationListPayload(OdClasseur $classeur): array
+    private function integrationListPayload(OdClasseur $classeur, \App\Models\User $viewer): array
     {
         return [
             'id' => $classeur->id,
@@ -766,8 +1038,30 @@ class OperationDiverseController extends Controller
             'user_name' => $classeur->user?->name,
             'created_at' => optional($classeur->created_at)->toIso8601String(),
             'justificatifs_count' => $classeur->pieces->count() + 1,
+            'can_integrate' => $classeur->canBeIntegratedBy($viewer),
             'resume_url' => route('operations-diverses.piece-comptable.resume', $classeur),
-            'valider_url' => route('operations-diverses.piece-comptable.valider', $classeur),
+            'integrer_url' => route('operations-diverses.piece-comptable.integrer', $classeur),
+            'supprimer_url' => route('operations-diverses.piece-comptable.destroy', $classeur),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function attenteValidationListPayload(OdClasseur $classeur, \App\Models\User $viewer): array
+    {
+        return [
+            'id' => $classeur->id,
+            'nom_classeur' => $classeur->nom_classeur,
+            'numero_batch' => $classeur->numero_batch,
+            'date_valeur' => optional($classeur->date_valeur)->toDateString(),
+            'maker_name' => $classeur->integratedBy?->name ?? $classeur->user?->name,
+            'checker_name' => $classeur->assignedChecker?->name,
+            'integrated_at' => optional($classeur->integrated_at)->toIso8601String(),
+            'justificatifs_count' => $classeur->pieces->count() + 1,
+            'resume_url' => route('operations-diverses.piece-comptable.resume', $classeur),
+            'can_validate' => $classeur->canBeValidatedBy($viewer),
+            'valider_checker_url' => route('operations-diverses.piece-comptable.valider-checker', $classeur),
         ];
     }
 
@@ -811,9 +1105,7 @@ class OperationDiverseController extends Controller
                 'date_valeur' => $baseFields['date_valeur'],
                 'numero_batch' => $baseFields['numero_batch'],
                 'numero_piece' => $baseFields['numero_batch'],
-                'statut' => 'brouillon',
-                'archive_date' => now()->toDateString(),
-                'archived_at' => now(),
+                'statut' => OdClasseur::STATUT_BROUILLON,
             ]);
 
             $baseDir = 'od/classeurs/'.$classeur->id;
@@ -876,7 +1168,7 @@ class OperationDiverseController extends Controller
             $rules['justificatifs.'.$index.'.description'] = ['required', 'string', 'max:1000'];
             $rules['justificatifs.'.$index.'.file'] = $this->justificatifFileRules();
         }
-        $request->validate($rules);
+        $request->validate($rules, $this->odValidationMessages());
 
         $classeur->load('pieces');
         $sortOrder = (int) ($classeur->pieces->max('sort_order') ?? -1) + 1;
@@ -932,6 +1224,8 @@ class OperationDiverseController extends Controller
         }
 
         $integratedAt = $classeur->integrated_at instanceof Carbon ? $classeur->integrated_at : now();
+        $makerName = $classeur->integratedBy?->name ?? $classeur->user?->name ?? '';
+        $checkerName = $classeur->validatedBy?->name ?? '';
 
         $pdf = Pdf::loadView('operations-diverses.piece-comptable', [
             'classeur' => $classeur,
@@ -939,6 +1233,8 @@ class OperationDiverseController extends Controller
             'userId' => $userId,
             'date' => $integratedAt->format('d/m/Y'),
             'heure' => $integratedAt->format('H:i:s'),
+            'makerName' => $makerName,
+            'checkerName' => $checkerName,
         ])->setPaper('a4', 'landscape');
 
         $path = 'od/classeurs/'.$classeur->id.'/piece/piece-'.Str::slug((string) $classeur->numero_piece, '_').'.pdf';
@@ -1033,10 +1329,12 @@ class OperationDiverseController extends Controller
     private function authorizeClasseur(OdClasseur $classeur): void
     {
         $user = auth()->user();
-        if ($this->voitTousLesClasseurs($user)) {
-            return;
-        }
-        abort_unless($classeur->user_id === $user->id, 403);
+        abort_unless(OdArchivage::canViewClasseur($user, $classeur), 403);
+    }
+
+    private function deleteClasseurStorage(OdClasseur $classeur): void
+    {
+        Storage::disk('local')->deleteDirectory('od/classeurs/'.$classeur->id);
     }
 
     private function voitTousLesClasseurs(\App\Models\User $user): bool

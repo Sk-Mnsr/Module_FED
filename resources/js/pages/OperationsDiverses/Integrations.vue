@@ -4,6 +4,14 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
+import {
     CalendarDays,
     ChevronDown,
     Clock,
@@ -15,6 +23,7 @@ import {
     Search,
     ShieldCheck,
     SlidersHorizontal,
+    Trash2,
     User,
     X,
 } from 'lucide-vue-next';
@@ -28,29 +37,38 @@ type ClasseurRow = {
     user_name: string | null;
     created_at: string | null;
     justificatifs_count: number;
+    can_integrate: boolean;
     resume_url: string;
-    valider_url: string;
+    integrer_url: string;
+    supprimer_url: string;
 };
 
 type Agent = { id: number; name: string };
+type Checker = { id: number; name: string };
 
 const props = defineProps<{
     classeurs?: ClasseurRow[];
     agents?: Agent[];
     filters?: { q?: string; nom_classeur?: string; numero_batch?: string; user_id?: string };
     canViewAllAgents?: boolean;
+    eligibleCheckers?: Checker[];
+    checkerPole?: string;
     comptableImportApiConfigured?: boolean;
 }>();
 
 const breadcrumbs = [
     { title: 'Opérations diverses', href: '/operations-diverses/piece-comptable' },
     { title: 'Intégration', href: '/operations-diverses/integrations' },
-    { title: 'Historique', href: '/operations-diverses/integrations' },
+    { title: 'Mes brouillons', href: '/operations-diverses/integrations' },
 ];
 
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
-const validerEnCours = ref<number | null>(null);
+const supprimerEnCours = ref<number | null>(null);
+const integrerEnCours = ref(false);
+const showIntegrerModal = ref(false);
+const integrerTarget = ref<ClasseurRow | null>(null);
+const selectedCheckerId = ref('');
 const showFilters = ref(false);
 const showNewMenu = ref(false);
 
@@ -75,13 +93,47 @@ function resetSearch() {
     router.get('/operations-diverses/integrations', {}, { preserveScroll: true });
 }
 
-function valider(id: number, url: string) {
-    if (validerEnCours.value !== null) return;
-    validerEnCours.value = id;
-    router.post(url, {}, {
+function supprimer(c: ClasseurRow) {
+    if (supprimerEnCours.value !== null) return;
+    if (!window.confirm(`Supprimer le brouillon « ${c.nom_classeur} » ? Cette action est irréversible.`)) {
+        return;
+    }
+    supprimerEnCours.value = c.id;
+    router.delete(c.supprimer_url, {
         preserveScroll: true,
-        onFinish: () => { validerEnCours.value = null; },
+        onFinish: () => { supprimerEnCours.value = null; },
     });
+}
+
+function ouvrirIntegrer(c: ClasseurRow) {
+    if (!c.can_integrate) {
+        router.visit(c.resume_url);
+        return;
+    }
+    integrerTarget.value = c;
+    selectedCheckerId.value = '';
+    showIntegrerModal.value = true;
+}
+
+function confirmerIntegrer() {
+    if (!integrerTarget.value || integrerEnCours.value) return;
+    if (!selectedCheckerId.value) {
+        window.alert('Veuillez désigner un validateur (checker).');
+        return;
+    }
+    integrerEnCours.value = true;
+    router.post(
+        integrerTarget.value.integrer_url,
+        { assigned_checker_user_id: selectedCheckerId.value },
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                integrerEnCours.value = false;
+                showIntegrerModal.value = false;
+                integrerTarget.value = null;
+            },
+        },
+    );
 }
 
 function dateFmt(iso: string | null): string {
@@ -99,7 +151,7 @@ function horodatage(iso: string | null): string {
 </script>
 
 <template>
-    <Head title="Historique — Intégrations OD" />
+    <Head title="Mes brouillons — Intégrations OD" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
             <!-- Flash -->
@@ -109,9 +161,6 @@ function horodatage(iso: string | null): string {
             <div v-if="flash?.warning" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
                 {{ flash.warning }}
             </div>
-            <div v-if="flash?.error" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-200">
-                {{ flash.error }}
-            </div>
 
             <!-- En-tête -->
             <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -120,9 +169,9 @@ function horodatage(iso: string | null): string {
                         <FileSpreadsheet class="size-6" />
                     </div>
                     <div>
-                        <h1 class="text-xl font-semibold text-foreground">Historique des intégrations</h1>
+                        <h1 class="text-xl font-semibold text-foreground">Mes brouillons</h1>
                         <p class="mt-1 text-sm text-muted-foreground">
-                            Brouillons en attente de validation et transmission à la plateforme.
+                            Vos classeurs en cours. Intégrez-les (maker), puis le checker désigné valide dans « En attente de validation ».
                         </p>
                     </div>
                 </div>
@@ -220,7 +269,7 @@ function horodatage(iso: string | null): string {
                 <div class="border-b border-border bg-gradient-to-r from-violet-50/90 to-transparent px-5 py-3 dark:from-violet-950/40 dark:to-transparent">
                     <h2 class="text-sm font-semibold text-foreground">Brouillons en attente</h2>
                     <p class="mt-0.5 text-xs text-muted-foreground">
-                        Une fois validées, les pièces sont archivées dans l’onglet Archivage.
+                        Cliquez « Intégrer » pour transmettre à la plateforme et désigner un validateur du même pôle.
                     </p>
                 </div>
 
@@ -292,22 +341,39 @@ function horodatage(iso: string | null): string {
                         </div>
 
                         <!-- Actions -->
-                        <div class="flex shrink-0 flex-wrap items-center gap-2 lg:justify-end">
-                            <Link
-                                :href="c.resume_url"
-                                class="inline-flex h-9 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium transition hover:bg-muted"
-                            >
-                                <FileSearch class="size-4" />
-                                Résumé
-                            </Link>
+                        <div class="flex shrink-0 flex-wrap items-center gap-1 lg:justify-end">
                             <Button
+                                as-child
+                                variant="ghost"
+                                size="icon"
+                                class="size-8 text-muted-foreground hover:text-foreground"
+                            >
+                                <Link :href="c.resume_url" title="Voir le résumé">
+                                    <FileSearch class="size-4" />
+                                    <span class="sr-only">Résumé</span>
+                                </Link>
+                            </Button>
+                            <Button
+                                v-if="c.can_integrate"
                                 size="sm"
-                                class="h-9 bg-violet-600 hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
-                                :disabled="validerEnCours === c.id"
-                                @click="valider(c.id, c.valider_url)"
+                                class="h-8 bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
+                                :disabled="integrerEnCours || supprimerEnCours === c.id || !(eligibleCheckers?.length ?? 0)"
+                                :title="(eligibleCheckers?.length ?? 0) ? 'Intégrer et désigner un checker' : 'Aucun checker disponible dans votre pôle'"
+                                @click="ouvrirIntegrer(c)"
                             >
                                 <ShieldCheck class="size-4" />
-                                {{ validerEnCours === c.id ? 'Validation…' : 'Valider' }}
+                                Intégrer
+                            </Button>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                class="size-8 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
+                                :disabled="supprimerEnCours === c.id || integrerEnCours"
+                                :title="supprimerEnCours === c.id ? 'Suppression…' : 'Supprimer'"
+                                @click="supprimer(c)"
+                            >
+                                <Trash2 class="size-4" />
+                                <span class="sr-only">Supprimer</span>
                             </Button>
                         </div>
                     </div>
@@ -315,11 +381,63 @@ function horodatage(iso: string | null): string {
             </div>
 
             <p
+                v-if="(eligibleCheckers?.length ?? 0) === 0"
+                class="rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+            >
+                <strong>Intégration indisponible :</strong>
+                aucun autre agent du pôle
+                <strong>{{ checkerPole ?? 'Operations' }}</strong>
+                n’est disponible comme validateur (checker).
+                Un collègue du même pôle (rôle OPS ou Finance) doit exister dans l’application pour que vous puissiez intégrer.
+            </p>
+
+            <p
                 v-if="comptableImportApiConfigured === false"
                 class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
             >
-                API plateforme non configurée : la validation échouera tant que l’URL d’import n’est pas renseignée.
+                API plateforme non configurée : l’intégration échouera tant que l’URL d’import n’est pas renseignée.
             </p>
+
+            <Dialog v-model:open="showIntegrerModal">
+                <DialogContent class="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Intégrer</DialogTitle>
+                        <DialogDescription>
+                            Choisissez votre validateur après enregistrement.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div class="py-2">
+                        <label for="checker-list" class="mb-1.5 block text-sm font-medium text-foreground">
+                            Validateur
+                        </label>
+                        <select
+                            id="checker-list"
+                            v-model="selectedCheckerId"
+                            class="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                            <option value="">Choisir un agent…</option>
+                            <option v-for="ch in eligibleCheckers" :key="ch.id" :value="String(ch.id)">
+                                {{ ch.name }}
+                            </option>
+                        </select>
+                        <p v-if="!(eligibleCheckers?.length ?? 0)" class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                            Aucun autre agent disponible dans votre pôle pour valider.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" :disabled="integrerEnCours" @click="showIntegrerModal = false">
+                            Annuler
+                        </Button>
+                        <Button
+                            class="bg-violet-600 text-white hover:bg-violet-700"
+                            :disabled="integrerEnCours || !selectedCheckerId"
+                            @click="confirmerIntegrer"
+                        >
+                            {{ integrerEnCours ? 'Intégration…' : 'Confirmer l’intégration' }}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     </AppLayout>
 </template>
