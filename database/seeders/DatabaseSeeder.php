@@ -35,5 +35,20 @@ class DatabaseSeeder extends Seeder
             'password_change_required' => false,
         ]);
         $user->roles()->attach(Role::where('slug', 'it')->first()->id);
+
+        $cgRole = Role::where('slug', 'controle_de_gestion')->first();
+        if ($cgRole) {
+            $cgUser = User::firstOrCreate(
+                ['email' => 'cg@cofinacorp.com'],
+                [
+                    'name' => 'Contrôle de Gestion',
+                    'fonction' => 'Contrôleur de Gestion',
+                    'password' => Hash::make('Cofina@123'),
+                    'profile' => 'other',
+                    'password_change_required' => false,
+                ]
+            );
+            $cgUser->roles()->syncWithoutDetaching([$cgRole->id]);
+        }
     }
 }

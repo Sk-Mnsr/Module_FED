@@ -8,6 +8,7 @@ import {
     CreditCard,
     FileSpreadsheet,
     FileText,
+    GitCompare,
     Layers,
     LayoutGrid,
     Settings,
@@ -48,6 +49,7 @@ const iconMap: Record<string, Component> = {
     layers: Layers,
     'credit-card': CreditCard,
     'file-spreadsheet': FileSpreadsheet,
+    'git-compare': GitCompare,
     settings: Settings,
 };
 
@@ -81,6 +83,11 @@ const accentStyles: Record<string, { ring: string; icon: string; hover: string }
         ring: 'ring-orange-200/80',
         icon: 'bg-orange-50 text-orange-600',
         hover: 'hover:border-orange-200 hover:shadow-orange-100/50',
+    },
+    cyan: {
+        ring: 'ring-cyan-200/80',
+        icon: 'bg-cyan-50 text-cyan-700',
+        hover: 'hover:border-cyan-200 hover:shadow-cyan-100/50',
     },
     slate: {
         ring: 'ring-slate-200/80',

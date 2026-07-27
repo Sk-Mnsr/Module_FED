@@ -24,15 +24,10 @@ class BudgetController extends Controller
     public function index(Request $request)
     {
         $departments = Department::orderBy('name')->get(['id', 'name']);
-        $years = Budget::query()
-            ->select('year')
-            ->distinct()
-            ->orderByDesc('year')
-            ->pluck('year')
-            ->values();
+        $years = $this->availableYears();
 
-        $selectedDepartmentId = $request->integer('department_id');
-        $selectedYear = $request->integer('year');
+        $selectedDepartmentId = $request->integer('department_id') ?: null;
+        $selectedYear = $request->integer('year') ?: null;
 
         $budget = null;
         if ($selectedDepartmentId && $selectedYear) {
@@ -83,19 +78,13 @@ class BudgetController extends Controller
             ->orderBy('name')
             ->get(['id', 'name']);
 
-        $years = Budget::query()
-            ->whereIn('department_id', $departmentIds)
-            ->select('year')
-            ->distinct()
-            ->orderByDesc('year')
-            ->pluck('year')
-            ->values();
+        $years = $this->availableYears();
 
-        $selectedDepartmentId = $request->integer('department_id');
+        $selectedDepartmentId = $request->integer('department_id') ?: null;
         if ($selectedDepartmentId && !in_array($selectedDepartmentId, $departmentIds, true)) {
             $selectedDepartmentId = null;
         }
-        $selectedYear = $request->integer('year');
+        $selectedYear = $request->integer('year') ?: null;
 
         $budget = null;
         if ($selectedDepartmentId && $selectedYear) {
@@ -299,13 +288,18 @@ class BudgetController extends Controller
 
     public function exportExcel(Request $request)
     {
-        $budget = $this->resolveBudgetForExport($request);
-        if (!$budget) {
-            abort(404, 'Budget introuvable.');
+        $departmentId = $request->integer('department_id');
+        $year = $request->integer('year');
+
+        if (! $departmentId || ! $year) {
+            abort(422, 'Département et année requis.');
         }
 
-        $departmentName = $budget->department?->name ?? 'departement';
-        $filename = 'budget_' . Str::slug($departmentName) . '_' . $budget->year . '.csv';
+        $budget = $this->resolveBudgetForExport($request);
+        $departmentName = $budget?->department?->name
+            ?? Department::query()->whereKey($departmentId)->value('name')
+            ?? 'departement';
+        $filename = 'budget_'.Str::slug($departmentName).'_'.$year.'.csv';
 
         return response()->streamDownload(function () use ($budget) {
             echo "\xEF\xBB\xBF";
@@ -329,6 +323,12 @@ class BudgetController extends Controller
                 'Global/Entité',
                 'Agence',
             ]);
+
+            if ($budget === null) {
+                fclose($handle);
+
+                return;
+            }
 
             $lineNumber = 1;
             $globalLines = $budget->lines->where('is_global', true);
@@ -401,9 +401,347 @@ class BudgetController extends Controller
         return $pdf->download($filename);
     }
 
+    /**
+     * Import CSV (même format que l’export Excel) — upsert par code ligne.
+     */
+    public function import(Request $request)
+    {
+        $validated = $request->validate([
+            'department_id' => ['required', 'integer', 'exists:departments,id'],
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ], [
+            'department_id.required' => 'Sélectionnez un département.',
+            'year.required' => 'Sélectionnez une année.',
+            'file.required' => 'Choisissez un fichier CSV à importer.',
+            'file.mimes' => 'Le fichier doit être un CSV.',
+        ]);
+
+        $budget = Budget::query()->firstOrCreate(
+            [
+                'department_id' => (int) $validated['department_id'],
+                'year' => (int) $validated['year'],
+            ],
+            ['total_amount' => 0],
+        );
+
+        $path = $request->file('file')->getRealPath();
+        $handle = fopen($path ?: '', 'r');
+        if ($handle === false) {
+            return back()->with('error', 'Impossible de lire le fichier importé.');
+        }
+
+        $firstLine = fgets($handle);
+        if ($firstLine === false) {
+            fclose($handle);
+
+            return back()->with('error', 'Le fichier CSV est vide.');
+        }
+
+        // Retirer le BOM éventuel
+        $firstLine = preg_replace('/^\xEF\xBB\xBF/', '', $firstLine) ?? $firstLine;
+        $delimiter = substr_count($firstLine, ';') > substr_count($firstLine, ',') ? ';' : ',';
+        $headers = str_getcsv($firstLine, $delimiter);
+        $headers = array_map(fn ($h) => mb_strtolower(trim((string) $h)), $headers);
+
+        $col = function (string ...$names) use ($headers): ?int {
+            foreach ($names as $name) {
+                $idx = array_search(mb_strtolower($name), $headers, true);
+                if ($idx !== false) {
+                    return (int) $idx;
+                }
+            }
+
+            return null;
+        };
+
+        $idxCode = $col('code ligne', 'code');
+        $idxLabel = $col('libellé de la dépense', 'libelle', 'libellé');
+        $idxResponsable = $col('responsable');
+        $idxMontant = $col('montant estimé', 'montant estime');
+        $idxConsomme = $col('montant consommé', 'montant consomme');
+        $idxStock = $col('montant stock');
+        $idxCompte = $col('compte gl');
+        $idxType = $col('type');
+        $idxCategorieOld = $col('catégorie dépense (old)', 'categorie depense (old)', 'catégorie dépense');
+        $idxDate = $col("date souhaitée d'exécution", 'date souhaitee d\'execution', 'date souhaitée');
+        $idxJustif = $col('justifications', 'justification');
+        $idxScope = $col('global/entité', 'global/entite', 'global/entité');
+        $idxAgence = $col('agence');
+
+        if ($idxCode === null || $idxLabel === null) {
+            fclose($handle);
+
+            return back()->with('error', 'Colonnes obligatoires manquantes : Code ligne, Libellé de la dépense.');
+        }
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowNum = 1;
+        $lastGlobal = null;
+
+        $validTypes = TypologieDepense::query()->pluck('type')->map(fn ($t) => (string) $t)->all();
+        $categoriesByName = CategorieDepense::query()->get()->keyBy(fn ($c) => mb_strtolower(trim((string) $c->categorie)));
+        $agencesByName = Agence::query()->get()->keyBy(fn ($a) => mb_strtolower(trim((string) $a->nom)));
+        $agencesByCode = Agence::query()->get()->keyBy(fn ($a) => mb_strtoupper(trim((string) $a->code)));
+
+        DB::beginTransaction();
+        try {
+            while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+                $rowNum++;
+                if ($row === [null] || $row === false || count(array_filter($row, fn ($v) => trim((string) $v) !== '')) === 0) {
+                    continue;
+                }
+
+                $get = function (?int $i) use ($row): string {
+                    if ($i === null || ! array_key_exists($i, $row)) {
+                        return '';
+                    }
+
+                    return trim((string) $row[$i]);
+                };
+
+                $code = $get($idxCode);
+                $label = $get($idxLabel);
+                $firstCell = $get(0);
+
+                if (str_starts_with(mb_strtoupper($firstCell), 'TOTAL') || str_starts_with(mb_strtoupper($code), 'TOTAL')) {
+                    continue;
+                }
+
+                if ($code === '' || $label === '') {
+                    $skipped++;
+                    continue;
+                }
+
+                $scopeRaw = mb_strtolower($get($idxScope));
+                $isEntity = str_contains($scopeRaw, 'entité') || str_contains($scopeRaw, 'entite');
+
+                $type = $get($idxType);
+                if ($type === '' && $lastGlobal) {
+                    $type = (string) ($lastGlobal->type ?? '');
+                }
+                if ($type !== '' && ! in_array($type, $validTypes, true)) {
+                    $errors[] = "Ligne {$rowNum} : type « {$type} » inconnu.";
+                    $skipped++;
+                    continue;
+                }
+
+                $responsable = $get($idxResponsable);
+                if ($responsable === '-' || $responsable === '') {
+                    $responsable = null;
+                } elseif (! in_array($responsable, ['IT', 'Facilities', 'RH'], true)) {
+                    $responsable = null;
+                }
+
+                $montantEstime = $this->parseImportAmount($get($idxMontant));
+                $montantConsomme = $this->parseImportAmount($get($idxConsomme));
+                $montantStock = $this->parseImportAmount($get($idxStock));
+                $compteGl = $get($idxCompte);
+                if ($compteGl === '-') {
+                    $compteGl = null;
+                }
+                $dateExec = $get($idxDate);
+                $justification = $get($idxJustif);
+                $catName = $get($idxCategorieOld);
+                $categorieId = null;
+                if ($catName !== '' && $catName !== '-') {
+                    $categorieId = $categoriesByName->get(mb_strtolower($catName))?->id;
+                }
+
+                if ($isEntity) {
+                    $agenceName = $get($idxAgence);
+                    $agence = null;
+                    if ($agenceName !== '' && $agenceName !== '-') {
+                        $agence = $agencesByName->get(mb_strtolower($agenceName));
+                    }
+                    if ($agence === null && str_contains($code, '_')) {
+                        $prefix = strtoupper(explode('_', $code, 2)[0] ?? '');
+                        $agence = $agencesByCode->get($prefix);
+                    }
+
+                    $parent = $lastGlobal;
+                    if (str_contains($code, '_')) {
+                        $globalCode = explode('_', $code, 2)[1] ?? '';
+                        if ($globalCode !== '') {
+                            $found = BudgetLine::query()
+                                ->where('budget_id', $budget->id)
+                                ->where('is_global', true)
+                                ->where('code', $globalCode)
+                                ->first();
+                            if ($found) {
+                                $parent = $found;
+                            }
+                        }
+                    }
+
+                    if ($parent === null) {
+                        $errors[] = "Ligne {$rowNum} : ligne entité « {$code} » sans ligne globale parente.";
+                        $skipped++;
+                        continue;
+                    }
+
+                    $existing = BudgetLine::query()
+                        ->where('budget_id', $budget->id)
+                        ->where('code', $code)
+                        ->first();
+
+                    $payload = [
+                        'label' => $label,
+                        'type' => $type !== '' ? $type : $parent->type,
+                        'categorie_depense_id' => $categorieId ?? $parent->categorie_depense_id,
+                        'montant_estime' => $montantEstime,
+                        'montant_consomme' => $montantConsomme,
+                        'montant_stock' => $montantStock,
+                        'compte_gl' => $compteGl ?: $parent->compte_gl,
+                        'date_souhaitee_execution' => $dateExec !== '' ? $dateExec : $parent->date_souhaitee_execution,
+                        'justification' => $justification !== '' ? $justification : $parent->justification,
+                        'responsable' => $responsable ?? $parent->responsable,
+                        'is_global' => false,
+                        'global_line_id' => $parent->id,
+                        'agence_id' => $agence?->id,
+                    ];
+
+                    if ($existing) {
+                        $existing->update($payload);
+                        $updated++;
+                    } else {
+                        BudgetLine::create(array_merge($payload, [
+                            'budget_id' => $budget->id,
+                            'code' => $code,
+                            'article_id' => $parent->article_id,
+                        ]));
+                        $created++;
+                    }
+
+                    continue;
+                }
+
+                // Ligne globale
+                if ($type === '') {
+                    $errors[] = "Ligne {$rowNum} : type obligatoire pour la ligne globale « {$code} ».";
+                    $skipped++;
+                    continue;
+                }
+
+                $existing = BudgetLine::query()
+                    ->where('budget_id', $budget->id)
+                    ->where('is_global', true)
+                    ->where('code', $code)
+                    ->first();
+
+                if (! $existing && $categorieId === null) {
+                    $errors[] = "Ligne {$rowNum} : catégorie dépense introuvable pour créer « {$code} ».";
+                    $skipped++;
+                    continue;
+                }
+
+                $payload = [
+                    'label' => $label,
+                    'type' => $type,
+                    'montant_estime' => $montantEstime,
+                    'montant_consomme' => $montantConsomme,
+                    'montant_stock' => $montantStock,
+                    'compte_gl' => $compteGl,
+                    'date_souhaitee_execution' => $dateExec !== '' ? $dateExec : null,
+                    'justification' => $justification !== '' ? $justification : null,
+                    'responsable' => $responsable,
+                    'is_global' => true,
+                    'global_line_id' => null,
+                    'agence_id' => null,
+                ];
+                if ($categorieId !== null) {
+                    $payload['categorie_depense_id'] = $categorieId;
+                }
+
+                if ($existing) {
+                    $existing->update($payload);
+                    $lastGlobal = $existing->fresh();
+                    $updated++;
+                } else {
+                    $lastGlobal = BudgetLine::create(array_merge($payload, [
+                        'budget_id' => $budget->id,
+                        'code' => $code,
+                        'categorie_depense_id' => $categorieId,
+                    ]));
+                    $created++;
+                }
+            }
+
+            fclose($handle);
+
+            $budget->update([
+                'total_amount' => $budget->lines()->where('is_global', true)->sum('montant_estime'),
+            ]);
+
+            DB::commit();
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            fclose($handle);
+            report($e);
+
+            return back()->with('error', 'Import échoué : '.$e->getMessage());
+        }
+
+        $msg = "Import terminé : {$created} créée(s), {$updated} mise(s) à jour";
+        if ($skipped > 0) {
+            $msg .= ", {$skipped} ignorée(s)";
+        }
+        $msg .= '.';
+
+        $redirect = redirect()->route('budgets.index', [
+            'department_id' => $validated['department_id'],
+            'year' => $validated['year'],
+        ])->with('success', $msg);
+
+        if ($errors !== []) {
+            $redirect->with('warning', implode(' ', array_slice($errors, 0, 5)));
+        }
+
+        return $redirect;
+    }
+
+    private function parseImportAmount(?string $value): float
+    {
+        if ($value === null || trim($value) === '' || trim($value) === '-') {
+            return 0.0;
+        }
+
+        $normalized = str_replace(["\u{00A0}", ' ', ' '], '', $value);
+        $normalized = str_replace(',', '.', $normalized);
+        $normalized = preg_replace('/[^\d.\-]/', '', $normalized) ?? '0';
+
+        return (float) $normalized;
+    }
+
     // ────────────────────────────────────────────────────────────────────────────
     // Méthodes privées
     // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Années sélectionnables : plage calendaire + années déjà présentes en base.
+     *
+     * @return list<int>
+     */
+    private function availableYears(): array
+    {
+        $current = (int) date('Y');
+        $range = range($current - 2, $current + 3);
+
+        $fromDb = Budget::query()
+            ->select('year')
+            ->distinct()
+            ->pluck('year')
+            ->map(fn ($y) => (int) $y)
+            ->all();
+
+        $years = array_values(array_unique(array_merge($range, $fromDb)));
+        rsort($years);
+
+        return $years;
+    }
 
     private function resolveBudgetWithLines(int $departmentId, int $year): ?object
     {

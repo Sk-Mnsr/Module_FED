@@ -44,6 +44,9 @@ use App\Http\Controllers\DemandeApprovisionnementController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\DgaFedController;
 use App\Http\Controllers\EcritureComptableController;
+use App\Http\Controllers\ReconciliationFlexcubeController;
+use App\Http\Controllers\Reconciliation\PartenaireController;
+use App\Http\Controllers\Reconciliation\ReconciliationController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\FacilitiesFedController;
 use App\Http\Controllers\FedController;
@@ -99,6 +102,9 @@ Route::middleware(['auth'])->group(function () {
     Route::get('budgets/export/pdf', [BudgetController::class, 'exportPdf'])
         ->name('budgets.export.pdf')
         ->middleware('role:it');
+    Route::post('budgets/import', [BudgetController::class, 'import'])
+        ->name('budgets.import')
+        ->middleware('role:it');
 
     // Entités partagées (IT et Responsable Achats)
     Route::middleware('role:it,responsable_achats')->group(function () {
@@ -132,6 +138,8 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('fiche-integrations/{ficheIntegration}', [FicheIntegrationController::class, 'destroy'])->name('fiche-integrations.destroy');
 
         // Articles & Agences & Familles
+        Route::get('articles/export-template', [ArticleController::class, 'exportTemplate'])->name('articles.export-template');
+        Route::post('articles/import', [ArticleController::class, 'import'])->name('articles.import');
         Route::resource('articles', ArticleController::class);
         Route::resource('agences', AgenceController::class);
         Route::post('zones', [ZoneController::class, 'store'])->name('zones.store');
@@ -161,7 +169,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('feds/n1/{fed}/expert-opinion', [N1FedController::class, 'expertOpinion'])->name('feds.n1.expert_opinion')->middleware('role:n_plus_1');
 
     // Routes pour le responsable Achats
-    Route::get('achats/tableaux-comparatifs', fn () => Inertia::render('achats/TableauxComparatifs'))
+    Route::get('achats/tableaux-comparatifs', [AchatsFedController::class, 'tableauxComparatifs'])
         ->name('achats.tableaux-comparatifs')->middleware(['auth', 'role:responsable_achats']);
     Route::get('feds/achats', [AchatsFedController::class, 'index'])->name('feds.achats.index')->middleware('role:responsable_achats');
     Route::get('feds/achats/{fed}', [AchatsFedController::class, 'show'])->name('feds.achats.show')->middleware('role:responsable_achats');
@@ -214,6 +222,26 @@ Route::middleware(['auth'])->group(function () {
         Route::post('ecritures-comptables/push', [EcritureComptableController::class, 'push'])
             ->name('ecritures-comptables.push')
             ->middleware('role:it');
+    });
+
+    // Reconciliation Flexcube (front)
+    Route::middleware('module:reconciliation')->group(function () {
+        Route::get('reconciliation-flexcube', [ReconciliationFlexcubeController::class, 'index'])
+            ->name('reconciliation-flexcube.index');
+
+        Route::get('reconciliation-flexcube/reconciliation', [ReconciliationController::class, 'index'])
+            ->name('reconciliation-flexcube.reconciliation.index');
+        Route::get('reconciliation-flexcube/reconciliation/{partenaire}', [ReconciliationController::class, 'show'])
+            ->name('reconciliation-flexcube.reconciliation.show');
+
+        Route::get('reconciliation-flexcube/partenaires', [PartenaireController::class, 'index'])
+            ->name('reconciliation-flexcube.partenaires.index');
+        Route::post('reconciliation-flexcube/partenaires', [PartenaireController::class, 'store'])
+            ->name('reconciliation-flexcube.partenaires.store');
+        Route::put('reconciliation-flexcube/partenaires/{partenaire}', [PartenaireController::class, 'update'])
+            ->name('reconciliation-flexcube.partenaires.update');
+        Route::delete('reconciliation-flexcube/partenaires/{partenaire}', [PartenaireController::class, 'destroy'])
+            ->name('reconciliation-flexcube.partenaires.destroy');
     });
 
     // Opérations diverses

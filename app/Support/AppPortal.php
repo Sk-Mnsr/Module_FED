@@ -14,6 +14,7 @@ final class AppPortal
         'ecritures' => 'layers',
         'monetique' => 'credit-card',
         'od' => 'file-spreadsheet',
+        'reconciliation' => 'git-compare',
         'config' => 'settings',
     ];
 
@@ -25,6 +26,7 @@ final class AppPortal
         'ecritures' => 'Import, consultation et export des écritures comptables.',
         'monetique' => 'Coficarte, ventes, recharges, transferts et encaissements.',
         'od' => 'Intégration automatique ou manuelle des opérations diverses.',
+        'reconciliation' => 'Réconciliation des écritures et soldes Flexcube.',
         'config' => 'Paramétrage et administration de la plateforme.',
     ];
 
@@ -36,6 +38,7 @@ final class AppPortal
         'ecritures' => 'blue',
         'monetique' => 'violet',
         'od' => 'orange',
+        'reconciliation' => 'cyan',
         'config' => 'slate',
     ];
 
@@ -49,6 +52,7 @@ final class AppPortal
         'ecritures' => ['ecritures-comptables'],
         'monetique' => ['monetique'],
         'od' => ['operations-diverses'],
+        'reconciliation' => ['reconciliation-flexcube'],
         'config' => [
             'users', 'roles', 'departments', 'typologies', 'categories', 'banques',
             'fournisseurs', 'type-depenses', 'fiche-integrations', 'agences',

@@ -35,7 +35,12 @@ class AchatsFedController extends Controller
                 Fed::STATUS_BON_DE_COMMANDE,
             ])
             ->when($status, fn ($q) => $q->where('status', $status))
-            ->orderByRaw("CASE WHEN status = 'n1_approved' THEN 0 WHEN status = 'achats_needs_info' THEN 1 ELSE 2 END")
+            ->orderByRaw("CASE
+                WHEN status = 'facilities_needs_info' THEN 0
+                WHEN status = 'n1_approved' THEN 1
+                WHEN status = 'achats_needs_info' THEN 2
+                ELSE 3
+            END")
             ->orderByDesc('n1_action_at')
             ->orderByDesc('created_at')
             ->paginate($perPage);
@@ -141,6 +146,8 @@ class AchatsFedController extends Controller
             'comment' => 'nullable|string|max:2000',
         ]);
 
+        $wasFacilitiesHold = $fed->status === Fed::STATUS_FACILITIES_NEEDS_INFO;
+
         $fed->update([
             'status' => Fed::STATUS_ACHATS_APPROVED,
             'achats_comment' => $validated['comment'] ?? null,
@@ -149,12 +156,14 @@ class AchatsFedController extends Controller
         ]);
 
         return redirect()->route('feds.achats.index')
-            ->with('success', 'Cotation envoyée au responsable Facilities. La FED a été transmise en pièce jointe.');
+            ->with('success', $wasFacilitiesHold
+                ? 'Complément renvoyé au responsable Facilities.'
+                : 'Cotation envoyée au responsable Facilities.');
     }
 
     public function reject(Request $request, Fed $fed)
     {
-        $this->assertEditableByAchats($fed);
+        $this->assertDecisionByAchats($fed);
 
         $data = $request->validate(['comment' => 'nullable|string|max:2000']);
         $fed->update([
@@ -170,7 +179,7 @@ class AchatsFedController extends Controller
 
     public function needsInfo(Request $request, Fed $fed)
     {
-        $this->assertEditableByAchats($fed);
+        $this->assertDecisionByAchats($fed);
 
         $data = $request->validate(['comment' => 'nullable|string|max:2000']);
         $fed->update([
@@ -182,6 +191,62 @@ class AchatsFedController extends Controller
 
         return redirect()->route('feds.achats.show', $fed)
             ->with('success', 'Complément demandé au demandeur.');
+    }
+
+    /**
+     * Liste des tableaux comparatifs déjà enregistrés (FED avec offres fournisseurs).
+     */
+    public function tableauxComparatifs(Request $request)
+    {
+        $perPage = max(1, min(50, (int) $request->get('per_page', 10)));
+        $search = trim((string) $request->get('search', ''));
+        $status = $request->get('status');
+
+        $feds = Fed::query()
+            ->with(['requester:id,name'])
+            ->withCount('fournisseurOffres as offres_count')
+            ->withMax('fournisseurOffres as last_saved_at', 'updated_at')
+            ->whereHas('fournisseurOffres')
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($inner) use ($search) {
+                    $inner->where('code', 'like', "%{$search}%")
+                        ->orWhere('demandeur', 'like', "%{$search}%")
+                        ->orWhere('motive', 'like', "%{$search}%")
+                        ->orWhere('department', 'like', "%{$search}%");
+                });
+            })
+            ->when($status, fn ($q) => $q->where('status', $status))
+            ->orderByDesc('last_saved_at')
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $fedIds = $feds->getCollection()->pluck('id');
+        $fournisseursCounts = FedFournisseurOffre::query()
+            ->whereIn('fed_id', $fedIds)
+            ->get(['fed_id', 'fournisseur_id', 'fournisseur'])
+            ->groupBy('fed_id')
+            ->map(function ($rows) {
+                return $rows->unique(function ($row) {
+                    return $row->fournisseur_id
+                        ? 'id_'.$row->fournisseur_id
+                        : 'name_'.mb_strtolower(trim((string) $row->fournisseur));
+                })->count();
+            });
+
+        $feds->getCollection()->transform(function (Fed $fed) use ($fournisseursCounts) {
+            $fed->setAttribute('fournisseurs_count', (int) ($fournisseursCounts[$fed->id] ?? 0));
+
+            return $fed;
+        });
+
+        return Inertia::render('achats/TableauxComparatifs', [
+            'feds' => $feds,
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+            ],
+        ]);
     }
 
     private function assertViewable(Fed $fed): void
@@ -212,14 +277,33 @@ class AchatsFedController extends Controller
 
     private function assertEditableByAchats(Fed $fed): void
     {
-        if (!in_array($fed->status, [Fed::STATUS_N1_APPROVED, Fed::STATUS_ACHATS_NEEDS_INFO], true)) {
+        if (!in_array($fed->status, [
+            Fed::STATUS_N1_APPROVED,
+            Fed::STATUS_ACHATS_NEEDS_INFO,
+            Fed::STATUS_FACILITIES_NEEDS_INFO,
+        ], true)) {
             abort(403, "Cette FED n'est plus modifiable par Achats.");
+        }
+    }
+
+    /** Rejet / complément demandeur : uniquement avant ou pendant le traitement Achats initial */
+    private function assertDecisionByAchats(Fed $fed): void
+    {
+        if (!in_array($fed->status, [
+            Fed::STATUS_N1_APPROVED,
+            Fed::STATUS_ACHATS_NEEDS_INFO,
+        ], true)) {
+            abort(403, "Cette action n'est plus disponible pour cette FED.");
         }
     }
 
     private function assertTransmittable(Fed $fed): void
     {
-        if (!in_array($fed->status, [Fed::STATUS_N1_APPROVED, Fed::STATUS_ACHATS_NEEDS_INFO], true)) {
+        if (!in_array($fed->status, [
+            Fed::STATUS_N1_APPROVED,
+            Fed::STATUS_ACHATS_NEEDS_INFO,
+            Fed::STATUS_FACILITIES_NEEDS_INFO,
+        ], true)) {
             abort(403, "Cette FED n'est pas transmissible.");
         }
     }

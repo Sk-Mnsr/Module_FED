@@ -22,12 +22,21 @@ class DafFedController extends Controller
         if ($tab === 'reclassement') {
             $fedsQuery->where('status', '=', Fed::STATUS_WAITING_DAF_RECLASS_APPROVAL);
         } else {
-            // tab = validation standard
+            // tab = validation : file d'attente + historique des décisions DAF
             $fedsQuery->whereIn('status', [
                 Fed::STATUS_CG_TREATED,
                 Fed::STATUS_DAF_APPROVED,
                 Fed::STATUS_DAF_REJECTED,
-            ])->when($status, fn ($q) => $q->where('status', $status));
+                Fed::STATUS_DGA_REJECTED,
+                Fed::STATUS_BON_DE_COMMANDE,
+            ])->when($status, fn ($q) => $q->where('status', $status))
+                ->orderByRaw("CASE
+                    WHEN status = 'cg_treated' THEN 0
+                    WHEN status = 'daf_approved' THEN 1
+                    WHEN status = 'daf_rejected' THEN 2
+                    WHEN status = 'dga_rejected' THEN 3
+                    ELSE 4
+                END");
         }
 
         $feds = $fedsQuery->paginate($perPage);
@@ -203,6 +212,8 @@ class DafFedController extends Controller
             Fed::STATUS_CG_TREATED,
             Fed::STATUS_DAF_APPROVED,
             Fed::STATUS_DAF_REJECTED,
+            Fed::STATUS_DGA_REJECTED,
+            Fed::STATUS_BON_DE_COMMANDE,
         ], true)) {
             abort(403, "Cette FED n'est pas accessible au DAF.");
         }

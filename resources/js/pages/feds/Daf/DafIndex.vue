@@ -42,13 +42,14 @@ const perPage = computed(() => props.feds.per_page || props.feds.meta?.per_page 
 const statusLabel = (status: string) => {
     const labels: Record<string, string> = {
         facilities_approved: 'En attente DAF',
-        daf_approved: 'Validée DAF',
+        daf_approved: 'Validée DAF → DGA',
         daf_rejected: 'Rejetée DAF',
+        dga_rejected: 'Rejetée DGA',
         waiting_daf_reclass_approval: 'Attente Reclassement',
-        cg_treated: 'Validée Budget',
+        cg_treated: 'Attente DAF (Validé CG)',
         expert_opinion_pending: 'Avis Expert en attente',
         expert_opinion_given: 'Avis Expert donné',
-        bon_de_commande: 'Bon de commande généré',
+        bon_de_commande: 'Bon de commande',
     };
     return labels[status] ?? status;
 };
@@ -58,6 +59,7 @@ const statusBadge = (status: string) => {
         facilities_approved: 'bg-blue-100 text-blue-700',
         daf_approved: 'bg-green-100 text-green-700',
         daf_rejected: 'bg-red-100 text-red-700',
+        dga_rejected: 'bg-red-100 text-red-700',
         waiting_daf_reclass_approval: 'bg-amber-100 text-amber-700',
         cg_treated: 'bg-cyan-100 text-cyan-700 font-bold',
         expert_opinion_pending: 'bg-purple-100 text-purple-700',
@@ -196,10 +198,12 @@ const tableData = computed(() =>
                         class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
                         @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
                     >
-                        <option value="">Tous</option>
+                        <option value="">Tous (attente + déjà traitées)</option>
                         <option value="cg_treated">Attente DAF (Validé CG)</option>
-                        <option value="daf_approved">Validée DAF</option>
+                        <option value="daf_approved">Validée DAF → DGA</option>
                         <option value="daf_rejected">Rejetée DAF</option>
+                        <option value="bon_de_commande">Bon de commande (validées)</option>
+                        <option value="dga_rejected">Rejetée DGA</option>
                     </select>
                 </div>
             </div>

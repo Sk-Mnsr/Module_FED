@@ -32,13 +32,18 @@ class FournisseurController extends Controller
             'contact_email' => 'nullable|email|max:255',
             'site_web' => 'nullable|string|max:255',
             'adresse_physique' => 'nullable|string',
-            'compte_transit_paiement' => 'nullable|string|size:12',
-            'compte_avance_acompte' => 'nullable|string|size:12',
-            'compte_client_interne' => 'nullable|string|size:12',
+            'compte_transit_paiement' => ['nullable', 'regex:/^\d{12}$/'],
+            'compte_avance_acompte' => ['nullable', 'regex:/^\d{12}$/'],
+            'compte_client_interne' => ['nullable', 'regex:/^\d{12}$/'],
             'banque_id' => 'nullable|exists:banques,id',
+        ], [
+            'compte_transit_paiement.regex' => 'Le compte transit doit contenir exactement 12 chiffres.',
+            'compte_avance_acompte.regex' => 'Le compte avance/acompte doit contenir exactement 12 chiffres.',
+            'compte_client_interne.regex' => 'Le compte client interne doit contenir exactement 12 chiffres.',
         ]);
 
         Fournisseur::create($validated);
+
         return redirect()->back()->with('success', 'Fournisseur ajouté avec succès.');
     }
 
@@ -54,13 +59,18 @@ class FournisseurController extends Controller
             'contact_email' => 'nullable|email|max:255',
             'site_web' => 'nullable|string|max:255',
             'adresse_physique' => 'nullable|string',
-            'compte_transit_paiement' => 'nullable|string|size:12',
-            'compte_avance_acompte' => 'nullable|string|size:12',
-            'compte_client_interne' => 'nullable|string|size:12',
+            'compte_transit_paiement' => ['nullable', 'regex:/^\d{12}$/'],
+            'compte_avance_acompte' => ['nullable', 'regex:/^\d{12}$/'],
+            'compte_client_interne' => ['nullable', 'regex:/^\d{12}$/'],
             'banque_id' => 'nullable|exists:banques,id',
+        ], [
+            'compte_transit_paiement.regex' => 'Le compte transit doit contenir exactement 12 chiffres.',
+            'compte_avance_acompte.regex' => 'Le compte avance/acompte doit contenir exactement 12 chiffres.',
+            'compte_client_interne.regex' => 'Le compte client interne doit contenir exactement 12 chiffres.',
         ]);
 
         $fournisseur->update($validated);
+
         return redirect()->back()->with('success', 'Fournisseur mis à jour avec succès.');
     }
 

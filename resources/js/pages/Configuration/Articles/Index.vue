@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import DataTable from '@/components/DataTable.vue';
-import { Pencil, Trash2, Plus } from 'lucide-vue-next';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Pencil, Trash2, Plus, Upload, Download, Search, X } from 'lucide-vue-next';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 const RESPONSABLES = ['IT', 'Facilities', 'RH', 'ALL'] as const;
@@ -22,6 +22,13 @@ const props = defineProps<{
     articles: { data: Array<any>; current_page: number; per_page: number; total: number; };
     familles: Famille[];
     typeDepenses: TypeDepense[];
+    filters?: {
+        q?: string;
+        responsable?: string;
+        famille_id?: number | null;
+        type_depense_id?: number | null;
+        per_page?: number;
+    };
 }>();
 
 const breadcrumbs = [
@@ -29,10 +36,68 @@ const breadcrumbs = [
     { title: 'Articles', href: '/articles' },
 ];
 
+const searchForm = ref({
+    q: props.filters?.q ?? '',
+    responsable: props.filters?.responsable ?? '',
+    famille_id: props.filters?.famille_id ? String(props.filters.famille_id) : '',
+    type_depense_id: props.filters?.type_depense_id ? String(props.filters.type_depense_id) : '',
+});
+
+const hasActiveFilters = computed(() =>
+    Boolean(searchForm.value.q || searchForm.value.responsable || searchForm.value.famille_id || searchForm.value.type_depense_id),
+);
+
+function filterParams(extra: Record<string, string | number> = {}) {
+    const params: Record<string, string | number> = {
+        per_page: props.filters?.per_page ?? props.articles.per_page ?? 10,
+        ...extra,
+    };
+    if (searchForm.value.q.trim()) params.q = searchForm.value.q.trim();
+    if (searchForm.value.responsable) params.responsable = searchForm.value.responsable;
+    if (searchForm.value.famille_id) params.famille_id = searchForm.value.famille_id;
+    if (searchForm.value.type_depense_id) params.type_depense_id = searchForm.value.type_depense_id;
+    return params;
+}
+
+function applyFilters() {
+    router.get('/articles', filterParams({ page: 1 }), {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function resetFilters() {
+    searchForm.value = { q: '', responsable: '', famille_id: '', type_depense_id: '' };
+    router.get('/articles', {
+        per_page: props.filters?.per_page ?? props.articles.per_page ?? 10,
+    }, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function onPageChange(page: number) {
+    router.get('/articles', filterParams({ page }), {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function onItemsPerPageChange(items: number) {
+    router.get('/articles', filterParams({ page: 1, per_page: items }), {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
 const columns = [
     { key: 'code', title: 'Code', sortable: true },
     { key: 'description', title: 'Description', sortable: true },
-    { key: 'responsable', title: 'Responsable' },
+    { key: 'responsable', title: 'Responsable Dépenses' },
     { key: 'categorie', title: 'Classification' },
     { key: 'type_depense', title: 'Type de dépense' },
     { key: 'actions', title: 'Actions' }
@@ -146,17 +211,150 @@ const breadcrumbLabel = (article: any) => {
     const fam = cat ? props.familles.find(f => f.id === cat.famille_id) : null;
     return [fam?.nom, cat?.nom, sc.nom].filter(Boolean).join(' / ');
 };
+
+const page = usePage();
+const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
+
+const showImportModal = ref(false);
+const importFile = ref<File | null>(null);
+const importProcessing = ref(false);
+const importFileKey = ref(0);
+
+function openImportModal() {
+    importFile.value = null;
+    importFileKey.value += 1;
+    showImportModal.value = true;
+}
+
+function onImportFileChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    importFile.value = input.files?.[0] ?? null;
+}
+
+function submitImport() {
+    if (!importFile.value) return;
+    importProcessing.value = true;
+    router.post('/articles/import', { file: importFile.value }, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            showImportModal.value = false;
+            importFile.value = null;
+        },
+        onFinish: () => {
+            importProcessing.value = false;
+        },
+    });
+}
 </script>
 
 <template>
     <Head title="Gestion des Articles" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
-            <div class="flex items-center justify-between">
+            <div
+                v-if="flash?.success"
+                class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                {{ flash.success }}
+            </div>
+            <div
+                v-if="flash?.warning"
+                class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+                {{ flash.warning }}
+            </div>
+            <div
+                v-if="flash?.error"
+                class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            >
+                {{ flash.error }}
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3">
                 <h1 class="text-3xl font-bold text-gray-900">Articles</h1>
-                <Button @click="openCreateModal" class="bg-purple-600 hover:bg-purple-700">
-                    <Plus class="mr-2 h-4 w-4" /> Nouveau Article
-                </Button>
+                <div class="flex flex-wrap items-center gap-2">
+                    <a
+                        href="/articles/export-template"
+                        class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
+                    >
+                        <Download class="mr-2 h-4 w-4" />
+                        Modèle CSV
+                    </a>
+                    <Button type="button" variant="outline" @click="openImportModal">
+                        <Upload class="mr-2 h-4 w-4" />
+                        Import
+                    </Button>
+                    <Button @click="openCreateModal" class="bg-purple-600 hover:bg-purple-700">
+                        <Plus class="mr-2 h-4 w-4" /> Nouveau Article
+                    </Button>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-border bg-card p-4 shadow-sm">
+                <form class="grid gap-3 md:grid-cols-2 xl:grid-cols-5" @submit.prevent="applyFilters">
+                    <div class="space-y-1.5 xl:col-span-2">
+                        <Label for="filter-q">Recherche</Label>
+                        <div class="relative">
+                            <Search class="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                                id="filter-q"
+                                v-model="searchForm.q"
+                                type="search"
+                                placeholder="Code ou description…"
+                                class="pl-9"
+                            />
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="filter-responsable">Responsable Dépenses</Label>
+                        <select
+                            id="filter-responsable"
+                            v-model="searchForm.responsable"
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                            <option value="">Tous</option>
+                            <option v-for="r in RESPONSABLES" :key="r" :value="r">{{ r }}</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="filter-famille">Famille</Label>
+                        <select
+                            id="filter-famille"
+                            v-model="searchForm.famille_id"
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                            <option value="">Toutes</option>
+                            <option v-for="f in familles" :key="f.id" :value="String(f.id)">{{ f.nom }}</option>
+                        </select>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="filter-type">Type de dépense</Label>
+                        <select
+                            id="filter-type"
+                            v-model="searchForm.type_depense_id"
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                        >
+                            <option value="">Tous</option>
+                            <option v-for="td in typeDepenses" :key="td.id" :value="String(td.id)">{{ td.nom_depense }}</option>
+                        </select>
+                    </div>
+                    <div class="flex flex-wrap items-end gap-2 md:col-span-2 xl:col-span-5">
+                        <Button type="submit" class="bg-purple-600 hover:bg-purple-700">
+                            <Search class="mr-2 h-4 w-4" />
+                            Filtrer
+                        </Button>
+                        <Button
+                            v-if="hasActiveFilters"
+                            type="button"
+                            variant="outline"
+                            @click="resetFilters"
+                        >
+                            <X class="mr-2 h-4 w-4" />
+                            Réinitialiser
+                        </Button>
+                    </div>
+                </form>
             </div>
 
             <DataTable
@@ -166,6 +364,8 @@ const breadcrumbLabel = (article: any) => {
                 :items-per-page="props.articles.per_page"
                 :total-items="props.articles.total"
                 :show-select="false"
+                :on-page-change="onPageChange"
+                :on-items-per-page-change="onItemsPerPageChange"
             >
                 <template #item.responsable="{ item }">
                     <span :class="['inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', badgeColor(item.responsable)]">
@@ -206,7 +406,7 @@ const breadcrumbLabel = (article: any) => {
                             <Input id="code" v-model="form.code" required placeholder="Ex: ART001" />
                         </div>
                         <div class="space-y-1.5">
-                            <Label for="responsable">Responsable <span class="text-red-500">*</span></Label>
+                            <Label for="responsable">Responsable Dépenses <span class="text-red-500">*</span></Label>
                             <select id="responsable" v-model="form.responsable"
                                 class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm">
                                 <option v-for="r in RESPONSABLES" :key="r" :value="r">{{ r }}</option>
@@ -278,6 +478,45 @@ const breadcrumbLabel = (article: any) => {
                         <Button type="submit" class="bg-purple-600 hover:bg-purple-700">Enregistrer</Button>
                     </DialogFooter>
                 </form>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog :open="showImportModal" @update:open="showImportModal = $event">
+            <DialogContent class="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Importer des articles</DialogTitle>
+                    <DialogDescription>
+                        CSV au format du modèle. Si le code existe déjà, l’article est mis à jour ; sinon il est créé.
+                    </DialogDescription>
+                </DialogHeader>
+                <div class="space-y-3 py-2">
+                    <Label for="articles-import-file">Fichier CSV</Label>
+                    <Input
+                        :key="importFileKey"
+                        id="articles-import-file"
+                        type="file"
+                        accept=".csv,.txt,text/csv"
+                        class="cursor-pointer"
+                        @change="onImportFileChange"
+                    />
+                    <p class="text-xs text-muted-foreground">
+                        Téléchargez d’abord le modèle CSV pour voir les colonnes attendues.
+                    </p>
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" :disabled="importProcessing" @click="showImportModal = false">
+                        Annuler
+                    </Button>
+                    <Button
+                        type="button"
+                        class="bg-purple-600 hover:bg-purple-700"
+                        :disabled="importProcessing || !importFile"
+                        @click="submitImport"
+                    >
+                        <Upload class="mr-2 h-4 w-4" />
+                        {{ importProcessing ? 'Import…' : 'Importer' }}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     </AppLayout>

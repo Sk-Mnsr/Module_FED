@@ -3,6 +3,7 @@ import {
     Calculator,
     CreditCard,
     FileText,
+    GitCompare,
     Layers,
     LayoutGrid,
     Link2,
@@ -25,6 +26,7 @@ const iconMap: Record<string, LucideIcon> = {
     calculator: Calculator,
     'credit-card': CreditCard,
     layers: Layers,
+    'git-compare': GitCompare,
     settings: Settings,
 };
 

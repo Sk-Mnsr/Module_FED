@@ -23,7 +23,7 @@ final class ModuleAccess
     private const PRIMARY_MODULE_OVERRIDES = [
         'it' => 'config',
         'admin' => 'config',
-        'controle_de_gestion' => 'ecritures',
+        'controle_de_gestion' => 'fed',
         'responsable_stock' => 'stock',
         'ops' => 'od',
         'finance' => 'od',
@@ -42,6 +42,7 @@ final class ModuleAccess
         'ecritures' => 'Écritures comptables',
         'monetique' => 'Monétique',
         'od' => 'Opérations diverses',
+        'reconciliation' => 'Reconciliation Flexcube',
         'config' => 'Configuration',
     ];
 
@@ -339,6 +340,7 @@ final class ModuleAccess
             'ecritures' => ['it', 'controle_de_gestion', 'daf'],
             'monetique' => ['it', 'monetique', 'monetique_ops', 'ca', 'cc', 'caissier'],
             'od' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
+            'reconciliation' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
             'config' => ['it', 'admin'],
         ];
 

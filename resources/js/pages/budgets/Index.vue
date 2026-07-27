@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -14,7 +14,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { computed, ref, reactive } from 'vue';
-import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-vue-next';
+import { Plus, Trash2, ChevronDown, ChevronRight, Upload } from 'lucide-vue-next';
 
 interface BudgetLine {
     id: number;
@@ -92,6 +92,8 @@ interface Props {
 
 const props = defineProps<Props>();
 const canEdit = computed(() => props.canEdit !== false);
+const page = usePage();
+const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 
 const breadcrumbs: BreadcrumbItem[] = [{ title: 'Budgets', href: '/budgets' }];
 
@@ -149,7 +151,46 @@ const exportQuery = computed(() => {
     return params.toString();
 });
 
-const canExport = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && globalLines.value.length));
+const canExportExcel = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear));
+const canExportPdf = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && globalLines.value.length));
+const canImport = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && canEdit.value && !props.isN1View));
+
+const showImportModal = ref(false);
+const importFile = ref<File | null>(null);
+const importProcessing = ref(false);
+const importFileKey = ref(0);
+
+function openImportModal() {
+    if (!canImport.value) return;
+    importFile.value = null;
+    importFileKey.value += 1;
+    showImportModal.value = true;
+}
+
+function onImportFileChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    importFile.value = input.files?.[0] ?? null;
+}
+
+function submitImport() {
+    if (!canImport.value || !importFile.value) return;
+    importProcessing.value = true;
+    router.post('/budgets/import', {
+        department_id: props.selectedDepartmentId,
+        year: props.selectedYear,
+        file: importFile.value,
+    }, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            showImportModal.value = false;
+            importFile.value = null;
+        },
+        onFinish: () => {
+            importProcessing.value = false;
+        },
+    });
+}
 
 // Modal édition
 const modalOpen = ref(false);
@@ -270,6 +311,25 @@ const responsableBadge = (r?: string | null) => {
     <Head title="Budgets" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
+            <div
+                v-if="flash?.success"
+                class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800"
+            >
+                {{ flash.success }}
+            </div>
+            <div
+                v-if="flash?.warning"
+                class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+            >
+                {{ flash.warning }}
+            </div>
+            <div
+                v-if="flash?.error"
+                class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            >
+                {{ flash.error }}
+            </div>
+
             <!-- En-tête -->
             <div class="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -283,15 +343,27 @@ const responsableBadge = (r?: string | null) => {
                                 <Plus class="mr-2 h-4 w-4" /> Nouveau
                             </Button>
                         </Link>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            :disabled="!canImport"
+                            :title="canImport ? 'Importer un CSV de lignes budgétaires' : 'Sélectionnez d’abord un département et une année'"
+                            @click="openImportModal"
+                        >
+                            <Upload class="mr-2 h-4 w-4" />
+                            Import
+                        </Button>
                         <a
-                            :href="canExport ? `/budgets/export/excel?${exportQuery}` : undefined"
+                            :href="canExportExcel ? `/budgets/export/excel?${exportQuery}` : undefined"
                             class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-                            :class="{ 'pointer-events-none opacity-50': !canExport }"
+                            :class="{ 'pointer-events-none opacity-50': !canExportExcel }"
+                            :title="canExportExcel ? 'Exporter le CSV (modèle ou données)' : 'Sélectionnez un département et une année'"
                         >Export Excel</a>
                         <a
-                            :href="canExport ? `/budgets/export/pdf?${exportQuery}` : undefined"
+                            :href="canExportPdf ? `/budgets/export/pdf?${exportQuery}` : undefined"
                             class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50"
-                            :class="{ 'pointer-events-none opacity-50': !canExport }"
+                            :class="{ 'pointer-events-none opacity-50': !canExportPdf }"
+                            :title="canExportPdf ? 'Exporter le PDF' : 'Aucune ligne à exporter en PDF'"
                         >Export PDF</a>
                     </template>
                 </div>
@@ -309,9 +381,12 @@ const responsableBadge = (r?: string | null) => {
                 </div>
                 <div>
                     <label class="mb-1.5 block text-base font-medium text-gray-700">Année</label>
-                    <select v-model.number="selectedYear"
-                        class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900">
-                        <option :value="null">-- Sélectionner --</option>
+                    <select
+                        :value="selectedYear ?? ''"
+                        class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900"
+                        @change="selectedYear = ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null"
+                    >
+                        <option value="">-- Sélectionner --</option>
                         <option v-for="year in props.years" :key="year" :value="year">{{ year }}</option>
                     </select>
                 </div>
@@ -340,7 +415,13 @@ const responsableBadge = (r?: string | null) => {
                         <tbody class="divide-y divide-gray-200">
                             <tr v-if="globalLines.length === 0">
                                 <td colspan="11" class="px-4 py-6 text-center text-sm text-gray-500">
-                                    Veuillez sélectionner un département et une année pour afficher les lignes budgétaires.
+                                    <template v-if="!selectedDepartmentId || !selectedYear">
+                                        Veuillez sélectionner un département et une année pour afficher les lignes budgétaires.
+                                    </template>
+                                    <template v-else>
+                                        Aucune ligne pour ce département et cette année.
+                                        Vous pouvez exporter le modèle CSV puis l’importer, ou créer un budget via « Nouveau ».
+                                    </template>
                                 </td>
                             </tr>
                             <template v-for="(line, index) in globalLines" :key="line.id">
@@ -548,6 +629,46 @@ const responsableBadge = (r?: string | null) => {
                                 {{ isSubmitting ? 'Enregistrement...' : 'Enregistrer' }}
                             </Button>
                         </div>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog v-model:open="showImportModal">
+                <DialogContent class="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Importer un budget</DialogTitle>
+                        <DialogDescription>
+                            Fichier CSV au même format que « Export Excel ». Les lignes sont mises à jour si le code existe, sinon créées
+                            (département {{ selectedDepartmentId }} · année {{ selectedYear }}).
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div class="space-y-3 py-2">
+                        <Label for="budget-import-file">Fichier CSV</Label>
+                        <Input
+                            :key="importFileKey"
+                            id="budget-import-file"
+                            type="file"
+                            accept=".csv,.txt,text/csv"
+                            class="cursor-pointer"
+                            @change="onImportFileChange"
+                        />
+                        <p class="text-xs text-muted-foreground">
+                            Astuce : exportez d’abord un budget pour obtenir le modèle, puis réimportez-le.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" :disabled="importProcessing" @click="showImportModal = false">
+                            Annuler
+                        </Button>
+                        <Button
+                            type="button"
+                            class="bg-purple-600 hover:bg-purple-700"
+                            :disabled="importProcessing || !importFile"
+                            @click="submitImport"
+                        >
+                            <Upload class="mr-2 h-4 w-4" />
+                            {{ importProcessing ? 'Import…' : 'Importer' }}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

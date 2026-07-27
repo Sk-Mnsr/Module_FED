@@ -32,8 +32,17 @@ class ComiteController extends Controller
 
         $comites = $query->paginate($perPage);
 
+        $appelOffresSansComite = [];
+        if ($user->hasRole('responsable_achats') || $user->hasRole('it') || $user->isSuperAdmin()) {
+            $appelOffresSansComite = AppelOffre::query()
+                ->whereDoesntHave('comite')
+                ->orderByDesc('created_at')
+                ->get(['id', 'reference', 'objet', 'statut']);
+        }
+
         return Inertia::render('Comites/Index', [
             'comites' => $comites,
+            'appelOffresSansComite' => $appelOffresSansComite,
         ]);
     }
 

@@ -149,6 +149,15 @@ final class AppNavigation
             $groups[] = ['module' => 'od', 'label' => 'OD', 'items' => $odItems];
         }
 
+        $reconciliationItems = self::reconciliationItems($modules);
+        if ($reconciliationItems !== []) {
+            $groups[] = [
+                'module' => 'reconciliation',
+                'label' => 'Reconciliation Flexcube',
+                'items' => $reconciliationItems,
+            ];
+        }
+
         $configItems = self::configItems($hasConfigAccess);
         if ($configItems !== []) {
             $groups[] = ['module' => 'config', 'label' => 'Configuration', 'items' => $configItems];
@@ -470,6 +479,22 @@ final class AppNavigation
                 ]),
                 self::link('Archivage', '/operations-diverses/archivage'),
             ]),
+        ];
+    }
+
+    /**
+     * @param  list<string>  $modules
+     * @return list<array<string, mixed>>
+     */
+    private static function reconciliationItems(array $modules): array
+    {
+        if (! in_array('reconciliation', $modules, true)) {
+            return [];
+        }
+
+        return [
+            self::link('Reconciliation', '/reconciliation-flexcube/reconciliation', 'git-compare'),
+            self::link('Partenaires', '/reconciliation-flexcube/partenaires', 'users'),
         ];
     }
 

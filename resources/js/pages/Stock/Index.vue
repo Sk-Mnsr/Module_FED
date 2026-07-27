@@ -6,10 +6,24 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAppearance } from '@/composables/useAppearance';
-import { 
-    Plus, Minus, AlertTriangle, ArrowUpRight, ArrowDownRight, History, 
-    ChevronDown, Package, Layers, FolderTree, Search, RotateCcw, 
-    Filter, CheckCircle, XCircle, TrendingUp, Eye, Moon, Sun, LibraryBig,
+import {
+    Plus,
+    AlertTriangle,
+    ArrowUpRight,
+    ArrowDownRight,
+    History,
+    Package,
+    Layers,
+    FolderTree,
+    Search,
+    RotateCcw,
+    CheckCircle,
+    XCircle,
+    TrendingUp,
+    Eye,
+    Moon,
+    Sun,
+    LibraryBig,
 } from 'lucide-vue-next';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
@@ -95,8 +109,6 @@ const activeSousCategoryData = computed(() => {
     if (!activeCategoryData.value) return null;
     return activeCategoryData.value.sousCategories.find((sc: any) => sc.id === activeSousCategoryId.value) || null;
 });
-
-
 
 const searchQuery = ref('');
 const statusFilter = ref('tous');
@@ -204,6 +216,14 @@ watch(activeCategoryId, (newId) => {
         activeSousCategoryId.value = null;
     }
 }, { immediate: true });
+
+// Si le filtre retire la famille active, basculer sur la première encore visible
+watch(hierarchicalData, (data) => {
+    if (data.length === 0) return;
+    if (!data.find((f) => f.id === activeFamilyId.value)) {
+        activeFamilyId.value = data[0].id;
+    }
+});
 
 const globalStats = computed(() => {
     const stats = {
@@ -362,234 +382,143 @@ const openViewModal = (article: Article) => {
 <template>
     <Head title="Gestion de Stock" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex min-h-0 w-full max-w-none flex-1 flex-col gap-5 px-4 pb-6 pt-3 sm:px-6 lg:px-8">
-            <header class="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div class="min-w-0 space-y-1">
-                    <p class="text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400">Inventaire</p>
-                    <h1 class="text-2xl font-bold tracking-tight text-gray-900 dark:text-neutral-50 sm:text-3xl">Gestion des stocks</h1>
-                    <p class="max-w-3xl text-sm text-gray-500 dark:text-neutral-400 lg:max-w-none">Suivi et mouvements par famille, avec filtres rapides sur les niveaux de stock.</p>
+        <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
+            <header class="flex shrink-0 flex-wrap items-end justify-between gap-3">
+                <div>
+                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inventaire</p>
+                    <h1 class="text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">Gestion des stocks</h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Suivi des niveaux et mouvements par famille.
+                    </p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div class="flex flex-wrap items-center gap-2">
                     <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        class="shrink-0 border-gray-200 bg-white text-gray-700 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800 relative"
+                        class="relative"
                         title="Basculer le thème clair / sombre"
                         @click="togglePageTheme"
                     >
-                        <Sun class="h-4 w-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
-                        <Moon class="absolute h-4 w-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
+                        <Sun class="size-4 scale-100 rotate-0 transition-all dark:scale-0 dark:-rotate-90" />
+                        <Moon class="absolute size-4 scale-0 rotate-90 transition-all dark:scale-100 dark:rotate-0" />
                     </Button>
-                    <Button
-                        variant="default"
-                        class="bg-emerald-600 hover:bg-emerald-700 flex items-center gap-2 shadow-md shadow-emerald-600/20 dark:shadow-emerald-900/40"
-                        @click="openMovementModal(null, 'entree')"
-                    >
-                        <Plus class="h-4 w-4 shrink-0" />
+                    <Button type="button" @click="openMovementModal(null, 'entree')">
+                        <Plus class="mr-1.5 size-4" />
                         <span class="hidden sm:inline">Nouvelle entrée</span>
                         <span class="sm:hidden">Entrée</span>
                     </Button>
-                    <Link href="/stock/movements">
-                        <Button variant="outline" class="flex items-center gap-2 border-gray-200 bg-white hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:hover:bg-neutral-800 dark:text-neutral-100">
-                            <History class="h-4 w-4 shrink-0" />
+                    <Button as-child variant="outline">
+                        <Link href="/stock/movements" class="inline-flex items-center gap-2">
+                            <History class="size-4" />
                             Historique
-                        </Button>
-                    </Link>
+                        </Link>
+                    </Button>
                 </div>
             </header>
 
-            <!-- Familles : bandeau compact, scroll horizontal sur mobile -->
-            <div class="flex shrink-0 flex-col gap-1">
-                <div
-                    class="-mx-1 flex gap-1 overflow-x-auto px-1 pb-2 scrollbar-none border-b border-gray-200 dark:border-neutral-800"
-                    role="tablist"
-                    aria-label="Familles"
+            <!-- KPI sobres (cliquables pour filtrer) -->
+            <div class="grid shrink-0 grid-cols-2 gap-3 lg:grid-cols-5">
+                <button
+                    type="button"
+                    class="rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:bg-muted/40"
+                    @click="statusFilter = 'tous'"
                 >
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Articles</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{{ globalStats.totalArticles }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Références</p>
+                </button>
+                <div class="rounded-xl border border-border bg-card px-4 py-3 shadow-sm">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Stock physique</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{{ globalStats.totalQty }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Unités totales</p>
+                </div>
+                <button
+                    type="button"
+                    class="rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:bg-amber-50/60"
+                    :class="statusFilter === 'alerte' ? 'ring-1 ring-amber-400' : ''"
+                    @click="statusFilter = statusFilter === 'alerte' ? 'tous' : 'alerte'"
+                >
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-amber-700">En alerte</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums text-amber-800">{{ globalStats.alerte }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Sous le seuil</p>
+                </button>
+                <button
+                    type="button"
+                    class="rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:bg-red-50/60"
+                    :class="statusFilter === 'rupture' ? 'ring-1 ring-red-400' : ''"
+                    @click="statusFilter = statusFilter === 'rupture' ? 'tous' : 'rupture'"
+                >
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-red-700">En rupture</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums text-red-800">{{ globalStats.rupture }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Stock épuisé</p>
+                </button>
+                <div class="col-span-2 rounded-xl border border-border bg-card px-4 py-3 shadow-sm lg:col-span-1">
+                    <p class="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Familles</p>
+                    <p class="mt-1 text-2xl font-semibold tabular-nums text-foreground">{{ globalStats.famillesCount }}</p>
+                    <p class="mt-0.5 text-xs text-muted-foreground">Groupes</p>
+                </div>
+            </div>
+
+            <!-- Recherche + statut (une seule rangée) -->
+            <div class="flex shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:p-4">
+                <div class="relative min-w-0 flex-1">
+                    <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        v-model="searchQuery"
+                        placeholder="Rechercher par nom, code…"
+                        class="h-10 pl-10"
+                    />
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
                     <button
-                        v-for="famille in families"
-                        :key="famille.id"
-                        type="button"
-                        role="tab"
-                        :aria-selected="activeFamilyId === famille.id ? 'true' : 'false'"
-                        @click="activeFamilyId = famille.id"
-                        :class="[
-                            'shrink-0 rounded-full px-4 py-1.5 text-xs font-semibold transition-all sm:text-sm',
-                            activeFamilyId === famille.id
-                                ? 'bg-purple-600 text-white shadow-sm dark:bg-purple-500'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
+                        v-for="opt in [
+                            { value: 'tous', label: 'Tous' },
+                            { value: 'sains', label: 'Optimal', icon: 'ok' },
+                            { value: 'alerte', label: 'Alerte', icon: 'warn' },
+                            { value: 'rupture', label: 'Rupture', icon: 'x' },
                         ]"
+                        :key="opt.value"
+                        type="button"
+                        :class="[
+                            'inline-flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors',
+                            statusFilter === opt.value
+                                ? 'border-foreground/20 bg-foreground text-background'
+                                : 'border-border bg-background text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                        ]"
+                        @click="statusFilter = opt.value"
                     >
-                        {{ famille.nom }}
+                        <CheckCircle v-if="opt.icon === 'ok'" class="size-3.5" />
+                        <AlertTriangle v-else-if="opt.icon === 'warn'" class="size-3.5" />
+                        <XCircle v-else-if="opt.icon === 'x'" class="size-3.5" />
+                        {{ opt.label }}
                     </button>
-                </div>
-            </div>
-
-            <!-- KPI : pleine largeur, plus confortable sur grands écrans -->
-            <div class="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:gap-4">
-                <div
-                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
-                >
-                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
-                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Total articles</p>
-                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.totalArticles }}</p>
-                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Références uniques</p>
-                    </div>
-                    <Layers class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
-                </div>
-
-                <div
-                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
-                >
-                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
-                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Stock physique</p>
-                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.totalQty }}</p>
-                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Unités totales</p>
-                    </div>
-                    <Package class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
-                </div>
-
-                <div
-                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
-                >
-                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
-                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">En alerte</p>
-                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.alerte }}</p>
-                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Sous le seuil</p>
-                    </div>
-                    <AlertTriangle class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
-                </div>
-
-                <div
-                    class="relative flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-rose-600 to-red-700 px-4 py-3 text-white shadow-md sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
-                >
-                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
-                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">En rupture</p>
-                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.rupture }}</p>
-                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Stock épuisé</p>
-                    </div>
-                    <Minus class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
-                </div>
-
-                <div
-                    class="relative col-span-2 flex min-h-[4.75rem] items-center gap-3 overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 px-4 py-3 text-white shadow-md sm:col-span-1 sm:min-h-[5rem] sm:flex-col sm:items-stretch sm:gap-0 sm:py-3"
-                >
-                    <div class="relative z-10 min-w-0 flex-1 sm:flex-none">
-                        <p class="text-[10px] font-bold uppercase tracking-wider opacity-80">Familles</p>
-                        <p class="text-xl font-bold tabular-nums leading-tight sm:mt-0.5 sm:text-2xl xl:text-3xl">{{ globalStats.famillesCount }}</p>
-                        <p class="mt-0.5 hidden text-[11px] opacity-75 sm:block">Groupes logiques</p>
-                    </div>
-                    <FolderTree class="relative z-10 h-8 w-8 shrink-0 opacity-40 sm:absolute sm:right-2 sm:top-1/2 sm:h-12 sm:w-12 sm:-translate-y-1/2 sm:opacity-20" />
-                </div>
-            </div>
-
-            <!-- Filtres -->
-            <div class="shrink-0 space-y-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 sm:p-4">
-                <div class="flex flex-col gap-3 md:flex-row md:items-center">
-                    <div class="relative min-w-0 flex-1">
-                        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
-                        <Input
-                            v-model="searchQuery"
-                            placeholder="Rechercher par nom, code…"
-                            class="h-10 rounded-lg border-gray-200 pl-10 shadow-sm focus-visible:ring-purple-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100 dark:placeholder:text-neutral-500"
-                        />
-                    </div>
-                    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <div class="relative min-w-[12rem] flex-1 sm:flex-initial sm:w-52">
-                            <Filter class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
-                            <select
-                                v-model="statusFilter"
-                                class="h-10 w-full rounded-lg border border-gray-200 bg-white py-2 pl-10 pr-9 text-sm shadow-sm appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-100"
-                            >
-                                <option value="tous">Tous les statuts</option>
-                                <option value="sains">État optimal</option>
-                                <option value="alerte">En alerte</option>
-                                <option value="rupture">En rupture</option>
-                            </select>
-                            <ChevronDown class="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-neutral-500" />
-                        </div>
-                        <Button
-                            type="button"
-                            variant="secondary"
-                            class="h-10 shrink-0 gap-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
-                            @click="resetFilters"
-                        >
-                            <RotateCcw class="h-4 w-4" />
-                            Réinitialiser
-                        </Button>
-                    </div>
-                </div>
-
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                    <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-neutral-400">Filtres rapides</span>
-                    <div class="flex flex-wrap gap-1.5">
-                        <button
-                            type="button"
-                            @click="statusFilter = 'tous'"
-                            :class="[
-                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
-                                statusFilter === 'tous'
-                                    ? 'border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-700 dark:bg-purple-950/60 dark:text-purple-200'
-                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                            ]"
-                        >
-                            Tous
-                        </button>
-                        <button
-                            type="button"
-                            @click="statusFilter = 'sains'"
-                            :class="[
-                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
-                                statusFilter === 'sains'
-                                    ? 'border-emerald-300 bg-emerald-100 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200'
-                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                            ]"
-                        >
-                            <CheckCircle class="h-3.5 w-3.5" />
-                            Optimal
-                        </button>
-                        <button
-                            type="button"
-                            @click="statusFilter = 'alerte'"
-                            :class="[
-                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
-                                statusFilter === 'alerte'
-                                    ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200'
-                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                            ]"
-                        >
-                            <AlertTriangle class="h-3.5 w-3.5" />
-                            Alerte
-                        </button>
-                        <button
-                            type="button"
-                            @click="statusFilter = 'rupture'"
-                            :class="[
-                                'inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all border',
-                                statusFilter === 'rupture'
-                                    ? 'border-rose-300 bg-rose-100 text-rose-800 dark:border-rose-800 dark:bg-rose-950/60 dark:text-rose-200'
-                                    : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800',
-                            ]"
-                        >
-                            <XCircle class="h-3.5 w-3.5" />
-                            Rupture
-                        </button>
-                    </div>
+                    <Button
+                        v-if="hasActiveFilters"
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        class="h-8 gap-1.5"
+                        @click="resetFilters"
+                    >
+                        <RotateCcw class="size-3.5" />
+                        Réinitialiser
+                    </Button>
                 </div>
             </div>
 
             <div class="flex min-h-0 flex-1 flex-col gap-4">
                 <div
                     v-if="hierarchicalData.length === 0"
-                    class="flex min-h-[min(24rem,calc(100dvh-22rem))] flex-1 flex-col justify-center rounded-2xl border border-dashed border-gray-300 bg-gradient-to-b from-white to-gray-50/80 px-6 py-12 text-center dark:border-neutral-700 dark:from-neutral-900 dark:to-neutral-950/80 sm:py-16"
+                    class="flex min-h-[min(20rem,calc(100dvh-22rem))] flex-1 flex-col justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-12 text-center"
                 >
-                    <h3 class="text-base font-semibold text-gray-900 dark:text-neutral-100">Aucun article trouvé</h3>
-                    <p class="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-neutral-400">
+                    <h3 class="text-base font-semibold text-foreground">Aucun article trouvé</h3>
+                    <p class="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
                         <template v-if="hasActiveFilters">
-                            Aucun résultat pour ces critères. Essayez d’élargir la recherche ou réinitialisez les filtres.
+                            Aucun résultat pour ces critères. Élargissez la recherche ou réinitialisez les filtres.
                         </template>
                         <template v-else>
-                            Commencez par créer des articles et les rattacher à une famille dans la configuration.
+                            Créez des articles et rattachez-les à une famille dans la configuration.
                         </template>
                     </p>
                     <div class="mt-6 flex flex-col items-center justify-center gap-2 sm:flex-row">
@@ -597,182 +526,181 @@ const openViewModal = (article: Article) => {
                             v-if="hasActiveFilters"
                             type="button"
                             variant="outline"
-                            class="w-full border-gray-200 sm:w-auto dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                             @click="resetFilters"
                         >
-                            <RotateCcw class="mr-2 h-4 w-4" />
+                            <RotateCcw class="mr-2 size-4" />
                             Réinitialiser les filtres
                         </Button>
-                        <Link href="/articles" class="w-full sm:w-auto">
-                            <Button
-                                type="button"
-                                class="w-full gap-2 bg-purple-600 hover:bg-purple-700 dark:bg-purple-600 dark:hover:bg-purple-500 sm:w-auto"
-                            >
-                                <LibraryBig class="h-4 w-4" />
-                                Ouvrir les articles (configuration)
-                            </Button>
-                        </Link>
+                        <Button as-child>
+                            <Link href="/articles" class="inline-flex items-center gap-2">
+                                <LibraryBig class="size-4" />
+                                Ouvrir les articles
+                            </Link>
+                        </Button>
                     </div>
                 </div>
 
                 <div
                     v-else
-                    v-for="famille in hierarchicalData.filter(f => f.id === activeFamilyId)"
-                    :key="famille.id"
-                    class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
+                    class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm"
                 >
+                    <!-- Navigation hiérarchique compacte -->
+                    <div class="shrink-0 space-y-2 border-b border-border p-3 sm:p-4">
+                        <div
+                            class="flex gap-1 overflow-x-auto pb-0.5 scrollbar-none"
+                            role="tablist"
+                            aria-label="Familles"
+                        >
+                            <button
+                                v-for="famille in hierarchicalData"
+                                :key="famille.id"
+                                type="button"
+                                role="tab"
+                                :aria-selected="activeFamilyId === famille.id ? 'true' : 'false'"
+                                :class="[
+                                    'shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                                    activeFamilyId === famille.id
+                                        ? 'bg-foreground text-background'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                                ]"
+                                @click="activeFamilyId = famille.id"
+                            >
+                                {{ famille.nom }}
+                            </button>
+                        </div>
+
+                        <div
+                            v-if="activeFamilyData?.categories?.length"
+                            class="flex gap-1 overflow-x-auto scrollbar-none"
+                        >
+                            <button
+                                v-for="categorie in activeFamilyData.categories"
+                                :key="categorie.id"
+                                type="button"
+                                :class="[
+                                    'inline-flex shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+                                    activeCategoryId === categorie.id
+                                        ? 'bg-muted text-foreground ring-1 ring-border'
+                                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                                ]"
+                                @click="activeCategoryId = categorie.id"
+                            >
+                                <Layers class="size-3.5 opacity-70" />
+                                {{ categorie.nom }}
+                            </button>
+                        </div>
+
+                        <div
+                            v-if="activeCategoryData?.sousCategories?.length"
+                            class="flex gap-1 overflow-x-auto scrollbar-none"
+                        >
+                            <button
+                                v-for="sousCategorie in activeCategoryData.sousCategories"
+                                :key="sousCategorie.id"
+                                type="button"
+                                :class="[
+                                    'inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors',
+                                    activeSousCategoryId === sousCategorie.id
+                                        ? 'border-border bg-background text-foreground'
+                                        : 'border-transparent text-muted-foreground hover:border-border hover:bg-muted/40',
+                                ]"
+                                @click="activeSousCategoryId = sousCategorie.id"
+                            >
+                                <Package class="size-3 opacity-70" />
+                                {{ sousCategorie.nom }}
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="flex min-h-0 flex-1 flex-col p-3 sm:p-4">
-                        <!-- Dashboard de la Famille -->
-                        <!-- <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                                    <div class="bg-blue-600 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform">
-                                        <div class="relative z-10">
-                                            <p class="text-xs font-medium opacity-80 uppercase tracking-wider">Quantité en Stock</p>
-                                            <p class="text-3xl font-bold mt-1">{{ famille.stats.totalQty }}</p>
-                                            <p class="text-[10px] mt-2 opacity-70 italic">Unités physiques</p>
-                                        </div>
-                                        <Package class="absolute -right-2 -bottom-2 h-16 w-16 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform" />
-                                    </div>
-
-                                    <div class="bg-emerald-500 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform">
-                                        <div class="relative z-10">
-                                            <p class="text-xs font-medium opacity-80 uppercase tracking-wider">État Optimal</p>
-                                            <p class="text-3xl font-bold mt-1">{{ famille.stats.sains }}</p>
-                                            <p class="text-[10px] mt-2 opacity-70 italic">Articles bien approvisionnés</p>
-                                        </div>
-                                        <Package class="absolute -right-2 -bottom-2 h-16 w-16 opacity-20 transform -rotate-12 group-hover:scale-110 transition-transform" />
-                                    </div>
-
-                                    <div class="bg-amber-500 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform">
-                                        <div class="relative z-10">
-                                            <p class="text-xs font-medium opacity-80 uppercase tracking-wider">En Alerte</p>
-                                            <p class="text-3xl font-bold mt-1">{{ famille.stats.alerte }}</p>
-                                            <p class="text-[10px] mt-2 opacity-70 italic">Sous le seuil d'alerte</p>
-                                        </div>
-                                        <AlertTriangle class="absolute -right-2 -bottom-2 h-16 w-16 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform" />
-                                    </div>
-
-                                    <div class="bg-rose-500 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform">
-                                        <div class="relative z-10">
-                                            <p class="text-xs font-medium opacity-80 uppercase tracking-wider">En Rupture</p>
-                                            <p class="text-3xl font-bold mt-1">{{ famille.stats.rupture }}</p>
-                                            <p class="text-[10px] mt-2 opacity-70 italic">Stock épuisé</p>
-                                        </div>
-                                        <Minus class="absolute -right-2 -bottom-2 h-16 w-16 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform" />
-                                    </div>
-
-                                    <div class="bg-slate-500 rounded-xl p-4 text-white shadow-lg relative overflow-hidden group hover:scale-[1.02] transition-transform">
-                                        <div class="relative z-10">
-                                            <p class="text-xs font-medium opacity-80 uppercase tracking-wider">Références</p>
-                                            <p class="text-3xl font-bold mt-1">{{ famille.stats.totalRefs }}</p>
-                                            <p class="text-[10px] mt-2 opacity-70 italic">Articles uniques</p>
-                                        </div>
-                                        <Layers class="absolute -right-2 -bottom-2 h-16 w-16 opacity-20 transform -rotate-12 group-hover:scale-110 transition-transform" />
-                                    </div>
-                                </div> -->
-
-                                <div v-if="activeFamilyData?.categories?.length > 0" class="flex min-h-0 flex-1 flex-col gap-3 border-t border-gray-100 pt-3 dark:border-neutral-800 sm:pt-4">
-
-                                    <!-- Onglets des Catégories -->
-                                    <div class="-mx-0.5 flex gap-1 overflow-x-auto px-0.5 pb-2 scrollbar-none border-b border-gray-100 dark:border-neutral-800">
-                                        <button
-                                            v-for="categorie in activeFamilyData.categories"
-                                            :key="categorie.id"
-                                            type="button"
-                                            @click="activeCategoryId = categorie.id"
-                                            :class="[
-                                                'shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all sm:text-sm',
-                                                activeCategoryId === categorie.id
-                                                    ? 'bg-blue-600 text-white shadow-sm dark:bg-blue-500'
-                                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-neutral-800 dark:text-neutral-300 dark:hover:bg-neutral-700',
-                                            ]"
-                                        >
-                                            <div class="flex items-center gap-1.5">
-                                                <Layers class="h-3.5 w-3.5 shrink-0 opacity-80" />
-                                                {{ categorie.nom }}
+                        <div v-if="!activeFamilyData?.categories?.length" class="py-8 text-center text-sm text-muted-foreground">
+                            Aucune catégorie disponible.
+                        </div>
+                        <div v-else-if="!activeCategoryData" class="py-8 text-center text-sm text-muted-foreground">
+                            Aucune catégorie disponible.
+                        </div>
+                        <div v-else-if="!activeSousCategoryData" class="py-8 text-center text-sm text-muted-foreground">
+                            Aucun article ou sous-catégorie disponible.
+                        </div>
+                        <div
+                            v-else
+                            class="min-h-0 flex-1 overflow-auto rounded-lg border border-border"
+                        >
+                            <table class="min-w-full divide-y divide-border md:min-w-[640px]">
+                                <thead class="sticky top-0 z-10 bg-muted/90 backdrop-blur-sm">
+                                    <tr>
+                                        <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-4">Code</th>
+                                        <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-4">Article</th>
+                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-4">Stock</th>
+                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-4">Seuil</th>
+                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-4">Statut</th>
+                                        <th scope="col" class="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground sm:px-4">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-border bg-card">
+                                    <tr
+                                        v-for="article in activeSousCategoryData.articles"
+                                        :key="article.id"
+                                        class="transition-colors hover:bg-muted/40"
+                                    >
+                                        <td class="whitespace-nowrap px-3 py-2.5 font-mono text-sm text-muted-foreground sm:px-4">
+                                            {{ article.code }}
+                                        </td>
+                                        <td class="px-3 py-2.5 text-sm font-medium text-foreground sm:px-4">
+                                            {{ article.description }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2.5 text-center sm:px-4">
+                                            <div class="flex items-center justify-center gap-1">
+                                                <span
+                                                    class="text-base font-semibold tabular-nums"
+                                                    :class="article.stock_actuel <= article.seuil_alerte ? 'text-red-600' : 'text-foreground'"
+                                                >
+                                                    {{ article.stock_actuel }}
+                                                </span>
+                                                <AlertTriangle
+                                                    v-if="article.stock_actuel <= article.seuil_alerte"
+                                                    class="size-3.5 shrink-0 text-red-500"
+                                                />
                                             </div>
-                                        </button>
-                                    </div>
-
-                                    <!-- Section Sous-catégories et Table -->
-                                    <div v-if="activeCategoryData" class="flex min-h-0 flex-1 flex-col gap-3">
-
-                                        <!-- Onglets des Sous-Catégories -->
-                                        <div v-if="activeCategoryData.sousCategories?.length > 0" class="-mx-0.5 flex gap-1 overflow-x-auto border-b border-gray-100 px-0.5 pb-2 dark:border-neutral-800">
-                                            <button
-                                                v-for="sousCategorie in activeCategoryData.sousCategories"
-                                                :key="sousCategorie.id"
-                                                type="button"
-                                                @click="activeSousCategoryId = sousCategorie.id"
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2.5 text-center text-sm tabular-nums text-muted-foreground sm:px-4">
+                                            {{ article.seuil_alerte }}
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2.5 text-center sm:px-4">
+                                            <span
                                                 :class="[
-                                                    'shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-all',
-                                                    activeSousCategoryId === sousCategorie.id
-                                                        ? 'border-amber-400 bg-amber-100 text-amber-900 dark:border-amber-600 dark:bg-amber-950/50 dark:text-amber-100'
-                                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-neutral-700 dark:bg-neutral-950 dark:text-neutral-300 dark:hover:bg-neutral-800',
+                                                    'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium',
+                                                    getStockStatusClass(article),
                                                 ]"
                                             >
-                                                <div class="flex items-center gap-1.5">
-                                                    <Package class="h-3 w-3 shrink-0" />
-                                                    {{ sousCategorie.nom }}
-                                                </div>
-                                            </button>
-                                        </div>
-
-                                        <!-- Table des articles -->
-                                        <div v-if="activeSousCategoryData" class="-mx-px min-h-0 flex-1 overflow-auto rounded-lg border border-gray-200 dark:border-neutral-700">
-                                            <table class="min-w-full divide-y divide-gray-200 dark:divide-neutral-700 md:min-w-[640px]">
-                                                <thead class="sticky top-0 z-10 bg-gray-50/95 shadow-sm backdrop-blur-sm dark:bg-neutral-950/95">
-                                                    <tr>
-                                                        <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Code</th>
-                                                        <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Article</th>
-                                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Stock</th>
-                                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Seuil</th>
-                                                        <th scope="col" class="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Statut</th>
-                                                        <th scope="col" class="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-neutral-400 sm:px-4">Actions</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody class="divide-y divide-gray-100 bg-white dark:divide-neutral-800 dark:bg-neutral-900">
-                                                    <tr v-for="article in activeSousCategoryData.articles" :key="article.id" class="transition-colors hover:bg-gray-50/90 dark:hover:bg-neutral-800/60">
-                                                        <td class="whitespace-nowrap px-3 py-2.5 font-mono text-sm text-gray-500 dark:text-neutral-400 sm:px-4">{{ article.code }}</td>
-                                                        <td class="px-3 py-2.5 text-sm font-semibold text-gray-900 dark:text-neutral-100 sm:px-4">{{ article.description }}</td>
-                                                        <td class="whitespace-nowrap px-3 py-2.5 text-center align-middle sm:px-4">
-                                                            <div class="flex items-center justify-center gap-1">
-                                                                <span
-                                                                    class="text-base font-bold tabular-nums"
-                                                                    :class="article.stock_actuel <= article.seuil_alerte ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-neutral-100'"
-                                                                >
-                                                                    {{ article.stock_actuel }}
-                                                                </span>
-                                                                <AlertTriangle v-if="article.stock_actuel <= article.seuil_alerte" class="h-3.5 w-3.5 shrink-0 animate-pulse text-red-500" />
-                                                            </div>
-                                                        </td>
-                                                        <td class="whitespace-nowrap px-3 py-2.5 text-center text-sm text-gray-500 tabular-nums dark:text-neutral-400 sm:px-4">{{ article.seuil_alerte }}</td>
-                                                        <td class="whitespace-nowrap px-3 py-2.5 text-center sm:px-4">
-                                                            <span :class="['inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium', getStockStatusClass(article)]">
-                                                                {{ getStockStatusLabel(article) }}
-                                                            </span>
-                                                        </td>
-                                                        <td class="whitespace-nowrap px-3 py-2.5 text-right text-sm font-medium sm:px-4">
-                                                            <div class="flex items-center justify-end gap-1.5 font-normal sm:gap-2">
-                                                                <Button size="sm" variant="ghost" class="h-8 w-8 p-0 text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950/40 dark:hover:text-blue-300" @click="openViewModal(article)">
-                                                                    <Eye class="h-4 w-4" />
-                                                                </Button>
-                                                                <Button size="sm" variant="outline" class="h-8 px-2.5 border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200 dark:hover:bg-emerald-950/70" @click="openMovementModal(article, 'entree')">
-                                                                    <Plus class="mr-1 h-3.5 w-3.5" /> Entrée
-                                                                </Button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <div v-else class="py-8 text-center text-sm italic text-gray-500 dark:text-neutral-400">
-                                            Aucun article ou sous-catégorie disponible.
-                                        </div>
-                                    </div>
-                                    <div v-else class="py-8 text-center text-sm italic text-gray-500 dark:text-neutral-400">
-                                        Aucune catégorie disponible.
-                                    </div>
-                                </div>
+                                                {{ getStockStatusLabel(article) }}
+                                            </span>
+                                        </td>
+                                        <td class="whitespace-nowrap px-3 py-2.5 text-right sm:px-4">
+                                            <div class="flex items-center justify-end gap-1.5">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    class="size-8 p-0 text-muted-foreground"
+                                                    @click="openViewModal(article)"
+                                                >
+                                                    <Eye class="size-4" />
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    class="h-8"
+                                                    @click="openMovementModal(article, 'entree')"
+                                                >
+                                                    <Plus class="mr-1 size-3.5" />
+                                                    Entrée
+                                                </Button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

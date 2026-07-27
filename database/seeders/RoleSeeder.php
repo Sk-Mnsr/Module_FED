@@ -81,9 +81,9 @@ class RoleSeeder extends Seeder
             [
                 'nom' => 'Contrôle de Gestion',
                 'slug' => 'controle_de_gestion',
-                'module' => 'ecritures',
+                'module' => 'fed',
                 'access_profile' => 'other',
-                'description' => 'Vérifie la disponibilité de la ligne budgétaire pour la dépense',
+                'description' => 'Vérifie la disponibilité budgétaire des FED après validation Facilities',
                 'actif' => true,
             ],
             [

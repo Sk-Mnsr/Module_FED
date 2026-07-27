@@ -1,27 +1,30 @@
 <script setup lang="ts">
-import { Head, useForm, router, Link } from '@inertiajs/vue3';
+import { Head, useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
-import FormSection from '@/components/FormSection.vue';
-import { Plus, Trash2, Minus } from 'lucide-vue-next';
+import { computed } from 'vue';
+import {
+    ClipboardList,
+    FileText,
+    ListChecks,
+    Paperclip,
+    Plus,
+    Send,
+    Users,
+    Minus,
+} from 'lucide-vue-next';
 
 const props = defineProps<{
-    fournisseurs: any[];
+    fournisseurs: Array<{ id: number; nom: string; contact_email?: string | null }>;
 }>();
 
 const breadcrumbs: BreadcrumbItem[] = [
-    {
-        title: 'Appels d\'Offres',
-        href: '/appel-offres',
-    },
-    {
-        title: 'Nouveau',
-        href: '#',
-    },
+    { title: "Appels d'Offres", href: '/appel-offres' },
+    { title: 'Nouveau', href: '#' },
 ];
 
 interface CritereForm {
@@ -49,7 +52,7 @@ const form = useForm({
         { nom: 'Expérience / Références', ponderation: 20, type: 'experience', note_maximale: 10 },
         { nom: 'Délai de livraison', ponderation: 20, type: 'delais', note_maximale: 10 },
         { nom: 'Offre financière', ponderation: 20, type: 'financier', note_maximale: 10 },
-        { nom: 'Documents administratifs', ponderation: 10, type: 'docs', note_maximale: 10 }
+        { nom: 'Documents administratifs', ponderation: 10, type: 'docs', note_maximale: 10 },
     ],
     fournisseurs: [] as number[],
     dao_file: null as File | null,
@@ -58,12 +61,12 @@ const form = useForm({
 
 const onDaoChange = (e: Event) => {
     const target = e.target as HTMLInputElement;
-    if (target.files && target.files.length) form.dao_file = target.files[0];
+    if (target.files?.length) form.dao_file = target.files[0];
 };
 
 const onCcChange = (e: Event) => {
     const target = e.target as HTMLInputElement;
-    if (target.files && target.files.length) form.cahier_charges_file = target.files[0];
+    if (target.files?.length) form.cahier_charges_file = target.files[0];
 };
 
 const typeOptions = [
@@ -72,13 +75,20 @@ const typeOptions = [
     { value: 'delais', label: 'Délais' },
     { value: 'experience', label: 'Expérience' },
     { value: 'docs', label: 'Documents administratifs' },
-    
 ];
 
 const publicationOptions = [
     { value: 'interne', label: 'Interne (Utilisateurs du système)' },
     { value: 'externe', label: 'Externe (Lien public)' },
 ];
+
+const publicationLabel = computed(
+    () => publicationOptions.find((o) => o.value === form.type_publication)?.label ?? '—',
+);
+
+const ponderationTotal = computed(() =>
+    form.criteres.reduce((sum, c) => sum + (Number(c.ponderation) || 0), 0),
+);
 
 const addCritere = () => {
     form.criteres.push(makeCritere());
@@ -90,7 +100,7 @@ const removeCritere = (index: number) => {
 
 const submit = () => {
     if (form.criteres.length === 0) {
-        alert('Veuillez ajouter au moins un critère d\'évaluation.');
+        alert("Veuillez ajouter au moins un critère d'évaluation.");
         return;
     }
 
@@ -98,145 +108,390 @@ const submit = () => {
         preserveScroll: true,
     });
 };
+
+const selectClass =
+    'mt-1.5 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+const textareaClass =
+    'mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
 </script>
 
 <template>
     <Head title="Nouvel Appel d'Offres" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            <h1 class="text-3xl font-bold text-gray-900">Nouvel Appel d'Offres</h1>
+        <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
+            <div>
+                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">TDR</p>
+                <h1 class="text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
+                    Nouvel Appel d'Offres
+                </h1>
+                <p class="mt-1 text-sm text-muted-foreground">
+                    Renseignez l’objet, les critères, les documents et les fournisseurs concernés.
+                </p>
+            </div>
 
-            <form @submit.prevent="submit" class="flex flex-col gap-6">
-                <!-- Informations Générales -->
-                <FormSection title="Informations générales" :columns="2">
-                    <div class="md:col-span-2">
-                        <Label for="objet" class="text-base font-medium text-gray-700">Objet de l'appel d'offres</Label>
-                        <Input id="objet" v-model="form.objet" type="text" class="mt-1.5 border-gray-300" required />
-                        <InputError :message="form.errors.objet" />
-                    </div>
-                    <div class="md:col-span-2">
-                        <Label for="description" class="text-base font-medium text-gray-700">Description détaillée</Label>
-                        <textarea
-                            id="description"
-                            v-model="form.description"
-                            rows="4"
-                            class="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2 text-base focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
-                            required
-                        ></textarea>
-                        <InputError :message="form.errors.description" />
-                    </div>
-                    <div>
-                        <Label for="date_lancement" class="text-base font-medium text-gray-700">Date de lancement</Label>
-                        <Input id="date_lancement" v-model="form.date_lancement" type="date" class="mt-1.5 border-gray-300" />
-                        <InputError :message="form.errors.date_lancement" />
-                    </div>
-                    <div>
-                        <Label for="date_limite_soumission" class="text-base font-medium text-gray-700">Date limite de soumission</Label>
-                        <Input id="date_limite_soumission" v-model="form.date_limite_soumission" type="datetime-local" class="mt-1.5 border-gray-300" required />
-                        <InputError :message="form.errors.date_limite_soumission" />
-                    </div>
-                    <div class="md:col-span-2">
-                        <Label for="type_publication" class="text-base font-medium text-gray-700">Type de publication</Label>
-                        <select
-                            id="type_publication"
-                            v-model="form.type_publication"
-                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900"
-                            required
-                        >
-                            <option v-for="option in publicationOptions" :key="option.value" :value="option.value">
-                                {{ option.label }}
-                            </option>
-                        </select>
-                        <InputError :message="form.errors.type_publication" />
-                    </div>
-                </FormSection>
-
-                <!-- Critères d'évaluation -->
-                <FormSection title="Critères d'évaluation" :columns="1">
-                    <div class="flex items-center justify-between mb-4">
-                        <p class="text-sm text-gray-600">Définissez les critères de notation pour le comité d'évaluation.</p>
-                        <Button type="button" variant="outline" size="sm" @click="addCritere" class="p-2 h-8 w-8">
-                            <Plus class="h-4 w-4" />
-                        </Button>
-                    </div>
-
-                    <div v-for="(critere, index) in form.criteres" :key="index" class="rounded-md border border-gray-200 p-4 mb-4">
-                        <div class="grid gap-4 md:grid-cols-2">
-                            <div class="md:col-span-2">
-                                <Label :for="`nom-${index}`" class="text-base font-medium text-gray-700">Nom du critère</Label>
-                                <Input :id="`nom-${index}`" v-model="critere.nom" type="text" class="mt-1.5 border-gray-300" required />
-                                <InputError :message="form.errors[`criteres.${index}.nom` as keyof typeof form.errors]" />
+            <form
+                class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.7fr)]"
+                @submit.prevent="submit"
+            >
+                <div class="flex min-h-0 flex-col gap-4 overflow-y-auto">
+                    <!-- Infos générales -->
+                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
+                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                <ClipboardList class="size-5" />
                             </div>
                             <div>
-                                <Label :for="`type-${index}`" class="text-base font-medium text-gray-700">Type de critère</Label>
-                                <select
-                                    :id="`type-${index}`"
-                                    v-model="critere.type"
-                                    class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
-                                    required
-                                >
-                                    <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">
-                                        {{ opt.label }}
-                                    </option>
-                                </select>
-                                <InputError :message="form.errors[`criteres.${index}.type` as keyof typeof form.errors]" />
-                            </div>
-                            <div>
-                                <Label :for="`max-${index}`" class="text-base font-medium text-gray-700">Note maximale (ex: 20)</Label>
-                                <!-- @ts-ignore -->
-                                <Input :id="`max-${index}`" v-model.number="critere.note_maximale" type="number" min="1" step="0.5" class="mt-1.5 border-gray-300" required />
-                                <InputError :message="form.errors[`criteres.${index}.note_maximale` as keyof typeof form.errors]" />
-                            </div>
-                            <div>
-                                <Label :for="`pond-${index}`" class="text-base font-medium text-gray-700">Coefficient / Pondération</Label>
-                                <!-- @ts-ignore -->
-                                <Input :id="`pond-${index}`" v-model.number="critere.ponderation" type="number" min="1" step="1" class="mt-1.5 border-gray-300" required />
-                                <InputError :message="form.errors[`criteres.${index}.ponderation` as keyof typeof form.errors]" />
+                                <h2 class="text-base font-semibold text-foreground">Informations générales</h2>
+                                <p class="text-sm text-muted-foreground">Objet, dates et mode de publication</p>
                             </div>
                         </div>
-                        <div v-if="form.criteres.length > 1" class="mt-3 flex justify-end">
-                            <Button type="button" variant="ghost" class="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 h-9 w-9" @click="removeCritere(index)" title="Supprimer ce critère">
-                                <Minus class="h-4 w-4" />
+
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div class="md:col-span-2">
+                                <Label for="objet">Objet de l'appel d'offres</Label>
+                                <Input id="objet" v-model="form.objet" type="text" class="mt-1.5" required />
+                                <InputError :message="form.errors.objet" />
+                            </div>
+                            <div class="md:col-span-2">
+                                <Label for="description">Description détaillée</Label>
+                                <textarea
+                                    id="description"
+                                    v-model="form.description"
+                                    rows="4"
+                                    :class="textareaClass"
+                                    required
+                                />
+                                <InputError :message="form.errors.description" />
+                            </div>
+                            <div>
+                                <Label for="date_lancement">Date de lancement</Label>
+                                <Input
+                                    id="date_lancement"
+                                    v-model="form.date_lancement"
+                                    type="date"
+                                    class="mt-1.5"
+                                />
+                                <InputError :message="form.errors.date_lancement" />
+                            </div>
+                            <div>
+                                <Label for="date_limite_soumission">Date limite de soumission</Label>
+                                <Input
+                                    id="date_limite_soumission"
+                                    v-model="form.date_limite_soumission"
+                                    type="datetime-local"
+                                    class="mt-1.5"
+                                    required
+                                />
+                                <InputError :message="form.errors.date_limite_soumission" />
+                            </div>
+                            <div class="md:col-span-2">
+                                <Label for="type_publication">Type de publication</Label>
+                                <select
+                                    id="type_publication"
+                                    v-model="form.type_publication"
+                                    :class="selectClass"
+                                    required
+                                >
+                                    <option
+                                        v-for="option in publicationOptions"
+                                        :key="option.value"
+                                        :value="option.value"
+                                    >
+                                        {{ option.label }}
+                                    </option>
+                                </select>
+                                <InputError :message="form.errors.type_publication" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Critères -->
+                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                    <ListChecks class="size-5" />
+                                </div>
+                                <div>
+                                    <h2 class="text-base font-semibold text-foreground">Critères d'évaluation</h2>
+                                    <p class="text-sm text-muted-foreground">
+                                        {{ form.criteres.length }} critère{{ form.criteres.length > 1 ? 's' : '' }}
+                                        · pondération {{ ponderationTotal }}
+                                    </p>
+                                </div>
+                            </div>
+                            <Button type="button" variant="outline" size="sm" @click="addCritere">
+                                <Plus class="mr-1.5 size-4" />
+                                Ajouter
+                            </Button>
+                        </div>
+
+                        <div class="space-y-3">
+                            <div
+                                v-for="(critere, index) in form.criteres"
+                                :key="index"
+                                class="rounded-lg border border-border bg-muted/20 p-4"
+                            >
+                                <div class="mb-3 flex items-center justify-between gap-2">
+                                    <p class="text-sm font-semibold text-foreground">Critère {{ index + 1 }}</p>
+                                    <Button
+                                        v-if="form.criteres.length > 1"
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        class="h-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                        @click="removeCritere(index)"
+                                    >
+                                        <Minus class="mr-1 size-4" />
+                                        Retirer
+                                    </Button>
+                                </div>
+                                <div class="grid gap-3 md:grid-cols-2">
+                                    <div class="md:col-span-2">
+                                        <Label :for="`nom-${index}`">Nom du critère</Label>
+                                        <Input
+                                            :id="`nom-${index}`"
+                                            v-model="critere.nom"
+                                            type="text"
+                                            class="mt-1.5"
+                                            required
+                                        />
+                                        <InputError
+                                            :message="
+                                                form.errors[`criteres.${index}.nom` as keyof typeof form.errors]
+                                            "
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label :for="`type-${index}`">Type</Label>
+                                        <select
+                                            :id="`type-${index}`"
+                                            v-model="critere.type"
+                                            :class="selectClass"
+                                            required
+                                        >
+                                            <option
+                                                v-for="opt in typeOptions"
+                                                :key="opt.value"
+                                                :value="opt.value"
+                                            >
+                                                {{ opt.label }}
+                                            </option>
+                                        </select>
+                                        <InputError
+                                            :message="
+                                                form.errors[`criteres.${index}.type` as keyof typeof form.errors]
+                                            "
+                                        />
+                                    </div>
+                                    <div>
+                                        <Label :for="`max-${index}`">Note maximale</Label>
+                                        <!-- @ts-ignore -->
+                                        <Input
+                                            :id="`max-${index}`"
+                                            v-model.number="critere.note_maximale"
+                                            type="number"
+                                            min="1"
+                                            step="0.5"
+                                            class="mt-1.5"
+                                            required
+                                        />
+                                        <InputError
+                                            :message="
+                                                form.errors[
+                                                    `criteres.${index}.note_maximale` as keyof typeof form.errors
+                                                ]
+                                            "
+                                        />
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <Label :for="`pond-${index}`">Coefficient / Pondération</Label>
+                                        <!-- @ts-ignore -->
+                                        <Input
+                                            :id="`pond-${index}`"
+                                            v-model.number="critere.ponderation"
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            class="mt-1.5"
+                                            required
+                                        />
+                                        <InputError
+                                            :message="
+                                                form.errors[
+                                                    `criteres.${index}.ponderation` as keyof typeof form.errors
+                                                ]
+                                            "
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Documents -->
+                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
+                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                <Paperclip class="size-5" />
+                            </div>
+                            <div>
+                                <h2 class="text-base font-semibold text-foreground">Documents</h2>
+                                <p class="text-sm text-muted-foreground">DAO et cahier des charges</p>
+                            </div>
+                        </div>
+                        <div class="grid gap-4 md:grid-cols-2">
+                            <div>
+                                <Label for="dao_file">Dossier d'Appel d'Offres (DAO)</Label>
+                                <Input id="dao_file" type="file" class="mt-1.5" @change="onDaoChange" />
+                                <p v-if="form.dao_file" class="mt-1 truncate text-xs text-muted-foreground">
+                                    {{ form.dao_file.name }}
+                                </p>
+                                <InputError :message="form.errors.dao_file" />
+                            </div>
+                            <div>
+                                <Label for="cahier_charges_file">Cahier des charges</Label>
+                                <Input
+                                    id="cahier_charges_file"
+                                    type="file"
+                                    class="mt-1.5"
+                                    @change="onCcChange"
+                                />
+                                <p
+                                    v-if="form.cahier_charges_file"
+                                    class="mt-1 truncate text-xs text-muted-foreground"
+                                >
+                                    {{ form.cahier_charges_file.name }}
+                                </p>
+                                <InputError :message="form.errors.cahier_charges_file" />
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Fournisseurs -->
+                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
+                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                <Users class="size-5" />
+                            </div>
+                            <div>
+                                <h2 class="text-base font-semibold text-foreground">Fournisseurs concernés</h2>
+                                <p class="text-sm text-muted-foreground">
+                                    {{ form.fournisseurs.length }} sélectionné{{
+                                        form.fournisseurs.length > 1 ? 's' : ''
+                                    }}
+                                </p>
+                            </div>
+                        </div>
+                        <div
+                            class="grid max-h-60 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-border bg-background p-2 md:grid-cols-2"
+                        >
+                            <label
+                                v-for="fournisseur in props.fournisseurs"
+                                :key="fournisseur.id"
+                                class="flex cursor-pointer items-start gap-2 rounded-md p-2 hover:bg-muted/50"
+                            >
+                                <input
+                                    v-model="form.fournisseurs"
+                                    type="checkbox"
+                                    :value="fournisseur.id"
+                                    class="mt-0.5 rounded border-input"
+                                />
+                                <span class="min-w-0 text-sm text-foreground">
+                                    {{ fournisseur.nom }}
+                                    <span
+                                        v-if="fournisseur.contact_email"
+                                        class="block truncate text-xs text-muted-foreground"
+                                    >
+                                        {{ fournisseur.contact_email }}
+                                    </span>
+                                </span>
+                            </label>
+                        </div>
+                        <InputError :message="form.errors.fournisseurs" />
+                    </section>
+                </div>
+
+                <!-- Récap -->
+                <aside class="xl:sticky xl:top-4 xl:self-start">
+                    <div class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                        <div class="flex items-start gap-3 border-b border-border pb-4">
+                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                <FileText class="size-5" />
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                    Récapitulatif
+                                </p>
+                                <h2 class="text-base font-semibold text-foreground">Avant création</h2>
+                            </div>
+                        </div>
+
+                        <dl class="space-y-3 text-sm">
+                            <div>
+                                <dt class="text-muted-foreground">Objet</dt>
+                                <dd class="mt-0.5 line-clamp-2 font-medium text-foreground">
+                                    {{ form.objet || '—' }}
+                                </dd>
+                            </div>
+                            <div>
+                                <dt class="text-muted-foreground">Publication</dt>
+                                <dd class="mt-0.5 font-medium text-foreground">{{ publicationLabel }}</dd>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3 border-t border-border pt-3">
+                                <div>
+                                    <dt class="text-muted-foreground">Critères</dt>
+                                    <dd class="font-medium tabular-nums text-foreground">
+                                        {{ form.criteres.length }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="text-muted-foreground">Pondération</dt>
+                                    <dd class="font-medium tabular-nums text-foreground">
+                                        {{ ponderationTotal }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="text-muted-foreground">Fournisseurs</dt>
+                                    <dd class="font-medium tabular-nums text-foreground">
+                                        {{ form.fournisseurs.length }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="text-muted-foreground">Documents</dt>
+                                    <dd class="font-medium tabular-nums text-foreground">
+                                        {{ (form.dao_file ? 1 : 0) + (form.cahier_charges_file ? 1 : 0) }}
+                                    </dd>
+                                </div>
+                            </div>
+                            <div v-if="form.date_limite_soumission" class="border-t border-border pt-3">
+                                <dt class="text-muted-foreground">Date limite</dt>
+                                <dd class="mt-0.5 font-medium text-foreground">
+                                    {{
+                                        new Date(form.date_limite_soumission).toLocaleString('fr-FR', {
+                                            day: '2-digit',
+                                            month: '2-digit',
+                                            year: 'numeric',
+                                            hour: '2-digit',
+                                            minute: '2-digit',
+                                        })
+                                    }}
+                                </dd>
+                            </div>
+                        </dl>
+
+                        <div class="flex flex-col gap-2 border-t border-border pt-4">
+                            <Button type="submit" class="w-full" :disabled="form.processing">
+                                <Send class="mr-2 size-4" />
+                                {{ form.processing ? 'Création…' : "Créer l'Appel d'Offres" }}
+                            </Button>
+                            <Button as-child type="button" variant="outline" class="w-full">
+                                <Link href="/appel-offres">Annuler</Link>
                             </Button>
                         </div>
                     </div>
-                </FormSection>
-
-                <!-- Documents joints -->
-                <FormSection title="Documents de l'Appel d'Offres" :columns="2">
-                    <div>
-                        <Label for="dao_file" class="text-base font-medium text-gray-700">Dossier d'Appel d'Offres (DAO)</Label>
-                        <Input id="dao_file" type="file" @change="onDaoChange" class="mt-1.5 border-gray-300" />
-                        <InputError :message="form.errors.dao_file" />
-                    </div>
-                    <div>
-                        <Label for="cahier_charges_file" class="text-base font-medium text-gray-700">Cahiers des charges</Label>
-                        <Input id="cahier_charges_file" type="file" @change="onCcChange" class="mt-1.5 border-gray-300" />
-                        <InputError :message="form.errors.cahier_charges_file" />
-                    </div>
-                </FormSection>
-
-                <!-- Fournisseurs -->
-                <FormSection title="Fournisseurs concernés" :columns="1">
-                    <p class="text-sm text-gray-600 mb-4">Sélectionnez les fournisseurs à qui cet appel d'offres s'adresse.</p>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-60 overflow-y-auto border border-gray-200 p-4 rounded-md bg-white">
-                        <label v-for="fournisseur in fournisseurs" :key="fournisseur.id" class="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded">
-                            <input type="checkbox" :value="fournisseur.id" v-model="form.fournisseurs" class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                            <span class="text-sm text-gray-700">{{ fournisseur.nom }} <span class="text-gray-400 text-xs">({{ fournisseur.contact_email }})</span></span>
-                        </label>
-                    </div>
-                    <InputError :message="form.errors.fournisseurs" />
-                </FormSection>
-
-                <div class="flex justify-end gap-2 mt-4">
-                    <Link href="/appel-offres">
-                        <Button type="button" variant="outline">Annuler</Button>
-                    </Link>
-                    <Button type="submit" :disabled="form.processing" class="bg-purple-600 hover:bg-purple-700 text-white">
-                        {{ form.processing ? 'Création...' : 'Créer l\'Appel d\'Offres' }}
-                    </Button>
-                </div>
+                </aside>
             </form>
         </div>
     </AppLayout>
