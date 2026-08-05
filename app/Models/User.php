@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\ModuleAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Collection;
 use Laravel\Fortify\TwoFactorAuthenticatable;
@@ -21,18 +22,10 @@ class User extends AuthenticatableBase
      */
     protected $fillable = [
         'name',
-        'fonction',
         'email',
         'password',
-        'profile',
         'activated',
         'password_change_required',
-        'signature',
-        'agence_id',
-        'matricule',
-        'department_id',
-        'n_plus_1_user_id',
-        'n_plus_2_user_id',
     ];
 
     /**
@@ -43,57 +36,27 @@ class User extends AuthenticatableBase
     protected $hidden = [
         'password',
         'remember_token',
-        'signature',
     ];
 
     /**
-     * The accessors to append to the model's array form.
+     * Les accesseurs ajoutés à la sérialisation.
      *
-     * @var array
+     * `ability_rules` (format CASL) est calculé dynamiquement depuis les rôles
+     * assignés à l'utilisateur (trait HasRoles), pour être consommé par CASL
+     * côté frontend.
+     *
+     * @var array<int, string>
      */
-    public $appends = [
-        'has_signature',
+    protected $appends = [
+        'ability_rules',
     ];
 
     /**
-     * Casts d'énumération pour le profil
+     * Casts d'énumération (libellés lisibles)
      *
      * @var array
      */
     protected $enumCasts = [
-        [
-            'colum_name' => 'profile',
-            'additional_column_name' => 'profile_fr',
-            'choices' => [
-                'admin' => 'Adminitrateur',
-                'other' => 'Métier',
-                'monetique' => 'Monétique',
-            ],
-        ],
-        [
-            'colum_name' => 'profile',
-            'additional_column_name' => 'ability_rules',
-            'choices' => [
-                'admin' => [
-                    [
-                        'subject' => ['all'],
-                        'action' => ['manage'],
-                    ],
-                ],
-                'other' => [
-                    [
-                        'subject' => ['user'],
-                        'action' => ['read'],
-                    ],
-                ],
-                'monetique' => [
-                    [
-                        'subject' => ['user'],
-                        'action' => ['read'],
-                    ],
-                ],
-            ],
-        ],
         [
             'colum_name' => 'activated',
             'additional_column_name' => 'activated_fr',
@@ -106,11 +69,10 @@ class User extends AuthenticatableBase
             'colum_name' => 'password_change_required',
             'additional_column_name' => 'password_change_required_fr',
             'choices' => [
-                1 => 'Oui',
-                0 => 'Non',
+                1 => 'Obligatoire',
+                0 => 'Facultatif',
             ],
         ],
-
     ];
 
     /**
@@ -191,13 +153,22 @@ class User extends AuthenticatableBase
     }
 
     /**
-     * Relation avec les rôles (many-to-many)
+     * Relation avec les rôles (many-to-many).
+     * Pivot historique : user_role (config rbac.tables.role_user).
      */
-    public function roles()
+    public function roles(): BelongsToMany
     {
-        return $this->belongsToMany(Role::class, 'user_role', 'user_id', 'role_id');
+        return $this->belongsToMany(
+            Role::class,
+            config('advanced-api-controller.rbac.tables.role_user', 'user_role'),
+            'user_id',
+            'role_id'
+        );
     }
 
+    /**
+     * Vérifie un rôle par slug métier (ModuleAccess), pas uniquement par name Maravel.
+     */
     public function hasRole(string $roleSlug): bool
     {
         return ModuleAccess::userHasAnyRole($this, [$roleSlug]);
@@ -249,7 +220,6 @@ class User extends AuthenticatableBase
         return $this->hasMany(Fed::class, 'requester_id');
     }
 
-    /** Classeurs OD (pièces comptables / intégrations). */
     public function odClasseurs()
     {
         return $this->hasMany(OdClasseur::class);

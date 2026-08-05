@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Partenaire extends Model
 {
@@ -15,6 +16,11 @@ class Partenaire extends Model
     protected $appends = [
         'icone_url',
     ];
+
+    public function reconciliationRuns(): HasMany
+    {
+        return $this->hasMany(ReconciliationRun::class);
+    }
 
     public function getIconeUrlAttribute(): ?string
     {

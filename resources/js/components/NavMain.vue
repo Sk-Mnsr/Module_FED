@@ -223,6 +223,11 @@ watch(
                                             :is-active="isSubItemActive(subItem.href)"
                                         >
                                             <Link :href="subItem.href">
+                                                <component
+                                                    :is="resolveNavIcon(subItem.icon)"
+                                                    v-if="resolveNavIcon(subItem.icon)"
+                                                    class="size-4"
+                                                />
                                                 <span>{{ subItem.title }}</span>
                                             </Link>
                                         </SidebarMenuSubButton>

@@ -4,6 +4,8 @@ use App\Http\Controllers\API\AuthController;
 use App\Http\Controllers\API\FedController;
 use App\Http\Controllers\API\UserController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\API\PermissionController;
+use App\Http\Controllers\API\RoleController;
 
 Route::controller(AuthController::class)->group(function () {
     Route::post("auth/login", "login");

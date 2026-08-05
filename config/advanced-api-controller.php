@@ -86,6 +86,33 @@ return [
 
 	/*
 	|--------------------------------------------------------------------------
+	| RBAC Maravel
+	|--------------------------------------------------------------------------
+	|
+	| Le pivot historique du projet est `user_role` (pas `role_user`).
+	|
+	*/
+
+	'rbac' => [
+		'models' => [
+			'user' => \App\Models\User::class,
+			'role' => \App\Models\Role::class,
+			'permission' => \App\Models\Permission::class,
+		],
+		'tables' => [
+			'roles' => 'roles',
+			'permissions' => 'permissions',
+			'permission_role' => 'permission_role',
+			'role_user' => 'user_role',
+		],
+		'super_admin' => [
+			'flag_column' => 'is_super_admin',
+			'inject_manage_all' => true,
+		],
+	],
+
+	/*
+	|--------------------------------------------------------------------------
 	| Configuration des modèles
 	|--------------------------------------------------------------------------
 	|

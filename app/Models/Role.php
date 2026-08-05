@@ -4,25 +4,33 @@ namespace App\Models;
 
 use App\Support\ModuleAccess;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Maravel\Models\Role as BaseRole;
 
-class Role extends Model
+/**
+ * Rôle applicatif : colonnes métier historiques (slug, module…)
+ * + colonnes RBAC Maravel (name, label, is_super_admin).
+ */
+class Role extends BaseRole
 {
     use HasFactory;
 
     protected $fillable = [
         'nom',
         'slug',
+        'name',
+        'label',
         'module',
         'access_profile',
         'description',
         'actif',
+        'is_super_admin',
     ];
 
     protected $casts = [
         'actif' => 'boolean',
+        'is_super_admin' => 'boolean',
     ];
 
     /**
@@ -65,13 +73,5 @@ class Role extends Model
         }
 
         ModuleAccess::clearModuleRolesCache();
-    }
-
-    /**
-     * Relation avec les utilisateurs (many-to-many)
-     */
-    public function users()
-    {
-        return $this->belongsToMany(User::class, 'user_role', 'role_id', 'user_id');
     }
 }

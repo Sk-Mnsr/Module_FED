@@ -70,6 +70,21 @@ return [
     ],
 
     /*
+    | Gateway Python Reconciliation (reconc.py — uvicorn --port 8002).
+    | Le navigateur n’appelle jamais le gateway directement : Laravel proxyfie.
+    */
+    'reconciliation_gateway' => [
+        'url' => env('RECONCILIATION_GATEWAY_URL', 'http://127.0.0.1:8002'),
+        'api_key' => env('RECONCILIATION_GATEWAY_KEY'),
+        'api_key_header' => env('RECONCILIATION_GATEWAY_KEY_HEADER', 'apikey'),
+        'timeout' => (int) env('RECONCILIATION_GATEWAY_TIMEOUT', 180),
+        'verify_ssl' => (bool) filter_var(
+            env('RECONCILIATION_GATEWAY_VERIFY_SSL', 'true'),
+            FILTER_VALIDATE_BOOL
+        ),
+    ],
+
+    /*
     | En-tête imprimable (bordereau caisse Coficarte) — surcharge via .env si besoin.
     */
     'coficarte' => [

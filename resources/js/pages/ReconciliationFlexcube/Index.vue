@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { GitCompare, Users } from 'lucide-vue-next';
+import { GitCompare, History, Users } from 'lucide-vue-next';
 
 const breadcrumbs = [
     { title: 'Reconciliation Flexcube', href: '/reconciliation-flexcube' },
@@ -37,6 +37,23 @@ const breadcrumbs = [
                             <h2 class="font-semibold text-foreground">Reconciliation</h2>
                             <p class="mt-0.5 text-sm text-muted-foreground">
                                 Choisir un partenaire et lancer la réconciliation.
+                            </p>
+                        </div>
+                    </div>
+                </Link>
+
+                <Link
+                    href="/reconciliation-flexcube/historique"
+                    class="group rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-cyan-300 hover:shadow-md"
+                >
+                    <div class="flex items-center gap-3">
+                        <div class="rounded-lg bg-cyan-50 p-2 text-cyan-700 group-hover:bg-cyan-100">
+                            <History class="size-5" />
+                        </div>
+                        <div>
+                            <h2 class="font-semibold text-foreground">Historique</h2>
+                            <p class="mt-0.5 text-sm text-muted-foreground">
+                                Runs passés et fichiers Excel générés.
                             </p>
                         </div>
                     </div>

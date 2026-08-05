@@ -7,6 +7,7 @@
         "dev": "vite",
         "serve": "php -c php-dev.ini artisan serve",
         "dev:all": "concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"npm run serve\" \"php -c php-dev.ini artisan queue:listen --tries=1\" \"php -c php-dev.ini artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others",
+        "gateway:recon": "bash scripts/start-reconciliation-gateway.sh",
         "format": "prettier --write resources/",
         "format:check": "prettier --check resources/",
         "lint": "eslint . --fix"
@@ -16,6 +17,7 @@
         "@laravel/vite-plugin-wayfinder": "^0.1.3",
         "@tailwindcss/vite": "^4.1.11",
         "@types/node": "^22.13.5",
+        "@types/plotly.js": "^3.0.10",
         "@vitejs/plugin-vue": "^6.0.0",
         "@vue/eslint-config-typescript": "^14.3.0",
         "concurrently": "^9.0.1",
@@ -37,6 +39,7 @@
         "clsx": "^2.1.1",
         "laravel-vite-plugin": "^2.0.0",
         "lucide-vue-next": "^0.468.0",
+        "plotly.js-dist-min": "^3.7.0",
         "reka-ui": "^2.4.1",
         "signature_pad": "^5.1.3",
         "tailwind-merge": "^3.2.0",

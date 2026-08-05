@@ -4,6 +4,7 @@ import {
     CreditCard,
     FileText,
     GitCompare,
+    History,
     Layers,
     LayoutGrid,
     Link2,
@@ -27,6 +28,7 @@ const iconMap: Record<string, LucideIcon> = {
     'credit-card': CreditCard,
     layers: Layers,
     'git-compare': GitCompare,
+    history: History,
     settings: Settings,
 };
 

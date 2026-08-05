@@ -494,6 +494,7 @@ final class AppNavigation
 
         return [
             self::link('Reconciliation', '/reconciliation-flexcube/reconciliation', 'git-compare'),
+            self::link('Historique', '/reconciliation-flexcube/historique', 'history'),
             self::link('Partenaires', '/reconciliation-flexcube/partenaires', 'users'),
         ];
     }

@@ -15,6 +15,14 @@ use Maravel\Http\Controllers\APIController;
  */
 class UserController extends APIController
 {
+    protected string $modelClass = User::class;
+
+    protected array $indexSearchFieldList = ['name', 'email'];
+
+    protected array $storeRelationArray = [];
+
+    protected array $updateRelationArray = [];
+
     public function __construct()
     {
         parent::__construct();

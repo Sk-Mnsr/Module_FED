@@ -47,6 +47,7 @@ use App\Http\Controllers\EcritureComptableController;
 use App\Http\Controllers\ReconciliationFlexcubeController;
 use App\Http\Controllers\Reconciliation\PartenaireController;
 use App\Http\Controllers\Reconciliation\ReconciliationController;
+use App\Http\Controllers\Reconciliation\HistoriqueController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\FacilitiesFedController;
 use App\Http\Controllers\FedController;
@@ -229,10 +230,40 @@ Route::middleware(['auth'])->group(function () {
         Route::get('reconciliation-flexcube', [ReconciliationFlexcubeController::class, 'index'])
             ->name('reconciliation-flexcube.index');
 
+        Route::get('reconciliation-flexcube/historique', [HistoriqueController::class, 'index'])
+            ->name('reconciliation-flexcube.historique.index');
+        Route::get('reconciliation-flexcube/historique/{run}/download', [HistoriqueController::class, 'download'])
+            ->name('reconciliation-flexcube.historique.download');
+
         Route::get('reconciliation-flexcube/reconciliation', [ReconciliationController::class, 'index'])
             ->name('reconciliation-flexcube.reconciliation.index');
+        Route::get('reconciliation-flexcube/gateway/health', [ReconciliationController::class, 'health'])
+            ->name('reconciliation-flexcube.gateway.health');
+        Route::get('reconciliation-flexcube/gateway/partenaires', [ReconciliationController::class, 'gatewayPartenaires'])
+            ->name('reconciliation-flexcube.gateway.partenaires');
+        Route::get('reconciliation-flexcube/gateway/statuts', [ReconciliationController::class, 'gatewayStatuts'])
+            ->name('reconciliation-flexcube.gateway.statuts');
+        Route::get('reconciliation-flexcube/gateway/tables', [ReconciliationController::class, 'gatewayTables'])
+            ->name('reconciliation-flexcube.gateway.tables');
         Route::get('reconciliation-flexcube/reconciliation/{partenaire}', [ReconciliationController::class, 'show'])
             ->name('reconciliation-flexcube.reconciliation.show');
+        Route::post('reconciliation-flexcube/reconciliation/{partenaire}/charger', [ReconciliationController::class, 'charger'])
+            ->name('reconciliation-flexcube.reconciliation.charger');
+        Route::post('reconciliation-flexcube/reconciliation/{partenaire}/run', [ReconciliationController::class, 'run'])
+            ->name('reconciliation-flexcube.reconciliation.run');
+        Route::post('reconciliation-flexcube/reconciliation/{partenaire}/reset', [ReconciliationController::class, 'reset'])
+            ->name('reconciliation-flexcube.reconciliation.reset');
+        Route::get('reconciliation-flexcube/reconciliation/{partenaire}/results', [ReconciliationController::class, 'results'])
+            ->name('reconciliation-flexcube.reconciliation.results');
+        Route::get('reconciliation-flexcube/reconciliation/{partenaire}/carte', [ReconciliationController::class, 'carte'])
+            ->name('reconciliation-flexcube.reconciliation.carte');
+        Route::get('reconciliation-flexcube/reconciliation/{partenaire}/graphe/statut', [ReconciliationController::class, 'grapheStatut'])
+            ->name('reconciliation-flexcube.reconciliation.graphe.statut');
+        Route::get('reconciliation-flexcube/reconciliation/{partenaire}/graphe/evolution', [ReconciliationController::class, 'grapheEvolution'])
+            ->name('reconciliation-flexcube.reconciliation.graphe.evolution');
+        Route::get('reconciliation-flexcube/reconciliation/{partenaire}/db/{resource}', [ReconciliationController::class, 'db'])
+            ->where('resource', 'excel|excel-w2b|excel-b2w|flex|flex-w2b|flex-b2w|reconciliation|reconciliation-resume|reconciliation-taux|reconciliation-summary|reconciliation-carte-resume|reconciliation-agence|reconciliation-agence-resume|reconciliation-agence-taux')
+            ->name('reconciliation-flexcube.reconciliation.db');
 
         Route::get('reconciliation-flexcube/partenaires', [PartenaireController::class, 'index'])
             ->name('reconciliation-flexcube.partenaires.index');

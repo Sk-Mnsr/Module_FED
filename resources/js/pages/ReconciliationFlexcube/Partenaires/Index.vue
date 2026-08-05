@@ -180,7 +180,13 @@ function submitForm() {
                     <div>
                         <h1 class="text-xl font-semibold text-foreground">Partenaires</h1>
                         <p class="mt-1 text-sm text-muted-foreground">
-                            Référentiel des partenaires Flexcube (identifiant, nom et icône).
+                            Référentiel des partenaires Flexcube. L’identifiant doit correspondre à une clé
+                            gateway (<span class="font-mono">WAVE</span>,
+                            <span class="font-mono">ORANGE_AGENCE</span>,
+                            <span class="font-mono">WIZZ</span>,
+                            <span class="font-mono">WAVE_AGENCE</span>,
+                            <span class="font-mono">RIA_AGENCE</span>,
+                            <span class="font-mono">ORANGE_USSD</span>…).
                         </p>
                     </div>
                 </div>
@@ -257,7 +263,8 @@ function submitForm() {
                             v-model="form.identifiant"
                             required
                             autocomplete="off"
-                            placeholder="Ex. WAVE, OM, FREE"
+                            placeholder="Ex. WAVE, ORANGE_AGENCE"
+           
                         />
                         <InputError :message="errors.identifiant" />
                     </div>

@@ -34,5 +34,12 @@ final class EnsureApplicationStorage
         if (! File::exists($logFile)) {
             File::put($logFile, '');
         }
+
+        // Lien public/storage -> storage/app/public (icônes partenaires, uploads…)
+        $link = public_path('storage');
+        $target = storage_path('app/public');
+        if (! file_exists($link) && is_dir($target)) {
+            File::link($target, $link);
+        }
     }
 }
