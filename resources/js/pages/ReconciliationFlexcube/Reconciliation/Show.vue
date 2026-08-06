@@ -6,6 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Head, Link } from '@inertiajs/vue3';
 import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
     AlertCircle,
     AlertTriangle,
     ArrowLeft,
@@ -86,16 +92,8 @@ const filesLoaded = ref(false);
 /** true uniquement après un POST /run réussi — évite d’afficher d’anciens graphes/tables. */
 const reconciliationDone = ref(false);
 const gatewayMode = ref<string | null>(props.gateway.mode);
-const message = ref<{ type: 'info' | 'success' | 'error'; text: string } | null>(
-    props.gateway.online
-        ? null
-        : {
-              type: 'error',
-              text:
-                  props.gateway.error ??
-                  `Gateway inaccessible${props.gateway.url ? ` (${props.gateway.url})` : ''}. Démarrez reconc.py (port 8002).`,
-          },
-);
+/** Pas de bandeau rouge au chargement : le badge « Service indisponible » suffit. */
+const message = ref<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
 const summary = ref<SummaryRow[] | SummaryRow | null>(null);
 const taux = ref<TauxPayload | null>(null);
 const carte = ref<SummaryRow | null>(null);
@@ -948,7 +946,7 @@ const setupStep = computed(() => {
                 class="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(ellipse_at_top,_rgba(8,145,178,0.12),_transparent_60%),linear-gradient(180deg,#f8fafc_0%,transparent_100%)]"
             />
 
-            <div class="relative z-10 mx-auto flex max-w-7xl flex-col gap-6 p-6 lg:p-8">
+            <div class="relative z-10 flex w-full flex-col gap-6 p-4 sm:p-6 lg:px-8 lg:py-6 xl:px-10">
                 <!-- En-tête partenaire -->
                 <header
                     class="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5"
@@ -979,18 +977,40 @@ const setupStep = computed(() => {
                                 >
                                     {{ modeLabel }}
                                 </span>
+
                                 <span
-                                    class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                    :class="
-                                        gateway.online
-                                            ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200/80'
-                                            : 'bg-rose-50 text-rose-800 ring-1 ring-rose-200/80'
-                                    "
+                                    v-if="gateway.online"
+                                    class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-800 ring-1 ring-emerald-200/80"
                                 >
-                                    <Wifi v-if="gateway.online" class="size-3.5" />
-                                    <WifiOff v-else class="size-3.5" />
-                                    {{ gateway.online ? 'Service disponible' : 'Service indisponible' }}
+                                    <Wifi class="size-3.5" />
+                                    Service disponible
                                 </span>
+
+                                <TooltipProvider v-else :delay-duration="150">
+                                    <Tooltip>
+                                        <TooltipTrigger as-child>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-medium text-rose-800 ring-1 ring-rose-200/80"
+                                            >
+                                                <WifiOff class="size-3.5" />
+                                                Service indisponible
+                                            </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="bottom" class="max-w-xs text-xs leading-relaxed">
+                                            <p class="font-medium">Gateway inaccessible</p>
+                                            <p class="mt-1 text-primary-foreground/90">
+                                                Démarrez le service :
+                                                <code class="ml-1 rounded bg-black/20 px-1 py-0.5 font-mono">
+                                                    npm run gateway:recon
+                                                </code>
+                                            </p>
+                                            <p v-if="gateway.url" class="mt-1 opacity-80">
+                                                {{ gateway.url }}
+                                            </p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             </div>
                         </div>
                     </div>
@@ -1016,7 +1036,15 @@ const setupStep = computed(() => {
                     <CheckCircle2 v-if="message.type === 'success'" class="mt-0.5 size-4 shrink-0" />
                     <AlertCircle v-else-if="message.type === 'error'" class="mt-0.5 size-4 shrink-0" />
                     <CircleDot v-else class="mt-0.5 size-4 shrink-0" />
-                    <p>{{ message.text }}</p>
+                    <p class="min-w-0 flex-1 break-words">{{ message.text }}</p>
+                    <button
+                        type="button"
+                        class="shrink-0 rounded-md px-1.5 py-0.5 text-xs font-medium opacity-60 hover:opacity-100"
+                        title="Fermer"
+                        @click="message = null"
+                    >
+                        ✕
+                    </button>
                 </div>
 
                 <!-- Configuration : parcours en 3 étapes -->

@@ -361,7 +361,7 @@ class ReconciliationGatewayClient
             $response = $this->http()->get($url);
         } catch (ConnectionException $e) {
             throw new RuntimeException(
-                'Gateway inaccessible ('.$this->baseUrl().'). Démarrez reconc.py : npm run gateway:recon. '.$e->getMessage(),
+                'Gateway inaccessible ('.$this->baseUrl().'). Démarrez reconc.py : npm run gateway:recon.',
                 0,
                 $e
             );
@@ -397,7 +397,7 @@ class ReconciliationGatewayClient
             $response = $this->http()->get($url);
         } catch (ConnectionException $e) {
             throw new RuntimeException(
-                'Gateway inaccessible ('.$this->baseUrl().'). Démarrez reconc.py : npm run gateway:recon. '.$e->getMessage(),
+                'Gateway inaccessible ('.$this->baseUrl().'). Démarrez reconc.py : npm run gateway:recon.',
                 0,
                 $e
             );

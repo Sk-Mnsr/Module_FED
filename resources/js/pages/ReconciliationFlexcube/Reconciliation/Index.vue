@@ -57,7 +57,7 @@ function choisir(partenaire: PartenaireOption) {
                 aria-hidden="true"
             />
 
-            <div class="relative mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 md:px-8">
+            <div class="relative flex w-full flex-col gap-8 px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
                 <header class="flex flex-col gap-6 border-b border-slate-200/80 pb-8 md:flex-row md:items-end md:justify-between">
                     <div class="space-y-3">
                         <p class="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-800">
