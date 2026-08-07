@@ -109,7 +109,7 @@ const timeline = computed(() =>
         <div class="flex min-h-0 w-full flex-1 flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
             <button
                 type="button"
-                class="inline-flex items-center gap-2 text-sm font-medium text-violet-700 hover:text-violet-900 w-fit"
+                class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:text-primary w-fit"
                 @click="router.visit('/monetique/cartes/en-stock')"
             >
                 <ArrowLeft class="h-4 w-4" />
@@ -117,7 +117,7 @@ const timeline = computed(() =>
             </button>
 
             <div class="flex items-center gap-3">
-                <div class="p-3 bg-violet-100 text-violet-700 rounded-xl">
+                <div class="p-3 bg-primary/10 text-primary rounded-xl">
                     <History class="h-6 w-6" />
                 </div>
                 <div class="min-w-0 flex-1">

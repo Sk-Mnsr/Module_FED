@@ -50,12 +50,18 @@ const statusLabel = (status: string) => {
 
 const statusBadge = (status: string) => {
     switch (status) {
-        case 'brouillon': return 'bg-gray-100 text-gray-700';
-        case 'publie': return 'bg-blue-100 text-blue-700';
-        case 'cloture': return 'bg-orange-100 text-orange-700';
-        case 'en_evaluation': return 'bg-purple-100 text-purple-700';
-        case 'attribue': return 'bg-green-100 text-green-700';
-        default: return 'bg-gray-100 text-gray-700';
+        case 'brouillon':
+            return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
+        case 'publie':
+            return 'bg-primary/10 text-primary ring-1 ring-primary/20';
+        case 'cloture':
+            return 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80';
+        case 'en_evaluation':
+            return 'bg-amber-100 text-amber-800 ring-1 ring-amber-200/80';
+        case 'attribue':
+            return 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80';
+        default:
+            return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
     }
 };
 
@@ -90,7 +96,7 @@ const publier = () => {
                             </Button>
                         </Link>
                         <!-- Button to publish -->
-                        <Button @click="publier" class="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-2">
+                        <Button @click="publier" class="flex items-center gap-2">
                             <Send class="h-4 w-4" /> Publier
                         </Button>
                     </template>
@@ -166,13 +172,13 @@ const publier = () => {
                         <div class="space-y-3">
                             <div v-if="appelOffre.dao_path" class="flex items-center justify-between p-2 bg-gray-50 rounded border">
                                 <span class="text-sm font-medium text-gray-700">Dossier d'Appel d'Offres (DAO)</span>
-                                <a :href="`/storage/${appelOffre.dao_path}`" target="_blank" class="text-indigo-600 hover:underline text-sm font-medium">Télécharger</a>
+                                <a :href="`/storage/${appelOffre.dao_path}`" target="_blank" class="text-sm font-medium text-primary hover:underline">Télécharger</a>
                             </div>
                             <div v-else class="text-sm text-gray-500 italic p-2">Aucun test DAO joint.</div>
 
                             <div v-if="appelOffre.cahier_charges_path" class="flex items-center justify-between p-2 bg-gray-50 rounded border">
                                 <span class="text-sm font-medium text-gray-700">Cahier des charges</span>
-                                <a :href="`/storage/${appelOffre.cahier_charges_path}`" target="_blank" class="text-indigo-600 hover:underline text-sm font-medium">Télécharger</a>
+                                <a :href="`/storage/${appelOffre.cahier_charges_path}`" target="_blank" class="text-sm font-medium text-primary hover:underline">Télécharger</a>
                             </div>
                             <div v-else class="text-sm text-gray-500 italic p-2">Aucun cahier des charges joint.</div>
                         </div>
@@ -217,7 +223,7 @@ const publier = () => {
                         <h2 class="text-xl font-semibold mb-2">Déposer une offre</h2>
                         <p class="text-sm text-gray-500 mb-4">Cet appel d'offres est ouvert aux soumissions.</p>
                         <Link :href="`/appel-offres/${appelOffre.id}/offres/create`">
-                            <Button class="w-full bg-green-600 hover:bg-green-700 text-white">Soumettre une offre</Button>
+                            <Button class="w-full">Soumettre une offre</Button>
                         </Link>
                     </div>
 
@@ -225,7 +231,7 @@ const publier = () => {
                         <h2 class="text-xl font-semibold mb-2">Ouverture des plis</h2>
                         <p class="text-sm text-gray-500 mb-4">Gérer l'ouverture officielle des offres soumises.</p>
                         <Link :href="`/appel-offres/${appelOffre.id}/opening-session`">
-                            <Button class="w-full bg-indigo-600 hover:bg-indigo-700 text-white">Aller à la session</Button>
+                            <Button class="w-full">Aller à la session</Button>
                         </Link>
                     </div>
 
@@ -233,7 +239,7 @@ const publier = () => {
                         <h2 class="text-xl font-semibold mb-2">Tableau Comparatif</h2>
                         <p class="text-sm text-gray-500 mb-4">Voir les scores et le classement des offres évaluées.</p>
                         <Link :href="`/appel-offres/${appelOffre.id}/compare`">
-                            <Button class="w-full bg-purple-600 hover:bg-purple-700 text-white">Consulter le classement final</Button>
+                            <Button class="w-full">Consulter le classement final</Button>
                         </Link>
                     </div>
                 </div>

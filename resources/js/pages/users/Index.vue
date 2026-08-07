@@ -5,12 +5,10 @@ import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable, { type Column } from '@/components/DataTable.vue';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { getInitials } from '@/composables/useInitials';
 import { ref, computed } from 'vue';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Code, Eye, Pencil, Trash2, Lock, Unlock, Upload } from 'lucide-vue-next';
+import { Eye, Pencil, Trash2, Lock, Unlock, Upload, Users, Plus, RotateCcw } from 'lucide-vue-next';
 
 interface User {
     id: number;
@@ -59,13 +57,17 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
+const fieldClass =
+    'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
+const selectClass =
+    'flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
 const currentPage = computed(() => {
     return props.users.current_page || props.users.meta?.current_page || 1;
 });
 const totalItems = computed(() => {
-    // Laravel paginate() retourne total à la racine, pas dans meta
-    const total = props.users.total || props.users.meta?.total || 0;
-    return total;
+    return props.users.total || props.users.meta?.total || 0;
 });
 const perPage = computed(() => {
     return props.users.per_page || props.users.meta?.per_page || 5;
@@ -79,78 +81,30 @@ const deleteUser = (id: number) => {
 
 const toggleUser = (id: number) => {
     if (confirm('Êtes-vous sûr de vouloir changer le statut de cet utilisateur ?')) {
-        router.post(`/users/${id}/toggle`, {}, {
-            preserveScroll: true,
-            preserveState: true,
-            only: ['users'],
-            onSuccess: () => {
-                // Le message de succès est géré par le contrôleur
+        router.post(
+            `/users/${id}/toggle`,
+            {},
+            {
+                preserveScroll: true,
+                preserveState: true,
+                only: ['users'],
             },
-        });
+        );
     }
-};
-
-const getAvatarColor = (name: string) => {
-    const colors = [
-        'bg-purple-500',
-        'bg-blue-500',
-        'bg-green-500',
-        'bg-yellow-500',
-        'bg-pink-500',
-        'bg-indigo-500',
-        'bg-red-500',
-        'bg-teal-500',
-    ];
-    const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
-};
-
-const getStatusBadge = (isActive: boolean) => {
-    if (isActive) {
-        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-    }
-    return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-};
-
-const getStatusLabel = (isActive: boolean) => {
-    return isActive ? 'Actif' : 'Inactif';
 };
 
 const columns: Column[] = [
-    {
-        key: 'name',
-        title: 'NOM',
-        sortable: true,
-    },
-    {
-        key: 'idflex',
-        title: 'IDFLEX',
-        sortable: true,
-    },
-    {
-        key: 'email',
-        title: 'EMAIL',
-        sortable: true,
-    },
-    {
-        key: 'agence',
-        title: 'ENTITÉ',
-    },
-    {
-        key: 'roles',
-        title: 'RÔLES',
-    },    {
-        key: 'activated',
-        title: 'ACTIVATION',
-    },
-    {
-        key: 'actions',
-        title: 'ACTIONS',
-    },
+    { key: 'name', title: 'NOM', sortable: true },
+    { key: 'idflex', title: 'IDFLEX', sortable: true },
+    { key: 'email', title: 'EMAIL', sortable: true },
+    { key: 'agence', title: 'ENTITÉ' },
+    { key: 'roles', title: 'RÔLES' },
+    { key: 'activated', title: 'ACTIVATION' },
+    { key: 'actions', title: 'ACTIONS' },
 ];
 
 const tableData = computed(() => {
-    return props.users.data.map(user => ({
+    return props.users.data.map((user) => ({
         id: user.id,
         name: user.name,
         idflex: user.matricule || user.email?.split('@')[0] || '-',
@@ -162,10 +116,6 @@ const tableData = computed(() => {
     }));
 });
 
-const reload = () => {
-    router.reload({ only: ['users'] });
-};
-
 const applyFilters = () => {
     const params = new URLSearchParams();
     Object.entries(filters.value).forEach(([key, value]) => {
@@ -173,12 +123,17 @@ const applyFilters = () => {
             params.set(key, value);
         }
     });
-    // Réinitialiser à la page 1 lors de l'application des filtres
     params.set('page', '1');
     router.visit(`/users?${params.toString()}`, { preserveScroll: true });
 };
 
-// Initialiser les filtres depuis l'URL
+const resetFilters = () => {
+    filters.value.role = '';
+    filters.value.activation = '';
+    filters.value.search = '';
+    applyFilters();
+};
+
 const initializeFilters = () => {
     const urlParams = new URLSearchParams(window.location.search);
     filters.value.role = urlParams.get('role') || '';
@@ -186,34 +141,24 @@ const initializeFilters = () => {
     filters.value.search = urlParams.get('search') || '';
 };
 
-// Initialiser au chargement
 initializeFilters();
 
 const handlePageChange = (page: number) => {
-    console.log('handlePageChange called:', { page, currentPage: currentPage.value, totalItems: totalItems.value, perPage: perPage.value });
-    
-    // Récupérer tous les paramètres actuels
     const urlParams = new URLSearchParams(window.location.search);
-    
-    // Mettre à jour le paramètre page
     urlParams.set('page', page.toString());
-    
-    // Préserver per_page s'il existe
     if (perPage.value) {
         urlParams.set('per_page', perPage.value.toString());
     }
-    
-    // Construire l'URL complète
-    const newUrl = `/users?${urlParams.toString()}`;
-    
-    console.log('Navigating to:', newUrl);
-    
-    router.get(newUrl, {}, {
-        preserveScroll: true,
-        preserveState: true,
-        only: ['users'],
-        replace: false,
-    });
+    router.get(
+        `/users?${urlParams.toString()}`,
+        {},
+        {
+            preserveScroll: true,
+            preserveState: true,
+            only: ['users'],
+            replace: false,
+        },
+    );
 };
 
 const handleItemsPerPageChange = (items: number) => {
@@ -251,168 +196,206 @@ const submitImport = () => {
     <Head title="Utilisateurs" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            <div class="flex flex-wrap items-center justify-between gap-4">
-                <h1 class="text-3xl font-bold text-gray-900">Liste des utilisateurs</h1>
-                <div class="flex items-center gap-2">
-                    <Button variant="outline" @click="showImportModal = true" class="text-blue-700 hover:bg-blue-50 hover:text-blue-800">
-                        <Upload class="mr-2 h-4 w-4" /> Importer
-                    </Button>
-                    <Link href="/users/create">
-                        <Button class="bg-purple-600 hover:bg-purple-700">+ Nouveau</Button>
-                    </Link>
-                </div>
-            </div>
-
-            <!-- Section Filtres -->
-            <div class="rounded-lg border border-gray-200 bg-white p-4">
-                <h2 class="mb-4 text-base font-semibold text-gray-700">Filtres</h2>
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                        <label class="mb-1.5 block text-base font-medium text-gray-700">Rôle</label>
-                        <select
-                            v-model="filters.role"
-                            class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
-                        >
-                            <option value="">Tous</option>
-                            <option
-                                v-for="role in props.roles || []"
-                                :key="role.id"
-                                :value="role.id"
+        <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                <div
+                    class="border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div
+                                class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
                             >
-                                {{ role.nom }}
-                            </option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="mb-1.5 block text-base font-medium text-gray-700">Activation</label>
-                        <select
-                            v-model="filters.activation"
-                            class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
-                        >
-                            <option value="">Tous</option>
-                            <option value="1">Activé</option>
-                            <option value="0">Désactivé</option>
-                        </select>
+                                <Users class="size-5" />
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                    Paramétrage
+                                </p>
+                                <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                    Liste des utilisateurs
+                                </h1>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    <span class="font-semibold text-primary">{{ totalItems }}</span>
+                                    utilisateur{{ totalItems > 1 ? 's' : '' }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Button
+                                variant="outline"
+                                class="border-slate-300"
+                                @click="showImportModal = true"
+                            >
+                                <Upload class="mr-2 size-4" />
+                                Importer
+                            </Button>
+                            <Button as-child>
+                                <Link href="/users/create" class="inline-flex items-center gap-2">
+                                    <Plus class="size-4" />
+                                    Nouveau
+                                </Link>
+                            </Button>
+                        </div>
                     </div>
                 </div>
-                <div class="mt-4 flex items-center gap-2">
-                    <Input
-                        v-model="filters.search"
-                        type="text"
-                        placeholder="Rechercher (nom, email, IDFLEX…)"
-                        class="flex-1 border-gray-300 focus-visible:border-gray-400"
-                        @keyup.enter="applyFilters"
-                    />
-                    <Button @click="applyFilters" class="bg-blue-600 hover:bg-blue-700">
-                        Appliquer les filtres
-                    </Button>
-                    <Button variant="outline" @click="() => { filters.role = ''; filters.activation = ''; filters.search = ''; applyFilters(); }" class="border-gray-300">
-                        Réinitialiser
-                    </Button>
+
+                <div class="space-y-4 border-b border-border/80 px-4 py-4 sm:px-5">
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div>
+                            <label class="mb-1.5 block text-sm font-medium text-foreground">Rôle</label>
+                            <select v-model="filters.role" :class="selectClass">
+                                <option value="">Tous</option>
+                                <option
+                                    v-for="role in props.roles || []"
+                                    :key="role.id"
+                                    :value="role.id"
+                                >
+                                    {{ role.nom }}
+                                </option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-sm font-medium text-foreground">Activation</label>
+                            <select v-model="filters.activation" :class="selectClass">
+                                <option value="">Tous</option>
+                                <option value="1">Activé</option>
+                                <option value="0">Désactivé</option>
+                            </select>
+                        </div>
+                        <div class="md:col-span-2 lg:col-span-1">
+                            <label class="mb-1.5 block text-sm font-medium text-foreground">Recherche</label>
+                            <Input
+                                v-model="filters.search"
+                                type="text"
+                                placeholder="Rechercher (nom, email, IDFLEX…)"
+                                :class="fieldClass"
+                                @keyup.enter="applyFilters"
+                            />
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <Button type="button" @click="applyFilters">Appliquer les filtres</Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            class="border-slate-300"
+                            @click="resetFilters"
+                        >
+                            <RotateCcw class="mr-2 size-4" />
+                            Réinitialiser
+                        </Button>
+                    </div>
                 </div>
-            </div>
 
-            <DataTable
-                :headers="columns"
-                :items="tableData"
-                :current-page="currentPage"
-                :items-per-page="perPage"
-                :total-items="totalItems"
-                show-select
-                @page-change="handlePageChange"
-                @items-per-page-change="handleItemsPerPageChange"
-                @sort="handleSort"
-            >
-                <template #item.name="{ item }">
-                    <span class="text-gray-900 font-medium">{{ item.name }}</span>
-                </template>
+                <div class="p-4 sm:p-5">
+                    <DataTable
+                        :headers="columns"
+                        :items="tableData"
+                        :current-page="currentPage"
+                        :items-per-page="perPage"
+                        :total-items="totalItems"
+                        show-select
+                        @page-change="handlePageChange"
+                        @items-per-page-change="handleItemsPerPageChange"
+                        @sort="handleSort"
+                    >
+                        <template #item.name="{ item }">
+                            <span class="font-medium text-foreground">{{ item.name }}</span>
+                        </template>
 
-                <template #item.idflex="{ item }">
-                    <span class="text-gray-900">{{ item.idflex }}</span>
-                </template>
+                        <template #item.idflex="{ item }">
+                            <span class="tabular-nums text-foreground">{{ item.idflex }}</span>
+                        </template>
 
-                <template #item.email="{ item }">
-                    <span class="text-gray-900">{{ item.email }}</span>
-                </template>
+                        <template #item.email="{ item }">
+                            <span class="text-foreground">{{ item.email }}</span>
+                        </template>
 
-                <template #item.agence="{ item }">
-                    <span class="text-gray-900 text-sm">{{ item.agence }}</span>
-                </template>
+                        <template #item.agence="{ item }">
+                            <span class="text-sm text-foreground">{{ item.agence }}</span>
+                        </template>
 
-                <template #item.roles="{ item }">
-                    <div class="flex flex-wrap gap-1">
-                        <span
-                            v-for="role in item.roles"
-                            :key="role.id"
-                            class="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
-                        >
-                            {{ role.nom }}
-                        </span>
-                        <span v-if="!item.roles || item.roles.length === 0" class="text-gray-400 text-xs italic">
-                            Aucun rôle
-                        </span>
-                    </div>
-                </template>
+                        <template #item.roles="{ item }">
+                            <div class="flex flex-wrap gap-1">
+                                <span
+                                    v-for="role in item.roles"
+                                    :key="role.id"
+                                    class="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-primary/20"
+                                >
+                                    {{ role.nom }}
+                                </span>
+                                <span
+                                    v-if="!item.roles || item.roles.length === 0"
+                                    class="text-xs italic text-muted-foreground"
+                                >
+                                    Aucun rôle
+                                </span>
+                            </div>
+                        </template>
 
-                <template #item.activated="{ item }">
-                    <div class="flex items-center gap-2">
-                        <component 
-                            :is="item.activated ? Unlock : Lock" 
-                            :class="[
-                                'h-5 w-5',
-                                item.activated ? 'text-green-600' : 'text-gray-400'
-                            ]" 
-                        />
-                        <span 
-                            :class="[
-                                'text-base font-medium',
-                                item.activated ? 'text-green-700' : 'text-gray-500'
-                            ]"
-                        >
-                            {{ item.activated ? 'Activé' : 'Désactivé' }}
-                        </span>
-                    </div>
-                </template>
+                        <template #item.activated="{ item }">
+                            <div class="flex items-center gap-2">
+                                <component
+                                    :is="item.activated ? Unlock : Lock"
+                                    :class="[
+                                        'size-5',
+                                        item.activated ? 'text-emerald-600' : 'text-muted-foreground',
+                                    ]"
+                                />
+                                <span
+                                    :class="[
+                                        'text-sm font-medium',
+                                        item.activated ? 'text-emerald-700' : 'text-muted-foreground',
+                                    ]"
+                                >
+                                    {{ item.activated ? 'Activé' : 'Désactivé' }}
+                                </span>
+                            </div>
+                        </template>
 
-                <template #item.actions="{ item }">
-                    <div class="flex items-center gap-1">
-                        <Link
-                            :href="`/users/${item.id}`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                            title="Voir"
-                        >
-                            <Eye class="h-5 w-5" />
-                        </Link>
-                        <Link
-                            :href="`/users/${item.id}/edit`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                            title="Modifier"
-                        >
-                            <Pencil class="h-5 w-5" />
-                        </Link>
-                        <button
-                            @click="toggleUser(item.id)"
-                            :class="[
-                                'inline-flex items-center justify-center rounded-md p-2 transition-colors',
-                                item.activated 
-                                    ? 'text-orange-600 hover:bg-orange-50 hover:text-orange-700' 
-                                    : 'text-green-600 hover:bg-green-50 hover:text-green-700'
-                            ]"
-                            :title="item.activated ? 'Désactiver' : 'Activer'"
-                        >
-                            <component :is="item.activated ? Lock : Unlock" class="h-5 w-5" />
-                        </button>
-                        <button
-                            @click="deleteUser(item.id)"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
-                            title="Supprimer"
-                        >
-                            <Trash2 class="h-5 w-5" />
-                        </button>
-                    </div>
-                </template>
-            </DataTable>
+                        <template #item.actions="{ item }">
+                            <div class="flex items-center gap-1">
+                                <Link
+                                    :href="`/users/${item.id}`"
+                                    class="inline-flex items-center justify-center rounded-md p-2 text-slate-600 transition-colors hover:bg-primary/5 hover:text-primary"
+                                    title="Voir"
+                                >
+                                    <Eye class="size-5" />
+                                </Link>
+                                <Link
+                                    :href="`/users/${item.id}/edit`"
+                                    class="inline-flex items-center justify-center rounded-md p-2 text-slate-600 transition-colors hover:bg-primary/5 hover:text-primary"
+                                    title="Modifier"
+                                >
+                                    <Pencil class="size-5" />
+                                </Link>
+                                <button
+                                    type="button"
+                                    :class="[
+                                        'inline-flex items-center justify-center rounded-md p-2 transition-colors',
+                                        item.activated
+                                            ? 'text-orange-600 hover:bg-orange-50 hover:text-orange-700'
+                                            : 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700',
+                                    ]"
+                                    :title="item.activated ? 'Désactiver' : 'Activer'"
+                                    @click="toggleUser(item.id)"
+                                >
+                                    <component :is="item.activated ? Lock : Unlock" class="size-5" />
+                                </button>
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center justify-center rounded-md p-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+                                    title="Supprimer"
+                                    @click="deleteUser(item.id)"
+                                >
+                                    <Trash2 class="size-5" />
+                                </button>
+                            </div>
+                        </template>
+                    </DataTable>
+                </div>
+            </section>
         </div>
 
         <Dialog :open="showImportModal" @update:open="showImportModal = $event">
@@ -420,17 +403,23 @@ const submitImport = () => {
                 <DialogHeader>
                     <DialogTitle>Importer des utilisateurs</DialogTitle>
                 </DialogHeader>
-                <form @submit.prevent="submitImport" class="space-y-4 py-4">
-                    <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+                <form class="space-y-4 py-4" @submit.prevent="submitImport">
+                    <div
+                        class="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground"
+                    >
                         <p>Importez un fichier Excel ou CSV. Les lignes sans email, nom ou fonction sont ignorées.</p>
                         <p class="mt-2 font-medium">
-                            <a href="/users/export-template" class="text-blue-700 underline hover:text-blue-900">
+                            <a
+                                href="/users/export-template"
+                                class="text-primary underline hover:text-primary/80"
+                            >
                                 Télécharger le template Excel
                             </a>
                         </p>
-                        <p class="mt-2 text-xs text-blue-700">
-                            Colonnes : Nom, Fonction, Email, IDFLEX, Mot de passe (optionnel), Role (slug ou nom), Departement, Code agence.
-                            Si le mot de passe est vide, un mot de passe temporaire est généré (changement obligatoire à la première connexion).
+                        <p class="mt-2 text-xs text-muted-foreground">
+                            Colonnes : Nom, Fonction, Email, IDFLEX, Mot de passe (optionnel), Role (slug ou
+                            nom), Departement, Code agence. Si le mot de passe est vide, un mot de passe
+                            temporaire est généré (changement obligatoire à la première connexion).
                         </p>
                     </div>
                     <div class="space-y-2">
@@ -439,20 +428,30 @@ const submitImport = () => {
                             id="import-file"
                             type="file"
                             accept=".xlsx,.xls,.csv"
-                            @input="importForm.file = ($event.target as HTMLInputElement).files?.[0] ?? null"
+                            :class="fieldClass"
                             required
+                            @input="
+                                importForm.file =
+                                    ($event.target as HTMLInputElement).files?.[0] ?? null
+                            "
                         />
                         <p v-if="importForm.errors.file" class="text-sm text-red-600">
                             {{ importForm.errors.file }}
                         </p>
                     </div>
                     <DialogFooter class="pt-4">
-                        <Button type="button" variant="outline" @click="showImportModal = false" :disabled="importForm.processing">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            class="border-slate-300"
+                            :disabled="importForm.processing"
+                            @click="showImportModal = false"
+                        >
                             Annuler
                         </Button>
-                        <Button type="submit" class="bg-blue-600 hover:bg-blue-700" :disabled="importForm.processing">
-                            <Upload v-if="!importForm.processing" class="mr-2 h-4 w-4" />
-                            {{ importForm.processing ? 'Importation en cours...' : 'Importer' }}
+                        <Button type="submit" :disabled="importForm.processing">
+                            <Upload v-if="!importForm.processing" class="mr-2 size-4" />
+                            {{ importForm.processing ? 'Importation en cours…' : 'Importer' }}
                         </Button>
                     </DialogFooter>
                 </form>
@@ -460,4 +459,3 @@ const submitImport = () => {
         </Dialog>
     </AppLayout>
 </template>
-

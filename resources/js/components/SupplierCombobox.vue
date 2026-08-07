@@ -88,7 +88,7 @@ const displayValue = computed(() => {
                 :disabled="disabled"
                 @focus="isOpen = true"
                 @blur="handleBlur"
-                class="h-10 w-full pr-10 text-sm font-medium"
+                class="h-10 w-full border-slate-300 bg-white pr-10 text-sm font-medium shadow-sm focus-visible:border-primary focus-visible:ring-primary/30"
                 :class="{ 'placeholder:text-gray-900': selectedSupplier }"
             />
             
@@ -120,8 +120,8 @@ const displayValue = computed(() => {
                     v-for="supplier in filteredSuppliers"
                     :key="supplier.id"
                     @mousedown="selectSupplier(supplier)"
-                    class="flex cursor-pointer flex-col px-4 py-2 hover:bg-blue-50 transition-colors"
-                    :class="{ 'bg-blue-50 font-bold text-blue-700': selectedSupplier?.id === supplier.id }"
+                    class="flex cursor-pointer flex-col px-4 py-2 transition-colors hover:bg-primary/5"
+                    :class="{ 'bg-primary/5 font-bold text-primary': selectedSupplier?.id === supplier.id }"
                 >
                     <span class="text-sm uppercase font-bold">{{ supplier.nom }}</span>
                     <span v-if="supplier.categorie" class="text-xs text-gray-500">{{ supplier.categorie }}</span>

@@ -134,14 +134,14 @@ const getInitials = (name: string) => {
 
 const getAvatarColor = (name: string) => {
     const colors = [
-        'bg-purple-500',
-        'bg-blue-500',
-        'bg-green-500',
-        'bg-yellow-500',
-        'bg-pink-500',
-        'bg-indigo-500',
-        'bg-red-500',
-        'bg-teal-500',
+        'bg-primary',
+        'bg-slate-600',
+        'bg-emerald-600',
+        'bg-amber-600',
+        'bg-rose-600',
+        'bg-cyan-700',
+        'bg-orange-600',
+        'bg-teal-600',
     ];
     const index = name.charCodeAt(0) % colors.length;
     return colors[index];
@@ -361,7 +361,7 @@ const handleItemsPerPageChange = (value: string) => {
                                 variant="ghost"
                                 size="sm"
                                 class="h-8 w-8"
-                                :class="{ 'bg-purple-600 text-white hover:bg-purple-700': page === props.currentPage }"
+                                :class="{ 'bg-primary text-primary-foreground hover:bg-primary/90': page === props.currentPage }"
                                 @click="() => goToPage(page)"
                             >
                                 {{ page }}

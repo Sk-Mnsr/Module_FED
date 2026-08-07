@@ -207,7 +207,7 @@ const statutBadgeClass = (k: StockStatutKey) => {
         case 'en_attente_encaissement':
             return 'bg-amber-50 text-amber-800 border-amber-100';
         case 'en_agence':
-            return 'bg-violet-50 text-violet-700 border-violet-100';
+            return 'bg-primary/5 text-primary border-primary/20';
         case 'au_siege':
             return 'bg-gray-100 text-gray-700 border-gray-200';
     }
@@ -230,11 +230,11 @@ const statutBadgeClass = (k: StockStatutKey) => {
                         Export
                     </Button>
                     <template v-if="canResponsableMonetique">
-                        <Button class="bg-violet-600 hover:bg-violet-700" @click="router.visit('/monetique/cartes/ajouter')">
+                        <Button class="bg-primary hover:bg-primary/90" @click="router.visit('/monetique/cartes/ajouter')">
                             <Plus class="h-4 w-4 mr-2" />
                             Ajouter
                         </Button>
-                        <Button class="bg-violet-600 hover:bg-violet-700" @click="router.visit('/monetique/cartes/modifier-prix')">
+                        <Button class="bg-primary hover:bg-primary/90" @click="router.visit('/monetique/cartes/modifier-prix')">
                             <Pencil class="h-4 w-4 mr-2" />
                             Modifier Prix
                         </Button>
@@ -248,10 +248,10 @@ const statutBadgeClass = (k: StockStatutKey) => {
 
             <section
                 v-if="stockPanorama"
-                class="rounded-xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 via-white to-white p-6 shadow-sm space-y-5"
+                class="rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 via-white to-white p-6 shadow-sm space-y-5"
             >
                 <div class="flex items-start gap-3">
-                    <div class="rounded-lg bg-violet-100 p-2 text-violet-700">
+                    <div class="rounded-lg bg-primary/10 p-2 text-primary">
                         <LayoutDashboard class="h-5 w-5" />
                     </div>
                     <div>
@@ -281,8 +281,8 @@ const statutBadgeClass = (k: StockStatutKey) => {
                         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Au siège</p>
                         <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ stockPanorama.totals.au_siege }}</p>
                     </div>
-                    <div class="rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-3">
-                        <p class="text-xs font-medium text-violet-800 uppercase tracking-wide">Stock agence</p>
+                    <div class="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+                        <p class="text-xs font-medium text-primary uppercase tracking-wide">Stock agence</p>
                         <p class="text-2xl font-bold text-gray-900 tabular-nums">{{ stockPanorama.totals.en_agence_stock }}</p>
                     </div>
                     <div class="rounded-lg border border-emerald-100 bg-emerald-50/60 px-4 py-3">
@@ -321,7 +321,7 @@ const statutBadgeClass = (k: StockStatutKey) => {
                                 </td>
                                
                                 <td class="px-4 py-2.5 text-right tabular-nums">{{ row.au_siege }}</td>
-                                <td class="px-4 py-2.5 text-right tabular-nums text-violet-800">{{ row.en_agence_stock }}</td>
+                                <td class="px-4 py-2.5 text-right tabular-nums text-primary">{{ row.en_agence_stock }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums text-emerald-800">{{ row.en_vente_cc }}</td>
                                  <td class="px-4 py-2.5 text-right font-semibold tabular-nums text-gray-900">{{ row.total }}</td>
                                 <td class="px-4 py-2.5 text-right tabular-nums text-gray-700">{{ formatCfa(row.valeur_stock_cfa) }}</td>

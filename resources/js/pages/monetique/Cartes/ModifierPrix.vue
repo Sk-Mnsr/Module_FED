@@ -49,11 +49,11 @@ const selectedIds = ref<number[]>([]);
 
 const selectClass =
     'flex h-11 w-full rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-none ' +
-    'focus-visible:outline-none focus-visible:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-500/20';
+    'focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30';
 
 const inputClass =
     'h-11 rounded-lg border-gray-200 bg-white shadow-none tabular-nums ' +
-    'focus-visible:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-500/20';
+    'focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30';
 
 watch(
     () => props.referenceCourante,
@@ -151,12 +151,12 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
     <Head title="Monétique — Cartes — Modifier prix" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50/80 via-white to-violet-50/20">
+        <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50/80 via-white to-primary/5">
             <div class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
                 <header class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div class="flex items-start gap-4">
                         <div
-                            class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-violet-600 text-white shadow-lg shadow-violet-600/25"
+                            class="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20"
                         >
                             <CreditCard class="h-7 w-7" />
                         </div>
@@ -173,7 +173,7 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
                         class="h-11 shrink-0 border-gray-200 bg-white/90 shadow-sm hover:bg-white"
                         @click="router.visit('/monetique/cartes/en-stock')"
                     >
-                        <ArrowLeft class="mr-2 h-4 w-4 text-violet-600" />
+                        <ArrowLeft class="mr-2 h-4 w-4 text-primary" />
                         Retour au stock
                     </Button>
                 </header>
@@ -183,11 +183,11 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
                     <div class="overflow-hidden rounded-2xl border border-gray-200/80 bg-white shadow-md shadow-gray-200/30">
                         <div class="flex items-start gap-4 border-b border-gray-100 bg-gray-50/70 px-5 py-4 sm:px-6">
                             <span
-                                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-sm font-bold text-violet-800"
+                                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary"
                                 >1</span
                             >
                             <div class="flex min-w-0 flex-1 items-start gap-3 pt-0.5">
-                                <FileText class="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
+                                <FileText class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                                 <div>
                                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-gray-500">Référence de facture</p>
                                     <p class="mt-0.5 text-sm text-gray-600">
@@ -230,11 +230,11 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
                     >
                         <div class="flex flex-wrap items-start gap-4 border-b border-gray-100 bg-gray-50/70 px-5 py-4 sm:px-6">
                             <span
-                                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-sm font-bold text-violet-800"
+                                class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary"
                                 >2</span
                             >
                             <div class="flex min-w-0 flex-1 items-start gap-3 pt-0.5">
-                                <ListChecks class="mt-0.5 h-5 w-5 shrink-0 text-violet-600" />
+                                <ListChecks class="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                                 <div class="min-w-0 flex-1">
                                     <p class="text-xs font-bold uppercase tracking-[0.12em] text-gray-500">Cartes concernées</p>
                                     <p class="mt-0.5 break-words text-sm text-gray-600">
@@ -254,13 +254,13 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
                                     <input
                                         v-model="allSelected"
                                         type="checkbox"
-                                        class="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                                        class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                                     />
                                     Tout sélectionner
                                     <span class="font-normal text-gray-500">({{ cartesLot.length }})</span>
                                 </label>
                                 <span
-                                    class="inline-flex w-fit items-center rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-900"
+                                    class="inline-flex w-fit items-center rounded-full border border-primary/25 bg-primary/5 px-3 py-1 text-xs font-semibold text-primary"
                                 >
                                     {{ selectedIds.length }} sélectionnée(s)
                                 </span>
@@ -281,13 +281,13 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
                                     <tr
                                         v-for="c in cartesLot"
                                         :key="c.id"
-                                        class="bg-white transition-colors hover:bg-violet-50/40"
-                                        :class="selectedIds.includes(c.id) ? 'bg-violet-50/60' : ''"
+                                        class="bg-white transition-colors hover:bg-primary/5"
+                                        :class="selectedIds.includes(c.id) ? 'bg-primary/5' : ''"
                                     >
                                         <td class="px-4 py-3 align-middle">
                                             <input
                                                 type="checkbox"
-                                                class="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                                                class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                                                 :checked="selectedIds.includes(c.id)"
                                                 @change="toggleId(c.id)"
                                             />
@@ -364,7 +364,7 @@ const hasLot = computed(() => Boolean(props.referenceCourante && props.cartesLot
                                 </Button>
                                 <Button
                                     type="submit"
-                                    class="h-11 bg-violet-600 text-white shadow-md shadow-violet-600/20 hover:bg-violet-700"
+                                    class="h-11 bg-primary text-white shadow-md shadow-primary/20 hover:bg-primary/90"
                                     :disabled="form.processing || !hasLot || selectedIds.length === 0"
                                 >
                                     <Save class="mr-2 h-4 w-4" />

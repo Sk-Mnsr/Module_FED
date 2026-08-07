@@ -4,8 +4,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
-import { Head, useForm } from '@inertiajs/vue3';
-import { Building2, Info, Sliders, Target, Warehouse } from 'lucide-vue-next';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Building2, Info, BarChart3, Sliders, Target, Warehouse } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Monétique', href: '/monetique/coficarte' },
@@ -40,6 +40,12 @@ const form = useForm({
     })),
 });
 
+const fieldClass =
+    'mt-1.5 h-10 border-slate-300 bg-white text-slate-900 shadow-sm tabular-nums focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
+const cellFieldClass =
+    'inline-block h-9 w-28 border-slate-300 bg-white text-right text-sm tabular-nums shadow-sm focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card';
+
 const submit = () => {
     form.put('/monetique/parametrage/seuils-stock', { preserveScroll: true });
 };
@@ -49,112 +55,164 @@ const submit = () => {
     <Head title="Seuils & objectifs" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6 pb-28 max-w-5xl mx-auto w-full">
-            <div class="flex items-start gap-4">
-                <div class="p-3.5 bg-violet-100 text-violet-700 rounded-2xl shadow-sm shrink-0">
-                    <Sliders class="h-7 w-7" />
+        <div class="mx-auto flex w-full max-w-5xl flex-col gap-4 p-4 pb-28 sm:p-6">
+            <section
+                class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+            >
+                <div
+                    class="border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div
+                                class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+                            >
+                                <Sliders class="size-5" />
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                    Pilotage & paramètres
+                                </p>
+                                <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                    Seuils d’alerte & objectifs
+                                </h1>
+                                <p class="mt-1 max-w-2xl text-sm text-muted-foreground">
+                                    <strong class="text-foreground">Seuils</strong> : alerte stock carte sous le
+                                    minimum.
+                                    <strong class="text-foreground">Objectifs</strong> : cibles mensuelles réseau et
+                                    par agence (ventes / recharges encaissées). Une valeur à
+                                    <strong class="text-foreground">0</strong> désactive l’objectif ou le seuil.
+                                </p>
+                            </div>
+                        </div>
+                        <Button as-child variant="outline" class="border-slate-300">
+                            <Link href="/monetique/pilotage" class="inline-flex items-center gap-2">
+                                <BarChart3 class="size-4" />
+                                Voir le pilotage
+                            </Link>
+                        </Button>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Seuils d’alerte & objectifs (mois en cours)</h1>
-                    <p class="text-sm text-gray-600 mt-1 max-w-2xl">
-                        <strong>Seuils</strong> : alerte stock carte lorsque l’on passe sous le minimum.
-                        <strong class="font-semibold text-gray-800">Objectifs</strong> : cibles mensuelles reseau (siège) et par
-                        agence pour les ventes encaissées (nombre de cartes vendues) et le montant des recharges encaissées
-                        (FCFA). Toute valeur à <strong>0</strong> désactive l’objectif ou le seuil selon la ligne.
-                    </p>
-                </div>
-            </div>
+            </section>
 
             <div
-                class="flex gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 px-4 py-3.5 text-sm text-amber-950"
+                class="flex gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3.5 text-sm text-amber-950"
                 role="status"
             >
-                <Info class="h-5 w-5 shrink-0 text-amber-700 mt-0.5" />
+                <Info class="mt-0.5 size-5 shrink-0 text-amber-700" />
                 <p>
-                    Les <strong>objectifs au siège</strong> s’appliquent au <strong>réseau entier</strong> sur le mois civil en
-                    cours (agrégat pilotage). Les colonnes par agence ciblent uniquement l’activité de chaque entité. Les
-                    indicateurs utilisés sont les mêmes que sur la page <strong>Pilotage</strong> (ventes / recharges
-                    <strong>encaissées</strong>).
+                    Les <strong>objectifs au siège</strong> s’appliquent au <strong>réseau entier</strong> sur le mois
+                    civil en cours (agrégat pilotage). Les colonnes par agence ciblent uniquement l’activité de chaque
+                    entité — mêmes indicateurs que sur
+                    <Link href="/monetique/pilotage" class="font-semibold text-primary underline-offset-2 hover:underline">
+                        Pilotage
+                    </Link>
+                    (encaissées).
                 </p>
             </div>
 
-            <form class="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden flex flex-col" @submit.prevent="submit">
-                <div class="p-6 border-b border-gray-100 bg-gradient-to-br from-violet-50/80 to-white space-y-6">
-                    <div class="flex items-center gap-2 mb-1">
-                        <Warehouse class="h-5 w-5 text-violet-700" />
-                        <h2 class="font-semibold text-gray-900">Stock siège (central)</h2>
-                    </div>
-                    <div class="grid sm:grid-cols-1 md:grid-cols-3 gap-5">
-                        <div>
-                            <Label for="central" class="text-xs font-medium text-gray-600">Seuil minimum cartes au siège</Label>
-                            <Input
-                                id="central"
-                                v-model.number="form.min_stock_central"
-                                type="number"
-                                min="0"
-                                class="mt-1.5 border-gray-300 shadow-sm"
-                            />
+            <form
+                class="flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+                @submit.prevent="submit"
+            >
+                <div
+                    class="space-y-6 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent p-5 sm:p-6"
+                >
+                    <div class="flex items-center gap-2">
+                        <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
+                            <Warehouse class="size-4" />
                         </div>
+                        <h2 class="font-semibold text-foreground">Stock siège (central)</h2>
+                    </div>
+                    <div class="max-w-sm">
+                        <Label for="central" class="text-sm font-medium text-foreground">
+                            Seuil minimum cartes au siège
+                        </Label>
+                        <Input
+                            id="central"
+                            v-model.number="form.min_stock_central"
+                            type="number"
+                            min="0"
+                            :class="fieldClass"
+                        />
                     </div>
 
-                    <div class="rounded-xl border border-teal-100 bg-teal-50/50 p-5 space-y-4">
+                    <div class="space-y-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-border dark:bg-card">
                         <div class="flex items-center gap-2">
-                            <Target class="h-5 w-5 text-teal-700" />
-                            <h3 class="font-semibold text-gray-900 text-sm">Objectifs réseau (mois en cours)</h3>
-                        </div>
-                        <p class="text-xs text-gray-600">
-                            Comparés aux totaux globaux du pilotage (toutes agences confondues).
-                        </p>
-                        <div class="grid sm:grid-cols-2 gap-5">
+                            <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
+                                <Target class="size-4" />
+                            </div>
                             <div>
-                                <Label for="obj-v-central" class="text-xs font-medium text-gray-600">Objectif ventes (nb cartes)</Label>
+                                <h3 class="text-sm font-semibold text-foreground">
+                                    Objectifs réseau (mois en cours)
+                                </h3>
+                                <p class="text-xs text-muted-foreground">
+                                    Comparés aux totaux globaux du pilotage (toutes agences confondues).
+                                </p>
+                            </div>
+                        </div>
+                        <div class="grid gap-5 sm:grid-cols-2">
+                            <div>
+                                <Label for="obj-v-central" class="text-sm font-medium text-foreground">
+                                    Objectif ventes (nb cartes)
+                                </Label>
                                 <Input
                                     id="obj-v-central"
                                     v-model.number="form.objectif_nb_ventes_central"
                                     type="number"
                                     min="0"
-                                    class="mt-1.5 border-gray-300 shadow-sm"
+                                    :class="fieldClass"
                                 />
                             </div>
                             <div>
-                                <Label for="obj-r-central" class="text-xs font-medium text-gray-600"
-                                    >Objectif recharges (FCFA / mois)</Label
-                                >
+                                <Label for="obj-r-central" class="text-sm font-medium text-foreground">
+                                    Objectif recharges (FCFA / mois)
+                                </Label>
                                 <Input
                                     id="obj-r-central"
                                     v-model.number="form.objectif_montant_recharges_central"
                                     type="number"
                                     min="0"
                                     step="1"
-                                    class="mt-1.5 border-gray-300 shadow-sm tabular-nums"
+                                    :class="fieldClass"
                                 />
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/60 flex items-center gap-2 flex-wrap">
-                    <Building2 class="h-5 w-5 text-gray-600" />
-                    <h2 class="font-semibold text-gray-900">Par agence</h2>
-                    <span class="text-xs text-gray-500 ml-auto">{{ form.agences.length }} ligne(s)</span>
+                <div
+                    class="flex flex-wrap items-center gap-2 border-b border-border/80 bg-muted/30 px-5 py-4 sm:px-6"
+                >
+                    <Building2 class="size-5 text-primary" />
+                    <h2 class="font-semibold text-foreground">Par agence</h2>
+                    <span class="ml-auto text-xs text-muted-foreground">
+                        {{ form.agences.length }} ligne{{ form.agences.length > 1 ? 's' : '' }}
+                    </span>
                 </div>
 
-                <div class="overflow-x-auto max-h-[min(58vh,520px)] overflow-y-auto">
-                    <table class="w-full text-sm min-w-[720px]">
-                        <thead class="sticky top-0 z-10 bg-gray-100/95 backdrop-blur border-b border-gray-200 shadow-sm">
-                            <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <div class="max-h-[min(58vh,520px)] overflow-x-auto overflow-y-auto">
+                    <table class="w-full min-w-[720px] text-sm">
+                        <thead
+                            class="sticky top-0 z-10 border-b border-border bg-muted/90 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm"
+                        >
+                            <tr>
                                 <th class="px-4 py-3">Agence</th>
-                                <th class="px-4 py-3 text-right w-36">Seuil min. (cartes)</th>
-                                <th class="px-4 py-3 text-right w-36">Objectif ventes (mois)</th>
-                                <th class="px-4 py-3 text-right w-44">Objectif recharges (FCFA)</th>
+                                <th class="w-36 px-4 py-3 text-right">Seuil min. (cartes)</th>
+                                <th class="w-36 px-4 py-3 text-right">Objectif ventes (mois)</th>
+                                <th class="w-44 px-4 py-3 text-right">Objectif recharges (FCFA)</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <tr v-for="(row, i) in form.agences" :key="row.agence_id" class="hover:bg-violet-50/40 transition-colors">
-                                <td class="px-4 py-2.5 text-gray-900 font-medium">
+                        <tbody class="divide-y divide-border">
+                            <tr
+                                v-for="(row, i) in form.agences"
+                                :key="row.agence_id"
+                                class="transition-colors hover:bg-primary/5"
+                            >
+                                <td class="px-4 py-2.5 font-medium text-foreground">
                                     {{
-                                        seuils_agences.find((s) => s.agence_id === row.agence_id)?.agence_nom
-                                            ?? `Agence #${row.agence_id}`
+                                        seuils_agences.find((s) => s.agence_id === row.agence_id)?.agence_nom ??
+                                        `Agence #${row.agence_id}`
                                     }}
                                 </td>
                                 <td class="px-4 py-2.5 text-right">
@@ -162,7 +220,7 @@ const submit = () => {
                                         v-model.number="form.agences[i].min_cards"
                                         type="number"
                                         min="0"
-                                        class="inline-block w-28 border-gray-300 text-right tabular-nums"
+                                        :class="cellFieldClass"
                                     />
                                 </td>
                                 <td class="px-4 py-2.5 text-right">
@@ -170,7 +228,7 @@ const submit = () => {
                                         v-model.number="form.agences[i].objectif_nb_ventes_mois"
                                         type="number"
                                         min="0"
-                                        class="inline-block w-28 border-gray-300 text-right tabular-nums"
+                                        :class="cellFieldClass"
                                     />
                                 </td>
                                 <td class="px-4 py-2.5 text-right">
@@ -179,7 +237,7 @@ const submit = () => {
                                         type="number"
                                         min="0"
                                         step="1"
-                                        class="inline-block w-36 border-gray-300 text-right tabular-nums"
+                                        :class="[cellFieldClass, 'w-36']"
                                     />
                                 </td>
                             </tr>
@@ -187,9 +245,13 @@ const submit = () => {
                     </table>
                 </div>
 
-                <div class="sticky bottom-0 border-t border-gray-200 bg-gray-50/95 backdrop-blur px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <p class="text-xs text-gray-500">Enregistrez après modification (seuils + objectifs).</p>
-                    <Button type="submit" class="bg-violet-600 hover:bg-violet-700 min-w-[200px]" :disabled="form.processing">
+                <div
+                    class="sticky bottom-0 flex flex-col gap-3 border-t border-border/80 bg-card/95 px-5 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6"
+                >
+                    <p class="text-xs text-muted-foreground">
+                        Enregistrez après modification (seuils + objectifs).
+                    </p>
+                    <Button type="submit" class="min-w-[200px]" :disabled="form.processing">
                         {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
                     </Button>
                 </div>

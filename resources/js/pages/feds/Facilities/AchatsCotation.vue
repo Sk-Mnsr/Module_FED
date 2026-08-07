@@ -269,29 +269,33 @@ const transmitToFacilities = () => {
 };
 
 const inputClass =
-    'h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60';
+    'h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60 dark:border-slate-600 dark:bg-card dark:text-foreground';
 const selectClass =
-    'h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60';
+    'h-10 w-full rounded-md border border-slate-300 bg-white px-2 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60 dark:border-slate-600 dark:bg-card dark:text-foreground';
 </script>
 
 <template>
     <Head :title="`Tableau comparatif - ${props.fed.code}`" />
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
-            <div class="flex flex-wrap items-end justify-between gap-3">
+            <div
+                class="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm sm:px-6"
+            >
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button as-child variant="outline" size="sm">
+                    <Button as-child variant="outline" size="sm" class="border-slate-300">
                         <Link :href="`/feds/achats/${props.fed.id}`" class="inline-flex items-center gap-1.5">
                             <ArrowLeft class="size-4" />
                             Retour à la demande
                         </Link>
                     </Button>
-                    <span class="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-800">
+                    <span
+                        class="inline-flex rounded-full border border-primary/25 bg-primary/5 px-3 py-1 text-sm font-medium text-primary"
+                    >
                         FED {{ props.fed.code }}
                     </span>
                 </div>
                 <div class="min-w-0">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
                         Achats & consultations
                     </p>
                     <h1 class="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
@@ -310,17 +314,19 @@ const selectClass =
                     <div
                         v-for="(group, gIdx) in fournisseurOffres"
                         :key="gIdx"
-                        class="overflow-hidden rounded-xl border shadow-sm transition-colors"
+                        class="overflow-hidden rounded-2xl border shadow-sm transition-colors"
                         :class="
                             group.id === props.fed.expert_opinion_offre_id
                                 ? 'border-amber-300 bg-amber-50/30 ring-1 ring-amber-200'
-                                : 'border-border bg-card'
+                                : 'border-border/80 bg-card'
                         "
                     >
-                        <div class="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
+                        <div
+                            class="flex items-center justify-between gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3 sm:px-5"
+                        >
                             <div class="flex min-w-0 flex-1 items-center gap-3">
                                 <span
-                                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-foreground text-sm font-semibold text-background"
+                                    class="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground"
                                 >
                                     {{ gIdx + 1 }}
                                 </span>
@@ -441,7 +447,7 @@ const selectClass =
                                 </div>
                             </div>
 
-                            <div class="space-y-3 rounded-lg border border-border bg-muted/20 p-4">
+                            <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-border dark:bg-muted/20">
                                 <h3 class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                     Conditions & documents
                                 </h3>
@@ -527,7 +533,7 @@ const selectClass =
                                             type="button"
                                             variant="outline"
                                             size="sm"
-                                            class="w-full"
+                                            class="w-full border-slate-300"
                                             @click="triggerFileInput(gIdx)"
                                         >
                                             <Paperclip class="mr-2 size-4" />
@@ -555,7 +561,7 @@ const selectClass =
                                             :key="att.id"
                                             :href="`/storage/${att.path}`"
                                             target="_blank"
-                                            class="flex items-center gap-2 rounded-md border border-border bg-background p-2 text-xs text-blue-600 hover:bg-muted/40"
+                                            class="flex items-center gap-2 rounded-md border border-slate-200 bg-white p-2 text-xs text-primary hover:bg-primary/5"
                                         >
                                             <Paperclip class="size-3 shrink-0" />
                                             <span class="truncate">{{ att.original_name }}</span>
@@ -573,7 +579,7 @@ const selectClass =
                         v-if="canEdit"
                         type="button"
                         variant="outline"
-                        class="h-11 w-full border-dashed"
+                        class="h-11 w-full border-dashed border-primary/40 text-primary hover:bg-primary/5 hover:text-primary"
                         @click="addFournisseur"
                     >
                         <Plus class="mr-2 size-4" />
@@ -583,13 +589,19 @@ const selectClass =
 
                 <!-- Panneau actions -->
                 <aside class="lg:sticky lg:top-4 lg:self-start">
-                    <div class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="flex items-start gap-3 border-b border-border pb-4">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <div
+                        class="flex flex-col gap-4 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+                    >
+                        <div
+                            class="flex items-start gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-4 lg:px-5"
+                        >
+                            <div
+                                class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm"
+                            >
                                 <FileSpreadsheet class="size-5" />
                             </div>
                             <div class="min-w-0">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
                                     Cotation
                                 </p>
                                 <h2 class="text-base font-semibold text-foreground">{{ props.fed.code }}</h2>
@@ -598,6 +610,7 @@ const selectClass =
                                 </p>
                             </div>
                         </div>
+                        <div class="flex flex-col gap-4 px-4 pb-4 lg:px-5 lg:pb-5">
 
                         <dl class="grid grid-cols-2 gap-3 text-sm">
                             <div>
@@ -639,7 +652,7 @@ const selectClass =
                                 <textarea
                                     v-model="transmitComment"
                                     rows="3"
-                                    class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground"
                                     placeholder="Infos pour le responsable Facilities…"
                                 />
                             </div>
@@ -652,7 +665,7 @@ const selectClass =
                                 <Button
                                     type="button"
                                     variant="outline"
-                                    class="w-full border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+                                    class="w-full border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
                                     :disabled="!hasOffresEnregistrees"
                                     @click="transmitToFacilities"
                                 >
@@ -661,9 +674,13 @@ const selectClass =
                                 </Button>
                             </div>
                         </template>
-                        <p v-else class="rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                        <p
+                            v-else
+                            class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-muted-foreground dark:border-border dark:bg-muted/40"
+                        >
                             Lecture seule — cette cotation n’est plus modifiable.
                         </p>
+                        </div>
                     </div>
                 </aside>
             </div>

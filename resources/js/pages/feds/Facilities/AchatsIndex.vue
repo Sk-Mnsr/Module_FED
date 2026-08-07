@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import DataTable, { type Column } from '@/components/DataTable.vue';
 import { computed } from 'vue';
-import { Eye, FileSpreadsheet, CheckCircle } from 'lucide-vue-next';
+import { Eye, FileSpreadsheet, ShoppingCart } from 'lucide-vue-next';
 
 interface Fed {
     id: number;
@@ -19,7 +19,15 @@ interface Fed {
 }
 
 interface Props {
-    feds: { data: Fed[]; links: any[]; meta?: any; total?: number; current_page?: number; per_page?: number; last_page?: number };
+    feds: {
+        data: Fed[];
+        links: any[];
+        meta?: any;
+        total?: number;
+        current_page?: number;
+        per_page?: number;
+        last_page?: number;
+    };
     selectedStatus?: string | null;
 }
 
@@ -30,6 +38,22 @@ const breadcrumbs: BreadcrumbItem[] = [{ title: 'Demandes en cours', href: '/fed
 const currentPage = computed(() => props.feds.current_page || props.feds.meta?.current_page || 1);
 const totalItems = computed(() => props.feds.total || props.feds.meta?.total || 0);
 const perPage = computed(() => props.feds.per_page || props.feds.meta?.per_page || 10);
+
+const selectClass =
+    'flex h-10 w-56 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
+const countPending = computed(
+    () => props.feds.data.filter((f) => f.status === 'n1_approved').length,
+);
+const countNeedsInfo = computed(
+    () => props.feds.data.filter((f) => f.status === 'achats_needs_info').length,
+);
+const countTransmitted = computed(
+    () => props.feds.data.filter((f) => f.status === 'achats_approved').length,
+);
+const countRejected = computed(
+    () => props.feds.data.filter((f) => f.status === 'achats_rejected').length,
+);
 
 const statusLabel = (status: string) => {
     const labels: Record<string, string> = {
@@ -57,41 +81,48 @@ const statusLabel = (status: string) => {
 
 const statusBadge = (status: string) => {
     const badges: Record<string, string> = {
-        pending_validation: 'bg-yellow-50 text-yellow-700 border border-yellow-200',
-        n1_needs_info: 'bg-orange-50 text-orange-700 border border-orange-200',
-        n1_rejected: 'bg-red-50 text-red-700 border border-red-200',
-        n1_approved: 'bg-blue-100 text-blue-700 border border-blue-200',
-        achats_needs_info: 'bg-orange-100 text-orange-700 border border-orange-200',
-        achats_rejected: 'bg-red-100 text-red-700 border border-red-200',
-        achats_approved: 'bg-green-100 text-green-700 border border-green-200',
-        expert_opinion_pending: 'bg-purple-100 text-purple-700 border border-purple-200',
-        expert_opinion_given: 'bg-purple-50 text-purple-600 border border-purple-100',
-        facilities_needs_info: 'bg-orange-50 text-orange-700 border border-orange-200',
-        facilities_rejected: 'bg-red-100 text-red-700 border border-red-200',
-        facilities_approved: 'bg-blue-50 text-blue-700 border border-blue-200',
-        cg_treated: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
-        waiting_daf_reclass_approval: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-        daf_rejected: 'bg-red-50 text-red-700 border border-red-200',
-        daf_approved: 'bg-green-150 text-green-800 border-green-300',
-        dga_rejected: 'bg-red-150 text-red-800 border-red-300',
-        bon_de_commande: 'bg-cyan-100 text-cyan-800 border border-cyan-200',
+        pending_validation: 'bg-amber-50 text-amber-800 ring-1 ring-amber-200/80',
+        n1_needs_info: 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80',
+        n1_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        n1_approved: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200/80',
+        achats_needs_info: 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80',
+        achats_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        achats_approved: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80',
+        expert_opinion_pending: 'bg-primary/10 text-primary ring-1 ring-primary/20',
+        expert_opinion_given: 'bg-primary/10 text-primary ring-1 ring-primary/25',
+        facilities_needs_info: 'bg-orange-50 text-orange-800 ring-1 ring-orange-200/80',
+        facilities_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        facilities_approved: 'bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200/80',
+        cg_treated: 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200/80',
+        waiting_daf_reclass_approval: 'bg-amber-100 text-amber-900 ring-1 ring-amber-200/80',
+        daf_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        daf_approved: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80',
+        dga_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        bon_de_commande: 'bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200/80',
     };
-    return badges[status] ?? 'bg-gray-100 text-gray-700 border border-gray-200';
+    return badges[status] ?? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
 };
 
 const priorityLabel = (priority?: string | null) => {
-    const labels: Record<string, string> = { low: 'Faible', normal: 'Normal', high: 'Haute', urgent: 'Urgente' };
+    const labels: Record<string, string> = {
+        low: 'Faible',
+        normal: 'Normal',
+        high: 'Haute',
+        urgent: 'Urgente',
+    };
     return priority ? (labels[priority] ?? priority) : '—';
 };
 
 const priorityBadge = (priority?: string | null) => {
     const badges: Record<string, string> = {
-        urgent: 'bg-red-100 text-red-700 border border-red-200',
-        high: 'bg-orange-100 text-orange-700 border border-orange-200',
-        normal: 'bg-blue-50 text-blue-600 border border-blue-200',
-        low: 'bg-gray-100 text-gray-600 border border-gray-200',
+        urgent: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        high: 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80',
+        normal: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200/80',
+        low: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80',
     };
-    return priority ? (badges[priority] ?? 'bg-gray-100 text-gray-600') : 'bg-gray-100 text-gray-600';
+    return priority
+        ? (badges[priority] ?? 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80')
+        : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80';
 };
 
 const handlePageChange = (page: number) => {
@@ -128,137 +159,190 @@ const columns: Column[] = [
 ];
 
 const tableData = computed(() =>
-    props.feds.data.map(fed => ({
+    props.feds.data.map((fed) => ({
         id: fed.id,
         code: fed.code,
-        date: fed.date ? new Date(fed.date).toLocaleDateString('fr-FR') : '-',
-        demandeur: fed.demandeur || '-',
-        department: fed.department || '-',
-        motive: fed.motive && fed.motive.length > 45 ? fed.motive.substring(0, 45) + '…' : fed.motive || '-',
+        date: fed.date ? new Date(fed.date).toLocaleDateString('fr-FR') : '—',
+        demandeur: fed.demandeur || '—',
+        department: fed.department || '—',
+        motive:
+            fed.motive && fed.motive.length > 45
+                ? fed.motive.substring(0, 45) + '…'
+                : fed.motive || '—',
         priority: fed.priority,
-        submitted_at: fed.submitted_at ? new Date(fed.submitted_at).toLocaleDateString('fr-FR') : '-',
+        submitted_at: fed.submitted_at
+            ? new Date(fed.submitted_at).toLocaleDateString('fr-FR')
+            : '—',
         status: fed.status,
-    }))
+    })),
 );
 </script>
 
 <template>
     <Head title="Demandes en cours – Achats" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-
-            <!-- Header -->
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">Demandes en cours</h1>
-                    <p class="mt-1 text-sm text-gray-500">
-                        FED validées par le N+1 — en attente de cotation fournisseur —
-                        <span class="font-semibold text-blue-600">{{ totalItems }}</span> au total
-                    </p>
-                </div>
-
-                <!-- Filtre -->
-                <div>
-                    <label class="mb-1 block text-xs font-medium text-gray-600">Filtrer par statut</label>
-                    <select
-                        :value="props.selectedStatus || ''"
-                        class="flex h-9 w-52 rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900 shadow-sm"
-                        @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
-                    >
-                        <option value="">Tous les statuts</option>
-                        <optgroup label="Initial">
-                            <option value="n1_approved">En attente Achats</option>
-                        </optgroup>
-                        <optgroup label="Achats">
-                            <option value="achats_needs_info">Complément demandé</option>
-                            <option value="achats_approved">Transmise Facilities</option>
-                            <option value="achats_rejected">Rejetée</option>
-                        </optgroup>
-                        <optgroup label="Facilities & Expert">
-                            <option value="expert_opinion_pending">En attente avis expert</option>
-                            <option value="expert_opinion_given">Avis expert reçu</option>
-                            <option value="facilities_approved">Validée Facilities</option>
-                        </optgroup>
-                        <optgroup label="Final">
-                            <option value="cg_treated">Validée Budget</option>
-                            <option value="daf_approved">Validée DAF/DGA</option>
-                            <option value="bon_de_commande">Bon de Commande</option>
-                        </optgroup>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Statistiques -->
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-center">
-                    <p class="text-xs font-medium text-blue-600">En attente</p>
-                    <p class="text-2xl font-bold text-blue-700">
-                        {{ props.feds.data.filter(f => f.status === 'n1_approved').length }}
-                    </p>
-                </div>
-                <div class="rounded-lg border border-orange-200 bg-orange-50 p-3 text-center">
-                    <p class="text-xs font-medium text-orange-600">Complément</p>
-                    <p class="text-2xl font-bold text-orange-700">
-                        {{ props.feds.data.filter(f => f.status === 'achats_needs_info').length }}
-                    </p>
-                </div>
-                <div class="rounded-lg border border-green-200 bg-green-50 p-3 text-center">
-                    <p class="text-xs font-medium text-green-600">Transmises</p>
-                    <p class="text-2xl font-bold text-green-700">
-                        {{ props.feds.data.filter(f => f.status === 'achats_approved').length }}
-                    </p>
-                </div>
-                <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-center">
-                    <p class="text-xs font-medium text-red-600">Rejetées</p>
-                    <p class="text-2xl font-bold text-red-700">
-                        {{ props.feds.data.filter(f => f.status === 'achats_rejected').length }}
-                    </p>
-                </div>
-            </div>
-
-            <!-- Table -->
-            <DataTable
-                :headers="columns"
-                :items="tableData"
-                :current-page="currentPage"
-                :items-per-page="perPage"
-                :total-items="totalItems"
-                :show-select="false"
-                @page-change="handlePageChange"
-                @items-per-page-change="handleItemsPerPageChange"
-            >
-                <template #item.status="{ item }">
-                    <span :class="['inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', statusBadge(item.status)]">
-                        {{ statusLabel(item.status) }}
-                    </span>
-                </template>
-
-                <template #item.priority="{ item }">
-                    <span :class="['inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', priorityBadge(item.priority)]">
-                        {{ priorityLabel(item.priority) }}
-                    </span>
-                </template>
-
-                <template #item.actions="{ item }">
-                    <div class="flex items-center gap-1">
-                        <Link
-                            :href="`/feds/achats/${item.id}`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                            title="Voir la demande"
+        <div class="flex flex-col gap-6 p-4 sm:p-6">
+            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                <div
+                    class="flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                >
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
                         >
-                            <Eye class="h-5 w-5" />
-                        </Link>
-                        <Link
-                            v-if="['n1_approved', 'achats_needs_info'].includes(item.status)"
-                            :href="`/feds/achats/${item.id}/cotation`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-                            title="Tableau comparatif / Cotation"
-                        >
-                            <FileSpreadsheet class="h-5 w-5" />
-                        </Link>
+                            <ShoppingCart class="size-5" />
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                Demandes en cours
+                            </h1>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                FED validées par le N+1 — en attente de cotation fournisseur —
+                                <span class="font-semibold text-primary">{{ totalItems }}</span>
+                                au total
+                            </p>
+                        </div>
                     </div>
-                </template>
-            </DataTable>
+
+                    <div>
+                        <label class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                            Filtrer par statut
+                        </label>
+                        <select
+                            :value="props.selectedStatus || ''"
+                            :class="selectClass"
+                            @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
+                        >
+                            <option value="">Tous les statuts</option>
+                            <optgroup label="Initial">
+                                <option value="n1_approved">En attente Achats</option>
+                            </optgroup>
+                            <optgroup label="Achats">
+                                <option value="achats_needs_info">Complément demandé</option>
+                                <option value="achats_approved">Transmise Facilities</option>
+                                <option value="achats_rejected">Rejetée</option>
+                            </optgroup>
+                            <optgroup label="Facilities & Expert">
+                                <option value="expert_opinion_pending">En attente avis expert</option>
+                                <option value="expert_opinion_given">Avis expert reçu</option>
+                                <option value="facilities_approved">Validée Facilities</option>
+                            </optgroup>
+                            <optgroup label="Final">
+                                <option value="cg_treated">Validée Budget</option>
+                                <option value="daf_approved">Validée DAF/DGA</option>
+                                <option value="bon_de_commande">Bon de Commande</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid gap-3 border-b border-border/80 p-5 sm:grid-cols-2 lg:grid-cols-4 sm:p-6">
+                    <div
+                        class="rounded-xl border border-sky-200 bg-sky-50 p-4 text-center dark:border-sky-900 dark:bg-sky-950/30"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">
+                            En attente
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums text-sky-800 dark:text-sky-200">
+                            {{ countPending }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-center dark:border-amber-900 dark:bg-amber-950/30"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                            Complément
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums text-amber-800 dark:text-amber-200">
+                            {{ countNeedsInfo }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center dark:border-emerald-900 dark:bg-emerald-950/30"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                            Transmises
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
+                            {{ countTransmitted }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-red-200 bg-red-50 p-4 text-center dark:border-red-900 dark:bg-red-950/30"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-red-700 dark:text-red-300">
+                            Rejetées
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums text-red-800 dark:text-red-200">
+                            {{ countRejected }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-4 sm:p-5">
+                    <div
+                        class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-card"
+                    >
+                        <DataTable
+                            :headers="columns"
+                            :items="tableData"
+                            :current-page="currentPage"
+                            :items-per-page="perPage"
+                            :total-items="totalItems"
+                            :show-select="false"
+                            @page-change="handlePageChange"
+                            @items-per-page-change="handleItemsPerPageChange"
+                        >
+                            <template #item.code="{ item }">
+                                <span class="font-semibold tabular-nums text-foreground">{{
+                                    item.code
+                                }}</span>
+                            </template>
+
+                            <template #item.status="{ item }">
+                                <span
+                                    class="inline-flex max-w-[14rem] truncate rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="statusBadge(item.status)"
+                                    :title="statusLabel(item.status)"
+                                >
+                                    {{ statusLabel(item.status) }}
+                                </span>
+                            </template>
+
+                            <template #item.priority="{ item }">
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="priorityBadge(item.priority)"
+                                >
+                                    {{ priorityLabel(item.priority) }}
+                                </span>
+                            </template>
+
+                            <template #item.actions="{ item }">
+                                <div class="flex items-center gap-0.5">
+                                    <Link
+                                        :href="`/feds/achats/${item.id}`"
+                                        class="inline-flex size-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-foreground dark:hover:bg-muted"
+                                        title="Voir la demande"
+                                    >
+                                        <Eye class="size-4" />
+                                    </Link>
+                                    <Link
+                                        v-if="
+                                            ['n1_approved', 'achats_needs_info'].includes(item.status)
+                                        "
+                                        :href="`/feds/achats/${item.id}/cotation`"
+                                        class="inline-flex size-8 items-center justify-center rounded-md text-primary transition hover:bg-primary/5"
+                                        title="Tableau comparatif / Cotation"
+                                    >
+                                        <FileSpreadsheet class="size-4" />
+                                    </Link>
+                                </div>
+                            </template>
+                        </DataTable>
+                    </div>
+                </div>
+            </section>
         </div>
     </AppLayout>
 </template>

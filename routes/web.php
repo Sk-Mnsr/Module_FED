@@ -344,6 +344,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('coficarte', [CoficarteController::class, 'index'])->name('monetique.coficarte');
 
         Route::get('pilotage', [PilotageController::class, 'index'])->name('monetique.pilotage');
+        Route::get('pilotage/export', [PilotageController::class, 'export'])->name('monetique.pilotage.export');
 
         Route::middleware('role:monetique')->group(function () {
             Route::get('demandes-approvisionnement', [SupplyRequestController::class, 'monetiqueIndex'])

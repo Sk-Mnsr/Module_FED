@@ -109,10 +109,12 @@ const submit = () => {
     });
 };
 
+const fieldClass =
+    'mt-1.5 h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
 const selectClass =
-    'mt-1.5 flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+    'mt-1.5 flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
 const textareaClass =
-    'mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+    'mt-1.5 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
 </script>
 
 <template>
@@ -120,14 +122,18 @@ const textareaClass =
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
-            <div>
-                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">TDR</p>
-                <h1 class="text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
-                    Nouvel Appel d'Offres
-                </h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    Renseignez l’objet, les critères, les documents et les fournisseurs concernés.
-                </p>
+            <div
+                class="flex flex-wrap items-end justify-between gap-3 rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm sm:px-6"
+            >
+                <div>
+                    <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">TDR</p>
+                    <h1 class="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                        Nouvel Appel d'Offres
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        Renseignez l’objet, les critères, les documents et les fournisseurs concernés.
+                    </p>
+                </div>
             </div>
 
             <form
@@ -136,9 +142,11 @@ const textareaClass =
             >
                 <div class="flex min-h-0 flex-col gap-4 overflow-y-auto">
                     <!-- Infos générales -->
-                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                        <div
+                            class="flex items-center gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3 sm:px-5"
+                        >
+                            <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
                                 <ClipboardList class="size-5" />
                             </div>
                             <div>
@@ -147,10 +155,16 @@ const textareaClass =
                             </div>
                         </div>
 
-                        <div class="grid gap-4 md:grid-cols-2">
+                        <div class="grid gap-4 p-4 sm:p-5 md:grid-cols-2">
                             <div class="md:col-span-2">
                                 <Label for="objet">Objet de l'appel d'offres</Label>
-                                <Input id="objet" v-model="form.objet" type="text" class="mt-1.5" required />
+                                <Input
+                                    id="objet"
+                                    v-model="form.objet"
+                                    type="text"
+                                    :class="fieldClass"
+                                    required
+                                />
                                 <InputError :message="form.errors.objet" />
                             </div>
                             <div class="md:col-span-2">
@@ -170,7 +184,7 @@ const textareaClass =
                                     id="date_lancement"
                                     v-model="form.date_lancement"
                                     type="date"
-                                    class="mt-1.5"
+                                    :class="fieldClass"
                                 />
                                 <InputError :message="form.errors.date_lancement" />
                             </div>
@@ -180,7 +194,7 @@ const textareaClass =
                                     id="date_limite_soumission"
                                     v-model="form.date_limite_soumission"
                                     type="datetime-local"
-                                    class="mt-1.5"
+                                    :class="fieldClass"
                                     required
                                 />
                                 <InputError :message="form.errors.date_limite_soumission" />
@@ -207,10 +221,12 @@ const textareaClass =
                     </section>
 
                     <!-- Critères -->
-                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+                    <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                        <div
+                            class="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3 sm:px-5"
+                        >
                             <div class="flex items-center gap-3">
-                                <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
                                     <ListChecks class="size-5" />
                                 </div>
                                 <div>
@@ -221,20 +237,33 @@ const textareaClass =
                                     </p>
                                 </div>
                             </div>
-                            <Button type="button" variant="outline" size="sm" @click="addCritere">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                class="border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                                @click="addCritere"
+                            >
                                 <Plus class="mr-1.5 size-4" />
                                 Ajouter
                             </Button>
                         </div>
 
-                        <div class="space-y-3">
+                        <div class="space-y-3 p-4 sm:p-5">
                             <div
                                 v-for="(critere, index) in form.criteres"
                                 :key="index"
-                                class="rounded-lg border border-border bg-muted/20 p-4"
+                                class="rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-border dark:bg-muted/20"
                             >
                                 <div class="mb-3 flex items-center justify-between gap-2">
-                                    <p class="text-sm font-semibold text-foreground">Critère {{ index + 1 }}</p>
+                                    <p class="text-sm font-semibold text-foreground">
+                                        <span
+                                            class="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-foreground"
+                                        >
+                                            {{ index + 1 }}
+                                        </span>
+                                        Critère {{ index + 1 }}
+                                    </p>
                                     <Button
                                         v-if="form.criteres.length > 1"
                                         type="button"
@@ -254,7 +283,7 @@ const textareaClass =
                                             :id="`nom-${index}`"
                                             v-model="critere.nom"
                                             type="text"
-                                            class="mt-1.5"
+                                            :class="fieldClass"
                                             required
                                         />
                                         <InputError
@@ -294,7 +323,7 @@ const textareaClass =
                                             type="number"
                                             min="1"
                                             step="0.5"
-                                            class="mt-1.5"
+                                            :class="fieldClass"
                                             required
                                         />
                                         <InputError
@@ -314,7 +343,7 @@ const textareaClass =
                                             type="number"
                                             min="1"
                                             step="1"
-                                            class="mt-1.5"
+                                            :class="fieldClass"
                                             required
                                         />
                                         <InputError
@@ -331,9 +360,11 @@ const textareaClass =
                     </section>
 
                     <!-- Documents -->
-                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                        <div
+                            class="flex items-center gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3 sm:px-5"
+                        >
+                            <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
                                 <Paperclip class="size-5" />
                             </div>
                             <div>
@@ -341,10 +372,10 @@ const textareaClass =
                                 <p class="text-sm text-muted-foreground">DAO et cahier des charges</p>
                             </div>
                         </div>
-                        <div class="grid gap-4 md:grid-cols-2">
+                        <div class="grid gap-4 p-4 sm:p-5 md:grid-cols-2">
                             <div>
                                 <Label for="dao_file">Dossier d'Appel d'Offres (DAO)</Label>
-                                <Input id="dao_file" type="file" class="mt-1.5" @change="onDaoChange" />
+                                <Input id="dao_file" type="file" :class="fieldClass" @change="onDaoChange" />
                                 <p v-if="form.dao_file" class="mt-1 truncate text-xs text-muted-foreground">
                                     {{ form.dao_file.name }}
                                 </p>
@@ -355,7 +386,7 @@ const textareaClass =
                                 <Input
                                     id="cahier_charges_file"
                                     type="file"
-                                    class="mt-1.5"
+                                    :class="fieldClass"
                                     @change="onCcChange"
                                 />
                                 <p
@@ -370,9 +401,11 @@ const textareaClass =
                     </section>
 
                     <!-- Fournisseurs -->
-                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                        <div
+                            class="flex items-center gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3 sm:px-5"
+                        >
+                            <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
                                 <Users class="size-5" />
                             </div>
                             <div>
@@ -384,111 +417,122 @@ const textareaClass =
                                 </p>
                             </div>
                         </div>
-                        <div
-                            class="grid max-h-60 grid-cols-1 gap-1 overflow-y-auto rounded-lg border border-border bg-background p-2 md:grid-cols-2"
-                        >
-                            <label
-                                v-for="fournisseur in props.fournisseurs"
-                                :key="fournisseur.id"
-                                class="flex cursor-pointer items-start gap-2 rounded-md p-2 hover:bg-muted/50"
+                        <div class="p-4 sm:p-5">
+                            <div
+                                class="grid max-h-60 grid-cols-1 gap-1 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 md:grid-cols-2 dark:border-border dark:bg-background"
                             >
-                                <input
-                                    v-model="form.fournisseurs"
-                                    type="checkbox"
-                                    :value="fournisseur.id"
-                                    class="mt-0.5 rounded border-input"
-                                />
-                                <span class="min-w-0 text-sm text-foreground">
-                                    {{ fournisseur.nom }}
-                                    <span
-                                        v-if="fournisseur.contact_email"
-                                        class="block truncate text-xs text-muted-foreground"
-                                    >
-                                        {{ fournisseur.contact_email }}
+                                <label
+                                    v-for="fournisseur in props.fournisseurs"
+                                    :key="fournisseur.id"
+                                    class="flex cursor-pointer items-start gap-2 rounded-md p-2 hover:bg-primary/5"
+                                >
+                                    <input
+                                        v-model="form.fournisseurs"
+                                        type="checkbox"
+                                        :value="fournisseur.id"
+                                        class="mt-0.5 rounded border-slate-300 text-primary focus:ring-primary/30"
+                                    />
+                                    <span class="min-w-0 text-sm text-foreground">
+                                        {{ fournisseur.nom }}
+                                        <span
+                                            v-if="fournisseur.contact_email"
+                                            class="block truncate text-xs text-muted-foreground"
+                                        >
+                                            {{ fournisseur.contact_email }}
+                                        </span>
                                     </span>
-                                </span>
-                            </label>
+                                </label>
+                            </div>
+                            <InputError :message="form.errors.fournisseurs" />
                         </div>
-                        <InputError :message="form.errors.fournisseurs" />
                     </section>
                 </div>
 
                 <!-- Récap -->
                 <aside class="xl:sticky xl:top-4 xl:self-start">
-                    <div class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="flex items-start gap-3 border-b border-border pb-4">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <div class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                        <div
+                            class="flex items-start gap-3 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-4 lg:px-5"
+                        >
+                            <div class="rounded-lg bg-primary p-2 text-primary-foreground shadow-sm">
                                 <FileText class="size-5" />
                             </div>
                             <div class="min-w-0">
-                                <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
                                     Récapitulatif
                                 </p>
                                 <h2 class="text-base font-semibold text-foreground">Avant création</h2>
                             </div>
                         </div>
 
-                        <dl class="space-y-3 text-sm">
-                            <div>
-                                <dt class="text-muted-foreground">Objet</dt>
-                                <dd class="mt-0.5 line-clamp-2 font-medium text-foreground">
-                                    {{ form.objet || '—' }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="text-muted-foreground">Publication</dt>
-                                <dd class="mt-0.5 font-medium text-foreground">{{ publicationLabel }}</dd>
-                            </div>
-                            <div class="grid grid-cols-2 gap-3 border-t border-border pt-3">
+                        <div class="flex flex-col gap-4 px-4 py-4 lg:px-5 lg:pb-5">
+                            <dl class="space-y-3 text-sm">
                                 <div>
-                                    <dt class="text-muted-foreground">Critères</dt>
-                                    <dd class="font-medium tabular-nums text-foreground">
-                                        {{ form.criteres.length }}
+                                    <dt class="text-muted-foreground">Objet</dt>
+                                    <dd class="mt-0.5 line-clamp-2 font-medium text-foreground">
+                                        {{ form.objet || '—' }}
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt class="text-muted-foreground">Pondération</dt>
-                                    <dd class="font-medium tabular-nums text-foreground">
-                                        {{ ponderationTotal }}
+                                    <dt class="text-muted-foreground">Publication</dt>
+                                    <dd class="mt-0.5 font-medium text-foreground">{{ publicationLabel }}</dd>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3 border-t border-border pt-3">
+                                    <div>
+                                        <dt class="text-muted-foreground">Critères</dt>
+                                        <dd class="font-medium tabular-nums text-foreground">
+                                            {{ form.criteres.length }}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-muted-foreground">Pondération</dt>
+                                        <dd class="font-medium tabular-nums text-foreground">
+                                            {{ ponderationTotal }}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-muted-foreground">Fournisseurs</dt>
+                                        <dd class="font-medium tabular-nums text-foreground">
+                                            {{ form.fournisseurs.length }}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt class="text-muted-foreground">Documents</dt>
+                                        <dd class="font-medium tabular-nums text-foreground">
+                                            {{ (form.dao_file ? 1 : 0) + (form.cahier_charges_file ? 1 : 0) }}
+                                        </dd>
+                                    </div>
+                                </div>
+                                <div v-if="form.date_limite_soumission" class="border-t border-border pt-3">
+                                    <dt class="text-muted-foreground">Date limite</dt>
+                                    <dd class="mt-0.5 font-medium text-foreground">
+                                        {{
+                                            new Date(form.date_limite_soumission).toLocaleString('fr-FR', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                            })
+                                        }}
                                     </dd>
                                 </div>
-                                <div>
-                                    <dt class="text-muted-foreground">Fournisseurs</dt>
-                                    <dd class="font-medium tabular-nums text-foreground">
-                                        {{ form.fournisseurs.length }}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt class="text-muted-foreground">Documents</dt>
-                                    <dd class="font-medium tabular-nums text-foreground">
-                                        {{ (form.dao_file ? 1 : 0) + (form.cahier_charges_file ? 1 : 0) }}
-                                    </dd>
-                                </div>
-                            </div>
-                            <div v-if="form.date_limite_soumission" class="border-t border-border pt-3">
-                                <dt class="text-muted-foreground">Date limite</dt>
-                                <dd class="mt-0.5 font-medium text-foreground">
-                                    {{
-                                        new Date(form.date_limite_soumission).toLocaleString('fr-FR', {
-                                            day: '2-digit',
-                                            month: '2-digit',
-                                            year: 'numeric',
-                                            hour: '2-digit',
-                                            minute: '2-digit',
-                                        })
-                                    }}
-                                </dd>
-                            </div>
-                        </dl>
+                            </dl>
 
-                        <div class="flex flex-col gap-2 border-t border-border pt-4">
-                            <Button type="submit" class="w-full" :disabled="form.processing">
-                                <Send class="mr-2 size-4" />
-                                {{ form.processing ? 'Création…' : "Créer l'Appel d'Offres" }}
-                            </Button>
-                            <Button as-child type="button" variant="outline" class="w-full">
-                                <Link href="/appel-offres">Annuler</Link>
-                            </Button>
+                            <div class="flex flex-col gap-2 border-t border-border pt-4">
+                                <Button type="submit" class="w-full" :disabled="form.processing">
+                                    <Send class="mr-2 size-4" />
+                                    {{ form.processing ? 'Création…' : "Créer l'Appel d'Offres" }}
+                                </Button>
+                                <Button
+                                    as-child
+                                    type="button"
+                                    variant="outline"
+                                    class="w-full border-slate-300"
+                                >
+                                    <Link href="/appel-offres">Annuler</Link>
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 </aside>

@@ -4,7 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import DataTable, { type Column } from '@/components/DataTable.vue';
 import { computed } from 'vue';
-import { Eye } from 'lucide-vue-next';
+import { Eye, Landmark } from 'lucide-vue-next';
 
 interface FedRequester {
     name: string;
@@ -39,6 +39,9 @@ const currentPage = computed(() => props.feds.current_page || props.feds.meta?.c
 const totalItems = computed(() => props.feds.total || props.feds.meta?.total || 0);
 const perPage = computed(() => props.feds.per_page || props.feds.meta?.per_page || 10);
 
+const selectClass =
+    'flex h-10 w-full max-w-xs rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
 const statusLabel = (status: string) => {
     const labels: Record<string, string> = {
         facilities_approved: 'En attente DAF',
@@ -56,17 +59,17 @@ const statusLabel = (status: string) => {
 
 const statusBadge = (status: string) => {
     const badges: Record<string, string> = {
-        facilities_approved: 'bg-blue-100 text-blue-700',
-        daf_approved: 'bg-green-100 text-green-700',
-        daf_rejected: 'bg-red-100 text-red-700',
-        dga_rejected: 'bg-red-100 text-red-700',
-        waiting_daf_reclass_approval: 'bg-amber-100 text-amber-700',
-        cg_treated: 'bg-cyan-100 text-cyan-700 font-bold',
-        expert_opinion_pending: 'bg-purple-100 text-purple-700',
-        expert_opinion_given: 'bg-purple-100 text-purple-700 ring-2 ring-purple-200',
-        bon_de_commande: 'bg-emerald-100 text-emerald-800',
+        facilities_approved: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200/80',
+        daf_approved: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80',
+        daf_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        dga_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        waiting_daf_reclass_approval: 'bg-amber-100 text-amber-800 ring-1 ring-amber-200/80',
+        cg_treated: 'bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200/80 font-bold',
+        expert_opinion_pending: 'bg-primary/10 text-primary ring-1 ring-primary/20',
+        expert_opinion_given: 'bg-primary/10 text-primary ring-1 ring-primary/30',
+        bon_de_commande: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80',
     };
-    return badges[status] ?? 'bg-gray-100 text-gray-700';
+    return badges[status] ?? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
 };
 
 const formatAmount = (value?: number | null) => {
@@ -164,74 +167,123 @@ const tableData = computed(() =>
 
 <template>
     <Head title="Validations DAF" />
+
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            <div class="flex flex-wrap items-end justify-between gap-4 border-b border-gray-200 pb-4">
-                <div class="space-y-4">
-                    <div>
-                        <h1 class="text-3xl font-bold text-gray-900">Validations DAF</h1>
-                        <p class="text-sm text-gray-500">Gérez les validations standards et les transferts budgétaires.</p>
+        <div class="flex flex-col gap-6 p-4 sm:p-6">
+            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                <div
+                    class="flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                >
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+                        >
+                            <Landmark class="size-5" />
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                Validations DAF
+                            </h1>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                Gérez les validations standards et les transferts budgétaires —
+                                <span class="font-semibold text-primary">{{ totalItems }}</span>
+                                au total
+                            </p>
+
+                            <div class="mt-4 flex gap-4">
+                                <button
+                                    type="button"
+                                    @click="switchTab('validation')"
+                                    class="pb-2 text-sm font-medium transition-colors border-b-2"
+                                    :class="
+                                        props.activeTab !== 'reclassement'
+                                            ? 'border-primary text-primary'
+                                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                                    "
+                                >
+                                    Validations FED
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="switchTab('reclassement')"
+                                    class="pb-2 text-sm font-medium transition-colors border-b-2 inline-flex items-center gap-2"
+                                    :class="
+                                        props.activeTab === 'reclassement'
+                                            ? 'border-amber-600 text-amber-700'
+                                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                                    "
+                                >
+                                    Reclassements budgétaires
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="flex gap-4">
-                        <button
-                            @click="switchTab('validation')"
-                            class="pb-2 text-sm font-medium transition-colors border-b-2"
-                            :class="props.activeTab !== 'reclassement' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'"
+                    <div v-if="props.activeTab !== 'reclassement'">
+                        <label class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                            Filtrer par statut
+                        </label>
+                        <select
+                            :value="props.selectedStatus || ''"
+                            :class="selectClass"
+                            @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
                         >
-                            Validations FED
-                        </button>
-                        <button
-                            @click="switchTab('reclassement')"
-                            class="pb-2 text-sm font-medium transition-colors border-b-2 inline-flex items-center gap-2"
-                            :class="props.activeTab === 'reclassement' ? 'border-amber-600 text-amber-600' : 'border-transparent text-gray-500 hover:text-gray-700'"
-                        >
-                            Reclassements budgétaires
-                        </button>
+                            <option value="">Tous (attente + déjà traitées)</option>
+                            <option value="cg_treated">Attente DAF (Validé CG)</option>
+                            <option value="daf_approved">Validée DAF → DGA</option>
+                            <option value="daf_rejected">Rejetée DAF</option>
+                            <option value="bon_de_commande">Bon de commande (validées)</option>
+                            <option value="dga_rejected">Rejetée DGA</option>
+                        </select>
                     </div>
                 </div>
 
-                <div v-if="props.activeTab !== 'reclassement'" class="w-full max-w-xs">
-                    <label class="mb-1 block text-sm font-medium text-gray-700">Statut</label>
-                    <select
-                        :value="props.selectedStatus || ''"
-                        class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
-                        @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
+                <div class="p-4 sm:p-5">
+                    <div
+                        class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-card"
                     >
-                        <option value="">Tous (attente + déjà traitées)</option>
-                        <option value="cg_treated">Attente DAF (Validé CG)</option>
-                        <option value="daf_approved">Validée DAF → DGA</option>
-                        <option value="daf_rejected">Rejetée DAF</option>
-                        <option value="bon_de_commande">Bon de commande (validées)</option>
-                        <option value="dga_rejected">Rejetée DGA</option>
-                    </select>
+                        <DataTable
+                            :headers="columns"
+                            :items="tableData"
+                            :current-page="currentPage"
+                            :items-per-page="perPage"
+                            :total-items="totalItems"
+                            :show-select="false"
+                            @page-change="handlePageChange"
+                            @items-per-page-change="handleItemsPerPageChange"
+                        >
+                            <template #item.code="{ item }">
+                                <span class="font-semibold tabular-nums text-foreground">{{
+                                    item.code
+                                }}</span>
+                            </template>
+
+                            <template #item.estimated_total="{ item }">
+                                <span class="tabular-nums">{{ item.estimated_total }}</span>
+                            </template>
+
+                            <template #item.status="{ item }">
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="statusBadge(item.status)"
+                                >
+                                    {{ statusLabel(item.status) }}
+                                </span>
+                            </template>
+
+                            <template #item.actions="{ item }">
+                                <Link
+                                    :href="`/feds/daf/${item.id}`"
+                                    class="inline-flex size-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-foreground dark:hover:bg-muted"
+                                    title="Voir"
+                                >
+                                    <Eye class="size-4" />
+                                </Link>
+                            </template>
+                        </DataTable>
+                    </div>
                 </div>
-            </div>
-            <DataTable
-                :headers="columns"
-                :items="tableData"
-                :current-page="currentPage"
-                :items-per-page="perPage"
-                :total-items="totalItems"
-                :show-select="false"
-                @page-change="handlePageChange"
-                @items-per-page-change="handleItemsPerPageChange"
-            >
-                <template #item.status="{ item }">
-                    <span :class="['inline-flex rounded-full px-2 py-0.5 text-xs font-medium', statusBadge(item.status)]">
-                        {{ statusLabel(item.status) }}
-                    </span>
-                </template>
-                <template #item.actions="{ item }">
-                    <Link
-                        :href="`/feds/daf/${item.id}`"
-                        class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                        title="Voir"
-                    >
-                        <Eye class="h-5 w-5" />
-                    </Link>
-                </template>
-            </DataTable>
+            </section>
         </div>
     </AppLayout>
 </template>

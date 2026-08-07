@@ -38,6 +38,16 @@ const currentPage = computed(() => props.feds.current_page || props.feds.meta?.c
 const totalItems = computed(() => props.feds.total || props.feds.meta?.total || 0);
 const perPage = computed(() => props.feds.per_page || props.feds.meta?.per_page || 10);
 
+const selectClass =
+    'flex h-10 w-52 rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
+const countNeedsVerification = computed(
+    () => props.feds.data.filter((f) => f.status === 'facilities_approved').length,
+);
+const countTreated = computed(
+    () => props.feds.data.filter((f) => f.status === 'cg_treated').length,
+);
+
 const statusLabel = (status: string) => {
     const labels: Record<string, string> = {
         facilities_approved: 'À Vérifier',
@@ -48,10 +58,10 @@ const statusLabel = (status: string) => {
 
 const statusBadge = (status: string) => {
     const badges: Record<string, string> = {
-        facilities_approved: 'bg-blue-100 text-blue-700 border border-blue-200',
-        cg_treated: 'bg-green-100 text-green-700 border border-green-200',
+        facilities_approved: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200/80',
+        cg_treated: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80',
     };
-    return badges[status] ?? 'bg-gray-100 text-gray-700 border border-gray-200';
+    return badges[status] ?? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
 };
 
 const priorityLabel = (priority?: string | null) => {
@@ -61,24 +71,12 @@ const priorityLabel = (priority?: string | null) => {
 
 const priorityBadge = (priority?: string | null) => {
     const badges: Record<string, string> = {
-        urgent: 'bg-red-100 text-red-700 border border-red-200',
-        high: 'bg-orange-100 text-orange-700 border border-orange-200',
-        normal: 'bg-blue-50 text-blue-600 border border-blue-200',
-        low: 'bg-gray-100 text-gray-600 border border-gray-200',
+        urgent: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        high: 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80',
+        normal: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200/80',
+        low: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80',
     };
-    return priority ? (badges[priority] ?? 'bg-gray-100 text-gray-600 border border-gray-200') : 'bg-gray-100 text-gray-600 border border-gray-200';
-};
-
-const formatAmount = (value?: number | null) => {
-    if (value === null || value === undefined) return '-';
-    // Formatage avec séparateur de milliers virgule
-    const formattedNum = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(Number(value) || 0);
-    return `${formattedNum} FCFA`;
-};
-
-const formatQuantity = (value?: number | null) => {
-    if (value === null || value === undefined) return '—';
-    return Math.round(value).toString();
+    return priority ? (badges[priority] ?? 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80') : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/80';
 };
 
 const handlePageChange = (page: number) => {
@@ -132,87 +130,132 @@ const tableData = computed(() =>
 
 <template>
     <Head title="Contrôle de Gestion" />
+
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            
-            <!-- Header -->
-            <div class="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                    <h1 class="text-3xl font-bold text-gray-900">Vérification Budgétaire</h1>
-                    <p class="mt-1 text-sm text-gray-500">
-                        Demandes validées par Facilities nécessitant une vérification budgétaire —
-                        <span class="font-semibold text-blue-600">{{ totalItems }}</span> au total
-                    </p>
-                </div>
-                
-                <!-- Filtre -->
-                <div>
-                    <label class="mb-1 block text-xs font-medium text-gray-600">Filtrer par statut</label>
-                    <select
-                        :value="props.selectedStatus || ''"
-                        class="flex h-9 w-52 rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900 shadow-sm"
-                        @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
-                    >
-                        <option value="">Tous les statuts</option>
-                        <option value="facilities_approved">À vérifier (Nouvelles)</option>
-                        <option value="cg_treated">Traitées</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- Statistiques -->
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-center">
-                    <p class="text-xs font-medium text-blue-600">Nécessite vérification</p>
-                    <p class="text-2xl font-bold text-blue-700">
-                        {{ props.feds.data.filter(f => f.status === 'facilities_approved').length }}
-                    </p>
-                </div>
-                <div class="rounded-lg border border-green-200 bg-green-50 p-3 text-center">
-                    <p class="text-xs font-medium text-green-600">Traitée</p>
-                    <p class="text-2xl font-bold text-green-700">
-                        {{ props.feds.data.filter(f => f.status === 'cg_treated').length }}
-                    </p>
-                </div>
-            </div>
-
-            <DataTable
-                :headers="columns"
-                :items="tableData"
-                :current-page="currentPage"
-                :items-per-page="perPage"
-                :total-items="totalItems"
-                :show-select="false"
-                @page-change="handlePageChange"
-                @items-per-page-change="handleItemsPerPageChange"
-            >
-                <template #item.priority="{ item }">
-                    <span :class="['inline-flex rounded-full px-2 py-0.5 text-xs font-medium', priorityBadge(item.priority)]">
-                        {{ priorityLabel(item.priority) }}
-                    </span>
-                </template>
-                <template #item.status="{ item }">
-                    <span :class="['inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', statusBadge(item.status)]">
-                        {{ statusLabel(item.status) }}
-                    </span>
-                </template>
-                <template #item.actions="{ item }">
-                    <div class="flex items-center gap-2">
-                        <Link
-                            :href="`/feds/cg/${item.id}`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                            title="Consulter et traiter la demande"
+        <div class="flex flex-col gap-6 p-4 sm:p-6">
+            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                <div
+                    class="flex flex-wrap items-start justify-between gap-4 border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                >
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
                         >
-                            <span v-if="item.status === 'facilities_approved'" class="text-blue-600 hover:text-blue-700">
-                                <Calculator class="h-5 w-5" />
-                            </span>
-                            <span v-else>
-                                <Eye class="h-5 w-5" />
-                            </span>
-                        </Link>
+                            <Calculator class="size-5" />
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                Vérification Budgétaire
+                            </h1>
+                            <p class="mt-1 text-sm text-muted-foreground">
+                                Demandes validées par Facilities nécessitant une vérification budgétaire —
+                                <span class="font-semibold text-primary">{{ totalItems }}</span>
+                                au total
+                            </p>
+                        </div>
                     </div>
-                </template>
-            </DataTable>
+
+                    <div>
+                        <label class="mb-1.5 block text-xs font-medium text-muted-foreground">
+                            Filtrer par statut
+                        </label>
+                        <select
+                            :value="props.selectedStatus || ''"
+                            :class="selectClass"
+                            @change="updateStatusFilter(($event.target as HTMLSelectElement).value)"
+                        >
+                            <option value="">Tous les statuts</option>
+                            <option value="facilities_approved">À vérifier (Nouvelles)</option>
+                            <option value="cg_treated">Traitées</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid gap-3 border-b border-border/80 p-5 sm:grid-cols-2 sm:p-6">
+                    <div
+                        class="rounded-xl border border-sky-200 bg-sky-50 p-4 text-center dark:border-sky-900 dark:bg-sky-950/30"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300">
+                            Nécessite vérification
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums text-sky-800 dark:text-sky-200">
+                            {{ countNeedsVerification }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center dark:border-emerald-900 dark:bg-emerald-950/30"
+                    >
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                            Traitée
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tabular-nums text-emerald-800 dark:text-emerald-200">
+                            {{ countTreated }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="p-4 sm:p-5">
+                    <div
+                        class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-card"
+                    >
+                        <DataTable
+                            :headers="columns"
+                            :items="tableData"
+                            :current-page="currentPage"
+                            :items-per-page="perPage"
+                            :total-items="totalItems"
+                            :show-select="false"
+                            @page-change="handlePageChange"
+                            @items-per-page-change="handleItemsPerPageChange"
+                        >
+                            <template #item.code="{ item }">
+                                <span class="font-semibold tabular-nums text-foreground">{{
+                                    item.code
+                                }}</span>
+                            </template>
+
+                            <template #item.priority="{ item }">
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="priorityBadge(item.priority)"
+                                >
+                                    {{ priorityLabel(item.priority) }}
+                                </span>
+                            </template>
+
+                            <template #item.status="{ item }">
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="statusBadge(item.status)"
+                                >
+                                    {{ statusLabel(item.status) }}
+                                </span>
+                            </template>
+
+                            <template #item.actions="{ item }">
+                                <div class="flex items-center gap-0.5">
+                                    <Link
+                                        :href="`/feds/cg/${item.id}`"
+                                        class="inline-flex size-8 items-center justify-center rounded-md transition"
+                                        :class="
+                                            item.status === 'facilities_approved'
+                                                ? 'text-sky-600 hover:bg-sky-50 hover:text-sky-700 dark:hover:bg-sky-950/40'
+                                                : 'text-slate-600 hover:bg-slate-100 hover:text-foreground dark:hover:bg-muted'
+                                        "
+                                        title="Consulter et traiter la demande"
+                                    >
+                                        <Calculator
+                                            v-if="item.status === 'facilities_approved'"
+                                            class="size-4"
+                                        />
+                                        <Eye v-else class="size-4" />
+                                    </Link>
+                                </div>
+                            </template>
+                        </DataTable>
+                    </div>
+                </div>
+            </section>
         </div>
     </AppLayout>
 </template>

@@ -5,7 +5,7 @@ import { type BreadcrumbItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import DataTable, { type Column } from '@/components/DataTable.vue';
 import { computed } from 'vue';
-import { Eye, Pencil, Trash2, Plus } from 'lucide-vue-next';
+import { Eye, FileText, Pencil, Plus, Trash2 } from 'lucide-vue-next';
 
 interface AppelOffre {
     id: number;
@@ -31,7 +31,7 @@ const props = defineProps<Props>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
-        title: 'Appels d\'Offres',
+        title: "Appels d'Offres",
         href: '/appel-offres',
     },
 ];
@@ -62,23 +62,35 @@ const handleItemsPerPageChange = (items: number) => {
 
 const statusLabel = (status: string) => {
     switch (status) {
-        case 'brouillon': return 'Brouillon';
-        case 'publie': return 'Publié';
-        case 'cloture': return 'Clôturé';
-        case 'en_evaluation': return 'En évaluation';
-        case 'attribue': return 'Attribué';
-        default: return status;
+        case 'brouillon':
+            return 'Brouillon';
+        case 'publie':
+            return 'Publié';
+        case 'cloture':
+            return 'Clôturé';
+        case 'en_evaluation':
+            return 'En évaluation';
+        case 'attribue':
+            return 'Attribué';
+        default:
+            return status;
     }
 };
 
 const statusBadge = (status: string) => {
     switch (status) {
-        case 'brouillon': return 'bg-gray-100 text-gray-700';
-        case 'publie': return 'bg-blue-100 text-blue-700';
-        case 'cloture': return 'bg-orange-100 text-orange-700';
-        case 'en_evaluation': return 'bg-purple-100 text-purple-700';
-        case 'attribue': return 'bg-green-100 text-green-700';
-        default: return 'bg-gray-100 text-gray-700';
+        case 'brouillon':
+            return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
+        case 'publie':
+            return 'bg-primary/10 text-primary ring-1 ring-primary/20';
+        case 'cloture':
+            return 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80';
+        case 'en_evaluation':
+            return 'bg-amber-100 text-amber-800 ring-1 ring-amber-200/80';
+        case 'attribue':
+            return 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80';
+        default:
+            return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
     }
 };
 
@@ -92,11 +104,13 @@ const columns: Column[] = [
 ];
 
 const tableData = computed(() => {
-    return props.appelOffres.data.map(tender => ({
+    return props.appelOffres.data.map((tender) => ({
         id: tender.id,
         reference: tender.reference,
-        objet: tender.objet.length > 50 ? tender.objet.substring(0, 50) + '...' : tender.objet,
-        date_lancement: tender.date_lancement ? new Date(tender.date_lancement).toLocaleDateString('fr-FR') : '-',
+        objet: tender.objet.length > 50 ? tender.objet.substring(0, 50) + '…' : tender.objet,
+        date_lancement: tender.date_lancement
+            ? new Date(tender.date_lancement).toLocaleDateString('fr-FR')
+            : '—',
         date_limite_soumission: new Date(tender.date_limite_soumission).toLocaleDateString('fr-FR'),
         statut: tender.statut,
         tender,
@@ -104,7 +118,7 @@ const tableData = computed(() => {
 });
 
 const deleteTender = (id: number) => {
-    if (confirm('Supprimer cet appel d\'offres ?')) {
+    if (confirm("Supprimer cet appel d'offres ?")) {
         router.delete(`/appel-offres/${id}`);
     }
 };
@@ -114,58 +128,94 @@ const deleteTender = (id: number) => {
     <Head title="Appels d'Offres" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            <div class="flex items-center justify-between">
-                <h1 class="text-3xl font-bold text-gray-900">Appels d'Offres</h1>
-                <Link href="/appel-offres/create">
-                    <Button class="bg-purple-600 hover:bg-purple-700">
-                        <Plus class="mr-2 h-4 w-4" /> Nouvel Appel
-                    </Button>
-                </Link>
-            </div>
-
-            <DataTable
-                :headers="columns"
-                :items="tableData"
-                :current-page="currentPage"
-                :items-per-page="perPage"
-                :total-items="totalItems"
-                :show-select="false"
-                @page-change="handlePageChange"
-                @items-per-page-change="handleItemsPerPageChange"
-            >
-                <template #item.statut="{ item }">
-                    <span :class="['inline-flex rounded-full px-2 py-0.5 text-xs font-medium', statusBadge(item.statut)]">
-                        {{ statusLabel(item.statut) }}
-                    </span>
-                </template>
-
-                <template #item.actions="{ item }">
-                    <div class="flex items-center gap-1">
-                        <Link
-                            :href="`/appel-offres/${item.id}`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                            title="Voir"
-                        >
-                            <Eye class="h-5 w-5" />
-                        </Link>
-                        <Link v-if="item.statut === 'brouillon'"
-                            :href="`/appel-offres/${item.id}/edit`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-                            title="Modifier"
-                        >
-                            <Pencil class="h-5 w-5" />
-                        </Link>
-                        <button v-if="item.statut === 'brouillon'"
-                            @click="deleteTender(item.id)"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors"
-                            title="Supprimer"
-                        >
-                            <Trash2 class="h-5 w-5" />
-                        </button>
+        <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                <div
+                    class="border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                >
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div
+                                class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+                            >
+                                <FileText class="size-5" />
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                    Achats & consultations
+                                </p>
+                                <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                    Appels d'Offres
+                                </h1>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    TDR —
+                                    <span class="font-semibold text-primary">{{ totalItems }}</span>
+                                    appel{{ totalItems > 1 ? 's' : '' }}
+                                </p>
+                            </div>
+                        </div>
+                        <Button as-child>
+                            <Link href="/appel-offres/create" class="inline-flex items-center gap-2">
+                                <Plus class="size-4" />
+                                Nouvel Appel
+                            </Link>
+                        </Button>
                     </div>
-                </template>
-            </DataTable>
+                </div>
+
+                <div class="p-4 sm:p-5">
+                    <DataTable
+                        :headers="columns"
+                        :items="tableData"
+                        :current-page="currentPage"
+                        :items-per-page="perPage"
+                        :total-items="totalItems"
+                        :show-select="false"
+                        @page-change="handlePageChange"
+                        @items-per-page-change="handleItemsPerPageChange"
+                    >
+                        <template #item.statut="{ item }">
+                            <span
+                                :class="[
+                                    'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                    statusBadge(item.statut),
+                                ]"
+                            >
+                                {{ statusLabel(item.statut) }}
+                            </span>
+                        </template>
+
+                        <template #item.actions="{ item }">
+                            <div class="flex items-center gap-1">
+                                <Link
+                                    :href="`/appel-offres/${item.id}`"
+                                    class="inline-flex items-center justify-center rounded-md p-2 text-slate-600 transition-colors hover:bg-primary/5 hover:text-primary"
+                                    title="Voir"
+                                >
+                                    <Eye class="size-5" />
+                                </Link>
+                                <Link
+                                    v-if="item.statut === 'brouillon'"
+                                    :href="`/appel-offres/${item.id}/edit`"
+                                    class="inline-flex items-center justify-center rounded-md p-2 text-slate-600 transition-colors hover:bg-primary/5 hover:text-primary"
+                                    title="Modifier"
+                                >
+                                    <Pencil class="size-5" />
+                                </Link>
+                                <button
+                                    v-if="item.statut === 'brouillon'"
+                                    type="button"
+                                    class="inline-flex items-center justify-center rounded-md p-2 text-red-600 transition-colors hover:bg-red-50 hover:text-red-700"
+                                    title="Supprimer"
+                                    @click="deleteTender(item.id)"
+                                >
+                                    <Trash2 class="size-5" />
+                                </button>
+                            </div>
+                        </template>
+                    </DataTable>
+                </div>
+            </section>
         </div>
     </AppLayout>
 </template>

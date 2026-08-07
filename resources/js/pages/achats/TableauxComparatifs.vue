@@ -49,6 +49,12 @@ const breadcrumbs: BreadcrumbItem[] = [
 const search = ref(props.filters?.search ?? '');
 const statusFilter = ref(props.filters?.status ?? '');
 
+const fieldClass =
+    'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
+
+const selectClass =
+    'flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 sm:w-56 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
 watch(
     () => props.filters,
     (f) => {
@@ -84,17 +90,17 @@ const statusLabel = (status: string) => {
 
 const statusBadge = (status: string) => {
     const badges: Record<string, string> = {
-        n1_approved: 'bg-blue-100 text-blue-700 border border-blue-200',
-        achats_needs_info: 'bg-orange-100 text-orange-700 border border-orange-200',
-        achats_rejected: 'bg-red-100 text-red-700 border border-red-200',
-        achats_approved: 'bg-green-100 text-green-700 border border-green-200',
-        expert_opinion_pending: 'bg-purple-100 text-purple-700 border border-purple-200',
-        expert_opinion_given: 'bg-purple-50 text-purple-600 border border-purple-100',
-        facilities_approved: 'bg-blue-50 text-blue-700 border border-blue-200',
-        cg_treated: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
-        bon_de_commande: 'bg-cyan-100 text-cyan-800 border border-cyan-200',
+        n1_approved: 'bg-sky-100 text-sky-800 ring-1 ring-sky-200/80',
+        achats_needs_info: 'bg-orange-100 text-orange-800 ring-1 ring-orange-200/80',
+        achats_rejected: 'bg-red-100 text-red-800 ring-1 ring-red-200/80',
+        achats_approved: 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/80',
+        expert_opinion_pending: 'bg-primary/10 text-primary ring-1 ring-primary/20',
+        expert_opinion_given: 'bg-primary/10 text-primary ring-1 ring-primary/25',
+        facilities_approved: 'bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200/80',
+        cg_treated: 'bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200/80',
+        bon_de_commande: 'bg-cyan-100 text-cyan-800 ring-1 ring-cyan-200/80',
     };
-    return badges[status] ?? 'bg-gray-100 text-gray-700 border border-gray-200';
+    return badges[status] ?? 'bg-slate-100 text-slate-700 ring-1 ring-slate-200/80';
 };
 
 const canEditCotation = (status: string) =>
@@ -162,7 +168,10 @@ const tableData = computed(() =>
         code: fed.code,
         demandeur: fed.demandeur || fed.requester?.name || '—',
         department: fed.department || '—',
-        motive: fed.motive && fed.motive.length > 50 ? fed.motive.substring(0, 50) + '…' : fed.motive || '—',
+        motive:
+            fed.motive && fed.motive.length > 50
+                ? fed.motive.substring(0, 50) + '…'
+                : fed.motive || '—',
         fournisseurs_count: fed.fournisseurs_count ?? 0,
         offres_count: fed.offres_count ?? 0,
         last_saved_at: fed.last_saved_at
@@ -184,136 +193,184 @@ const hasFilters = computed(() => !!(search.value.trim() || statusFilter.value))
 <template>
     <Head title="Tableaux comparatifs" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
-            <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Achats & consultations
-                    </p>
-                    <h1 class="text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
-                        Tableaux comparatifs
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Cotations enregistrées —
-                        <span class="font-medium text-foreground">{{ totalItems }}</span>
-                        tableau{{ totalItems > 1 ? 'x' : '' }}
-                    </p>
-                </div>
-            </div>
-
-            <div class="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm sm:flex-row sm:items-center sm:p-4">
-                <div class="relative min-w-0 flex-1">
-                    <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        v-model="search"
-                        placeholder="Rechercher par FED, demandeur, motif…"
-                        class="h-10 pl-10"
-                        @keyup.enter="applyFilters"
-                    />
-                </div>
-                <select
-                    v-model="statusFilter"
-                    class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm sm:w-56"
-                    @change="applyFilters"
+        <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
+            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
+                <div
+                    class="border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
                 >
-                    <option value="">Tous les statuts</option>
-                    <option value="n1_approved">En attente Achats</option>
-                    <option value="achats_needs_info">Complément demandé</option>
-                    <option value="achats_approved">Transmise Facilities</option>
-                    <option value="expert_opinion_pending">Avis expert</option>
-                    <option value="facilities_approved">Validée Facilities</option>
-                    <option value="bon_de_commande">Bon de commande</option>
-                </select>
-                <div class="flex gap-2">
-                    <Button type="button" variant="outline" class="h-10" @click="applyFilters">
-                        Filtrer
-                    </Button>
-                    <Button
-                        v-if="hasFilters"
-                        type="button"
-                        variant="ghost"
-                        class="h-10"
-                        @click="resetFilters"
-                    >
-                        <RotateCcw class="mr-1.5 size-4" />
-                        Réinitialiser
-                    </Button>
-                </div>
-            </div>
-
-            <div
-                v-if="totalItems === 0"
-                class="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/20 px-6 py-16 text-center"
-            >
-                <FileSpreadsheet class="mb-3 size-10 text-muted-foreground/60" />
-                <h2 class="text-base font-semibold text-foreground">Aucun tableau enregistré</h2>
-                <p class="mt-1 max-w-md text-sm text-muted-foreground">
-                    <template v-if="hasFilters">
-                        Aucun résultat pour ces critères.
-                    </template>
-                    <template v-else>
-                        Les tableaux apparaissent ici dès qu’une cotation fournisseur est enregistrée sur une FED.
-                    </template>
-                </p>
-                <div class="mt-4 flex gap-2">
-                    <Button v-if="hasFilters" type="button" variant="outline" @click="resetFilters">
-                        Réinitialiser
-                    </Button>
-                    <Button as-child>
-                        <Link href="/feds/achats">Voir les demandes en cours</Link>
-                    </Button>
-                </div>
-            </div>
-
-            <DataTable
-                v-else
-                :headers="columns"
-                :items="tableData"
-                :current-page="currentPage"
-                :items-per-page="perPage"
-                :total-items="totalItems"
-                :show-select="false"
-                @page-change="handlePageChange"
-                @items-per-page-change="handleItemsPerPageChange"
-            >
-                <template #item.code="{ item }">
-                    <span class="font-mono text-sm font-semibold text-foreground">{{ item.code }}</span>
-                </template>
-
-                <template #item.fournisseurs_count="{ item }">
-                    <span class="tabular-nums text-sm text-foreground">
-                        {{ item.fournisseurs_count }}
-                        <span class="text-muted-foreground">
-                            fournisseur{{ item.fournisseurs_count > 1 ? 's' : '' }}
-                        </span>
-                    </span>
-                </template>
-
-                <template #item.status="{ item }">
-                    <span :class="['inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', statusBadge(item.status)]">
-                        {{ statusLabel(item.status) }}
-                    </span>
-                </template>
-
-                <template #item.actions="{ item }">
-                    <div class="flex items-center gap-1">
-                        <Link
-                            :href="`/feds/achats/${item.id}`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            title="Voir la demande"
-                        >
-                            <Eye class="size-4" />
-                        </Link>
-                        <Link
-                            :href="`/feds/achats/${item.id}/cotation`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-blue-600 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                            :title="canEditCotation(item.status) ? 'Modifier le tableau' : 'Consulter le tableau'"
-                        >
-                            <FileSpreadsheet class="size-4" />
-                        </Link>
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="flex items-start gap-3">
+                            <div
+                                class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+                            >
+                                <FileSpreadsheet class="size-5" />
+                            </div>
+                            <div>
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                                    Achats & consultations
+                                </p>
+                                <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                    Tableaux comparatifs
+                                </h1>
+                                <p class="mt-1 text-sm text-muted-foreground">
+                                    Cotations enregistrées —
+                                    <span class="font-semibold text-primary">{{ totalItems }}</span>
+                                    tableau{{ totalItems > 1 ? 'x' : '' }}
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                </template>
-            </DataTable>
+                </div>
+
+                <div class="space-y-3 border-b border-border/80 p-5 sm:p-6">
+                    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <div class="relative min-w-0 flex-1">
+                            <Search
+                                class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                            />
+                            <Input
+                                v-model="search"
+                                placeholder="Rechercher par FED, demandeur, motif…"
+                                :class="[fieldClass, 'pl-9']"
+                                @keyup.enter="applyFilters"
+                            />
+                        </div>
+                        <select v-model="statusFilter" :class="selectClass" @change="applyFilters">
+                            <option value="">Tous les statuts</option>
+                            <option value="n1_approved">En attente Achats</option>
+                            <option value="achats_needs_info">Complément demandé</option>
+                            <option value="achats_approved">Transmise Facilities</option>
+                            <option value="expert_opinion_pending">Avis expert</option>
+                            <option value="facilities_approved">Validée Facilities</option>
+                            <option value="bon_de_commande">Bon de commande</option>
+                        </select>
+                        <div class="flex gap-2">
+                            <Button
+                                type="button"
+                                class="h-10 bg-primary text-primary-foreground hover:bg-primary/90"
+                                @click="applyFilters"
+                            >
+                                Filtrer
+                            </Button>
+                            <Button
+                                v-if="hasFilters"
+                                type="button"
+                                variant="outline"
+                                class="h-10 border-slate-300"
+                                @click="resetFilters"
+                            >
+                                <RotateCcw class="size-4" />
+                                Réinitialiser
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 sm:p-5">
+                    <div
+                        v-if="totalItems === 0"
+                        class="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 px-6 py-16 text-center dark:border-slate-600"
+                    >
+                        <div
+                            class="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+                        >
+                            <FileSpreadsheet class="size-7" />
+                        </div>
+                        <h2 class="text-base font-semibold text-foreground">
+                            Aucun tableau enregistré
+                        </h2>
+                        <p class="mt-1 max-w-md text-sm text-muted-foreground">
+                            <template v-if="hasFilters">
+                                Aucun résultat pour ces critères.
+                            </template>
+                            <template v-else>
+                                Les tableaux apparaissent ici dès qu’une cotation fournisseur est
+                                enregistrée sur une FED.
+                            </template>
+                        </p>
+                        <div class="mt-4 flex gap-2">
+                            <Button
+                                v-if="hasFilters"
+                                type="button"
+                                variant="outline"
+                                class="border-slate-300"
+                                @click="resetFilters"
+                            >
+                                Réinitialiser
+                            </Button>
+                            <Button as-child class="bg-primary text-primary-foreground hover:bg-primary/90">
+                                <Link href="/feds/achats">Voir les demandes en cours</Link>
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else
+                        class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-card"
+                    >
+                        <DataTable
+                            :headers="columns"
+                            :items="tableData"
+                            :current-page="currentPage"
+                            :items-per-page="perPage"
+                            :total-items="totalItems"
+                            :show-select="false"
+                            @page-change="handlePageChange"
+                            @items-per-page-change="handleItemsPerPageChange"
+                        >
+                            <template #item.code="{ item }">
+                                <span class="font-mono text-sm font-semibold text-foreground">{{
+                                    item.code
+                                }}</span>
+                            </template>
+
+                            <template #item.fournisseurs_count="{ item }">
+                                <span class="tabular-nums text-sm text-foreground">
+                                    {{ item.fournisseurs_count }}
+                                    <span class="text-muted-foreground">
+                                        fournisseur{{
+                                            item.fournisseurs_count > 1 ? 's' : ''
+                                        }}
+                                    </span>
+                                </span>
+                            </template>
+
+                            <template #item.status="{ item }">
+                                <span
+                                    class="inline-flex max-w-[14rem] truncate rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="statusBadge(item.status)"
+                                    :title="statusLabel(item.status)"
+                                >
+                                    {{ statusLabel(item.status) }}
+                                </span>
+                            </template>
+
+                            <template #item.actions="{ item }">
+                                <div class="flex items-center gap-0.5">
+                                    <Link
+                                        :href="`/feds/achats/${item.id}`"
+                                        class="inline-flex size-8 items-center justify-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-foreground dark:hover:bg-muted"
+                                        title="Voir la demande"
+                                    >
+                                        <Eye class="size-4" />
+                                    </Link>
+                                    <Link
+                                        :href="`/feds/achats/${item.id}/cotation`"
+                                        class="inline-flex size-8 items-center justify-center rounded-md text-primary transition hover:bg-primary/5"
+                                        :title="
+                                            canEditCotation(item.status)
+                                                ? 'Modifier le tableau'
+                                                : 'Consulter le tableau'
+                                        "
+                                    >
+                                        <FileSpreadsheet class="size-4" />
+                                    </Link>
+                                </div>
+                            </template>
+                        </DataTable>
+                    </div>
+                </div>
+            </section>
         </div>
     </AppLayout>
 </template>

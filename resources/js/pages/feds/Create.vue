@@ -193,10 +193,17 @@ const availableBudgetLines = computed(() => {
     });
 });
 
+const fieldClass =
+    'mt-1.5 h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
+
 const selectClass =
-    'mt-1.5 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+    'mt-1.5 flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
 const textareaClass =
-    'mt-1.5 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring';
+    'mt-1.5 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
+
+const fieldReadonlyClass =
+    'mt-1.5 h-10 border-slate-300 bg-slate-50 text-slate-700 shadow-sm dark:border-slate-600 dark:bg-muted/40 dark:text-foreground';
 
 const submit = () => {
     if (!form.department || !form.motive) {
@@ -239,17 +246,26 @@ const submit = () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:p-6">
-            <div class="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        Fiches de dépense
-                    </p>
-                    <h1 class="text-2xl font-semibold tracking-tight text-foreground lg:text-3xl">
-                        Nouvelle fiche d'engagement
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        Renseignez la demande, les articles, puis soumettez pour validation N+1.
-                    </p>
+            <div
+                class="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-border/80 bg-card px-5 py-5 shadow-sm sm:px-6"
+            >
+                <div class="flex items-start gap-3">
+                    <div
+                        class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+                    >
+                        <FilePlus2 class="size-5" />
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                            Fiches de dépense
+                        </p>
+                        <h1 class="text-xl font-semibold tracking-tight text-foreground lg:text-2xl">
+                            Nouvelle fiche d'engagement
+                        </h1>
+                        <p class="mt-1 text-sm text-muted-foreground">
+                            Renseignez la demande, les articles, puis soumettez pour validation N+1.
+                        </p>
+                    </div>
                 </div>
             </div>
 
@@ -260,9 +276,11 @@ const submit = () => {
                 <!-- Colonne principale -->
                 <div class="flex min-h-0 flex-col gap-4 overflow-y-auto">
                     <!-- Informations générales -->
-                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="mb-4 flex items-center gap-3 border-b border-border pb-3">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <section class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm lg:p-5">
+                        <div class="mb-4 flex items-center gap-3 border-b border-border/80 pb-3">
+                            <div
+                                class="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                            >
                                 <ClipboardList class="size-5" />
                             </div>
                             <div>
@@ -274,7 +292,7 @@ const submit = () => {
                         <div class="grid gap-4 md:grid-cols-2">
                             <div>
                                 <Label for="date">Date</Label>
-                                <Input id="date" v-model="form.date" type="date" class="mt-1.5" />
+                                <Input id="date" v-model="form.date" type="date" :class="fieldClass" />
                                 <InputError :message="form.errors.date" />
                             </div>
                             <div>
@@ -284,7 +302,7 @@ const submit = () => {
                                     v-model="form.demandeur"
                                     type="text"
                                     readonly
-                                    class="mt-1.5 bg-muted/50"
+                                    :class="fieldReadonlyClass"
                                 />
                                 <InputError :message="form.errors.demandeur" />
                             </div>
@@ -312,7 +330,7 @@ const submit = () => {
                                     v-model="form.fonction"
                                     type="text"
                                     readonly
-                                    class="mt-1.5 bg-muted/50"
+                                    :class="fieldReadonlyClass"
                                 />
                                 <InputError :message="form.errors.fonction" />
                             </div>
@@ -323,7 +341,7 @@ const submit = () => {
                                         type="button"
                                         variant="outline"
                                         size="sm"
-                                        class="h-8 w-8 p-0"
+                                        class="h-8 w-8 border-slate-300 p-0"
                                         title="Ajouter un bénéficiaire"
                                         @click="addBeneficiaire"
                                     >
@@ -341,11 +359,12 @@ const submit = () => {
                                             v-model="form.beneficiaire[index]"
                                             type="text"
                                             placeholder="Agence, service…"
+                                            :class="fieldClass.replace('mt-1.5 ', '')"
                                         />
                                         <Button
                                             type="button"
                                             variant="ghost"
-                                            class="h-9 w-9 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                            class="h-10 w-9 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
                                             :disabled="form.beneficiaire.length === 1"
                                             title="Supprimer"
                                             @click="removeBeneficiaire(index)"
@@ -387,10 +406,10 @@ const submit = () => {
                     </section>
 
                     <!-- Articles -->
-                    <section v-if="hasItems" class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                    <section v-if="hasItems" class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm lg:p-5">
                         <div class="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
                             <div class="flex items-center gap-3">
-                                <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                                <div class="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                     <FilePlus2 class="size-5" />
                                 </div>
                                 <div>
@@ -400,7 +419,7 @@ const submit = () => {
                                     </p>
                                 </div>
                             </div>
-                            <Button type="button" variant="outline" size="sm" @click="addItem">
+                            <Button type="button" variant="outline" size="sm" class="border-primary/25 text-primary hover:bg-primary/5" @click="addItem">
                                 <Plus class="mr-1.5 size-4" />
                                 Ajouter une ligne
                             </Button>
@@ -410,7 +429,7 @@ const submit = () => {
                             <div
                                 v-for="(item, index) in form.items"
                                 :key="index"
-                                class="rounded-lg border border-border bg-muted/20 p-4"
+                                class="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-muted/20"
                             >
                                 <div class="mb-3 flex items-center justify-between gap-2">
                                     <p class="text-sm font-semibold text-foreground">Ligne {{ index + 1 }}</p>
@@ -434,7 +453,7 @@ const submit = () => {
                                             :id="`label-${index}`"
                                             v-model="item.label"
                                             type="text"
-                                            class="mt-1.5"
+                                            :class="fieldClass"
                                             placeholder="Ex. Laptop"
                                         />
                                         <InputError
@@ -450,8 +469,8 @@ const submit = () => {
                                             type="number"
                                             step="1"
                                             :class="[
-                                                'mt-1.5',
-                                                item.entities.length > 0 ? 'bg-blue-50/40' : '',
+                                                fieldClass,
+                                                item.entities.length > 0 ? 'bg-sky-50 dark:bg-sky-950/20' : '',
                                             ]"
                                             @focus="isEditingTotal = true"
                                             @blur="isEditingTotal = false"
@@ -531,7 +550,7 @@ const submit = () => {
                                                                 :value="getEntityPercentage(item, entity)"
                                                                 type="number"
                                                                 readonly
-                                                                class="h-9 bg-muted/50 text-right font-medium"
+                                                                :class="[fieldClass.replace('mt-1.5 ', ''), 'h-9 bg-slate-50 text-right font-medium']"
                                                                 placeholder="0"
                                                             />
                                                         </td>
@@ -542,7 +561,7 @@ const submit = () => {
                                                                 type="number"
                                                                 step="1"
                                                                 min="0"
-                                                                class="h-9 text-right font-medium"
+                                                                :class="[fieldClass.replace('mt-1.5 ', ''), 'h-9 text-right font-medium']"
                                                                 placeholder="0"
                                                             />
                                                         </td>
@@ -573,9 +592,9 @@ const submit = () => {
                     </section>
 
                     <!-- Pièces jointes -->
-                    <section class="rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
+                    <section class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm lg:p-5">
                         <div class="flex items-start gap-3">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                            <div class="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                 <Paperclip class="size-5" />
                             </div>
                             <div class="min-w-0 flex-1">
@@ -602,7 +621,10 @@ const submit = () => {
                                         id="attachments"
                                         type="file"
                                         multiple
-                                        class="mt-1.5"
+                                        :class="[
+                                            fieldClass,
+                                            'cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary',
+                                        ]"
                                         @change="onFileChange"
                                     />
                                     <p
@@ -620,9 +642,9 @@ const submit = () => {
 
                 <!-- Panneau latéral -->
                 <aside class="xl:sticky xl:top-4 xl:self-start">
-                    <div class="flex flex-col gap-4 rounded-xl border border-border bg-card p-4 shadow-sm lg:p-5">
-                        <div class="flex items-start gap-3 border-b border-border pb-4">
-                            <div class="rounded-lg bg-slate-100 p-2 text-slate-700">
+                    <div class="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-4 shadow-sm lg:p-5">
+                        <div class="flex items-start gap-3 border-b border-border/80 pb-4">
+                            <div class="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                 <FileText class="size-5" />
                             </div>
                             <div class="min-w-0">
@@ -682,14 +704,18 @@ const submit = () => {
                         </dl>
 
                         <div class="flex flex-col gap-2 border-t border-border pt-4">
-                            <Button type="submit" class="w-full" :disabled="form.processing">
+                            <Button
+                                type="submit"
+                                class="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                                :disabled="form.processing"
+                            >
                                 <Send class="mr-2 size-4" />
                                 {{ form.processing ? 'Création…' : 'Soumettre N+1' }}
                             </Button>
                             <Button
                                 type="button"
                                 variant="outline"
-                                class="w-full"
+                                class="w-full border-slate-300"
                                 @click="router.visit('/feds')"
                             >
                                 Annuler

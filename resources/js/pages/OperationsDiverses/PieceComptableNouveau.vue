@@ -5,7 +5,19 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import InputError from '@/components/InputError.vue';
-import { ArrowLeft, Download, Eye, FileSpreadsheet, FileText, Plus, Trash2, Eraser, Save, Hash, CalendarDays } from 'lucide-vue-next';
+import {
+    ArrowLeft,
+    Check,
+    Download,
+    Eye,
+    FileSpreadsheet,
+    FileText,
+    Plus,
+    Trash2,
+    Eraser,
+    Save,
+    Upload,
+} from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { odFileTooLarge } from '@/lib/odUpload';
 
@@ -54,6 +66,10 @@ const flashWarning = computed(() => flash.value?.warning);
 
 const maxUploadMo = computed(() => props.maxUploadMo ?? 25);
 
+/** Champs plus contrastés (bordure / fond / placeholder). */
+const fieldClass =
+    'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
+
 const form = useForm<{
     numero_batch: string;
     date_valeur: string;
@@ -70,19 +86,68 @@ const form = useForm<{
 
 /** Incrémenté pour réinitialiser les champs fichier HTML après « Effacer ». */
 const justificatifListKey = ref(0);
+const csvInputRef = ref<HTMLInputElement | null>(null);
+const csvDragOver = ref(false);
 
-function onIntegrationFile(e: Event) {
-    const t = e.target as HTMLInputElement;
-    const f = t.files?.[0] ?? null;
+const stepIdentifiantsOk = computed(
+    () =>
+        form.numero_batch.trim() !== '' &&
+        form.date_valeur !== '' &&
+        form.nom_classeur.trim() !== '',
+);
+
+const stepCsvOk = computed(
+    () =>
+        form.fichier_integration !== null ||
+        (Boolean(props.editing) && Boolean(props.classeur?.fichier)),
+);
+
+const stepPiecesOk = computed(() => {
+    if (props.editing) {
+        return (props.classeur?.pieces?.length ?? 0) > 0 || form.justificatifs.some((j) => j.file);
+    }
+    return form.justificatifs.some((j) => j.description.trim() && j.file);
+});
+
+const setupStep = computed(() => {
+    if (!stepIdentifiantsOk.value) return 1;
+    if (!stepCsvOk.value) return 2;
+    return 3;
+});
+
+function assignIntegrationFile(f: File | null, input?: HTMLInputElement | null) {
     const tooLarge = odFileTooLarge(f, maxUploadMo.value);
     if (tooLarge) {
         form.setError('fichier_integration', tooLarge);
         form.fichier_integration = null;
-        t.value = '';
+        if (input) input.value = '';
         return;
     }
     form.clearErrors('fichier_integration');
     form.fichier_integration = f;
+}
+
+function onIntegrationFile(e: Event) {
+    const t = e.target as HTMLInputElement;
+    assignIntegrationFile(t.files?.[0] ?? null, t);
+}
+
+function onCsvDrop(e: DragEvent) {
+    csvDragOver.value = false;
+    const f = e.dataTransfer?.files?.[0] ?? null;
+    if (!f) return;
+    const name = f.name.toLowerCase();
+    if (!name.endsWith('.csv') && !name.endsWith('.txt') && f.type !== 'text/csv') {
+        form.setError('fichier_integration', 'Seuls les fichiers CSV / TXT sont acceptés.');
+        return;
+    }
+    assignIntegrationFile(f);
+}
+
+function clearCsvFile() {
+    form.fichier_integration = null;
+    form.clearErrors('fichier_integration');
+    if (csvInputRef.value) csvInputRef.value.value = '';
 }
 
 function onJustificatifFile(index: number, e: Event) {
@@ -117,12 +182,13 @@ function effacerTout() {
     form.reset();
     form.justificatifs = [{ description: 'Email', file: null }];
     justificatifListKey.value += 1;
+    if (csvInputRef.value) csvInputRef.value.value = '';
 }
 
 function submit() {
     if (props.editing && props.classeur) {
-        const hasNewFiles = form.fichier_integration !== null
-            || form.justificatifs.some((j) => j.file !== null);
+        const hasNewFiles =
+            form.fichier_integration !== null || form.justificatifs.some((j) => j.file !== null);
         form
             .transform((data) => ({
                 ...data,
@@ -140,235 +206,355 @@ function submit() {
         preserveScroll: true,
     });
 }
+
+function formatBytes(size: number): string {
+    if (size < 1024) return `${size} o`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} Ko`;
+    return `${(size / (1024 * 1024)).toFixed(1)} Mo`;
+}
 </script>
 
 <template>
-    <Head title="Pièce comptable — OD" />
+    <Head :title="editing ? 'Modifier l’intégration — OD' : 'Intégration automatique — OD'" />
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            <div v-if="flashSuccess" class="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-200">
+        <div class="flex flex-col gap-6 p-4 sm:p-6">
+            <div
+                v-if="flashSuccess"
+                class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+            >
                 {{ flashSuccess }}
             </div>
-            <div v-if="flashWarning" class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            <div
+                v-if="flashWarning"
+                class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+            >
                 {{ flashWarning }}
-            </div>
-
-            <div class="flex items-start gap-3">
-                <div class="rounded-lg bg-muted p-2 text-muted-foreground">
-                    <FileSpreadsheet class="size-6" />
-                </div>
-                <div>
-                    <h1 class="text-xl font-semibold text-foreground">
-                        {{ editing ? 'Modifier l’intégration automatique' : 'Intégration automatique' }}
-                    </h1>
-                    <p class="mt-1 text-sm text-muted-foreground">
-                        <template v-if="editing">
-                            Corrigez les données d’intégration. Les pièces existantes sont conservées.
-                        </template>
-                        <template v-else>
-                            Téléchargez le modèle CSV, remplissez-le puis importez-le avec les pièces justificatives.
-                        </template>
-                    </p>
-                </div>
             </div>
 
             <Link
                 v-if="editing && classeur?.resume_url"
                 :href="classeur.resume_url"
-                class="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                class="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground transition hover:text-foreground"
             >
                 <ArrowLeft class="size-4" /> Retour au résumé
             </Link>
 
-            <form id="form-integration-od" class="space-y-8" @submit.prevent="submit">
-                <div class="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-                    <div class="border-b border-border bg-gradient-to-r from-violet-50/90 to-transparent px-5 py-3 dark:from-violet-950/40 dark:to-transparent">
-                        <h2 class="text-sm font-semibold text-foreground">Données d’intégration</h2>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            Numéro batch, date valeur et fichier CSV à importer.
-                        </p>
+            <form id="form-integration-od" class="space-y-6" @submit.prevent="submit">
+                <section
+                    class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+                >
+                    <!-- En-tête + étapes -->
+                    <div
+                        class="border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+                    >
+                        <div class="flex flex-wrap items-start justify-between gap-4">
+                            <div class="flex items-start gap-3">
+                                <div
+                                    class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-white shadow-sm"
+                                >
+                                    <FileSpreadsheet class="size-5" />
+                                </div>
+                                <div>
+                                    <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                        {{
+                                            editing
+                                                ? 'Modifier l’intégration automatique'
+                                                : 'Intégration automatique'
+                                        }}
+                                    </h1>
+                                    <p class="mt-1 max-w-xl text-sm text-muted-foreground">
+                                        <template v-if="editing">
+                                            Corrigez les données. Les pièces déjà jointes sont
+                                            conservées.
+                                        </template>
+                                        <template v-else>
+                                            Identifiants, fichier CSV, puis pièces justificatives —
+                                            en une seule soumission.
+                                        </template>
+                                    </p>
+                                </div>
+                            </div>
+
+                            <ol
+                                v-if="!editing"
+                                class="flex flex-wrap items-center gap-1.5 text-xs font-medium"
+                                aria-label="Progression"
+                            >
+                                <li
+                                    class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 transition"
+                                    :class="
+                                        setupStep >= 1
+                                            ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-red-200'
+                                            : 'bg-muted text-muted-foreground'
+                                    "
+                                >
+                                    <span
+                                        class="flex size-5 items-center justify-center rounded-full text-[11px] font-bold"
+                                        :class="
+                                            stepIdentifiantsOk
+                                                ? 'bg-primary text-white'
+                                                : 'bg-white text-primary dark:bg-primary/30 dark:text-red-100'
+                                        "
+                                    >
+                                        <Check v-if="stepIdentifiantsOk" class="size-3" />
+                                        <template v-else>1</template>
+                                    </span>
+                                    Identifiants
+                                </li>
+                                <li class="hidden text-muted-foreground/50 sm:inline" aria-hidden="true">
+                                    →
+                                </li>
+                                <li
+                                    class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 transition"
+                                    :class="
+                                        setupStep >= 2
+                                            ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-red-200'
+                                            : 'bg-muted text-muted-foreground'
+                                    "
+                                >
+                                    <span
+                                        class="flex size-5 items-center justify-center rounded-full text-[11px] font-bold"
+                                        :class="
+                                            stepCsvOk
+                                                ? 'bg-primary text-white'
+                                                : 'bg-white text-primary dark:bg-primary/30 dark:text-red-100'
+                                        "
+                                    >
+                                        <Check v-if="stepCsvOk" class="size-3" />
+                                        <template v-else>2</template>
+                                    </span>
+                                    CSV
+                                </li>
+                                <li class="hidden text-muted-foreground/50 sm:inline" aria-hidden="true">
+                                    →
+                                </li>
+                                <li
+                                    class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 transition"
+                                    :class="
+                                        setupStep >= 3
+                                            ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-red-200'
+                                            : 'bg-muted text-muted-foreground'
+                                    "
+                                >
+                                    <span
+                                        class="flex size-5 items-center justify-center rounded-full text-[11px] font-bold"
+                                        :class="
+                                            stepPiecesOk
+                                                ? 'bg-primary text-white'
+                                                : 'bg-white text-primary dark:bg-primary/30 dark:text-red-100'
+                                        "
+                                    >
+                                        <Check v-if="stepPiecesOk" class="size-3" />
+                                        <template v-else>3</template>
+                                    </span>
+                                    Pièces
+                                </li>
+                            </ol>
+                        </div>
                     </div>
 
-                    <div class="space-y-5 p-5">
-                        <!-- Champs mis en valeur : Numéro batch & Date valeur -->
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <div class="rounded-xl border border-violet-200/80 bg-violet-50/50 p-4 shadow-xs dark:border-violet-900/60 dark:bg-violet-950/20">
-                                <div class="flex items-center gap-2">
-                                    <div class="rounded-lg bg-violet-600 p-1.5 text-white">
-                                        <Hash class="size-4" />
-                                    </div>
-                                    <Label for="numero_batch" class="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-300">
+                    <!-- Identifiants + CSV -->
+                    <div class="grid lg:grid-cols-5">
+                        <div class="space-y-5 border-b border-border/80 p-5 sm:p-6 lg:col-span-2 lg:border-b-0 lg:border-r">
+                            <div>
+                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary dark:text-red-300">
+                                    Étape 1
+                                </p>
+                                <h2 class="mt-0.5 text-sm font-semibold text-foreground">
+                                    Identifiants
+                                </h2>
+                                <p class="mt-0.5 text-xs text-muted-foreground">
+                                    Batch, date valeur et libellé du classeur.
+                                </p>
+                            </div>
+
+                            <div class="space-y-4">
+                                <div class="space-y-2">
+                                    <Label for="numero_batch">
                                         Numéro batch <span class="text-red-600">*</span>
                                     </Label>
+                                    <Input
+                                        id="numero_batch"
+                                        v-model="form.numero_batch"
+                                        type="text"
+                                        autocomplete="off"
+                                        placeholder="xxxx"
+                                        :class="[fieldClass, 'font-medium tracking-wide']"
+                                    />
+                                    <InputError :message="form.errors.numero_batch" />
                                 </div>
-                                <Input
-                                    id="numero_batch"
-                                    v-model="form.numero_batch"
-                                    type="text"
-                                    autocomplete="off"
-                                    placeholder="xxxx"
-                                    class="mt-3 h-11 border-violet-200 bg-white text-base font-semibold tracking-wide focus-visible:ring-violet-400/40 dark:border-violet-900 dark:bg-card"
-                                />
-                                <InputError :message="form.errors.numero_batch" />
-                            </div>
 
-                            <div class="rounded-xl border border-violet-200/80 bg-violet-50/50 p-4 shadow-xs dark:border-violet-900/60 dark:bg-violet-950/20">
-                                <div class="flex items-center gap-2">
-                                    <div class="rounded-lg bg-violet-600 p-1.5 text-white">
-                                        <CalendarDays class="size-4" />
-                                    </div>
-                                    <Label for="date_valeur" class="text-xs font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-300">
+                                <div class="space-y-2">
+                                    <Label for="date_valeur">
                                         Date valeur <span class="text-red-600">*</span>
                                     </Label>
+                                    <Input
+                                        id="date_valeur"
+                                        v-model="form.date_valeur"
+                                        type="date"
+                                        :class="fieldClass"
+                                    />
+                                    <InputError :message="form.errors.date_valeur" />
                                 </div>
-                                <Input
-                                    id="date_valeur"
-                                    v-model="form.date_valeur"
-                                    type="date"
-                                    class="mt-3 h-11 border-violet-200 bg-white text-base font-semibold focus-visible:ring-violet-400/40 dark:border-violet-900 dark:bg-card"
-                                />
-                                <InputError :message="form.errors.date_valeur" />
+
+                                <div class="space-y-2">
+                                    <Label for="nom_classeur">
+                                        Nom du classeur <span class="text-red-600">*</span>
+                                    </Label>
+                                    <Input
+                                        id="nom_classeur"
+                                        v-model="form.nom_classeur"
+                                        type="text"
+                                        placeholder="Libellé du classeur"
+                                        :class="fieldClass"
+                                    />
+                                    <InputError :message="form.errors.nom_classeur" />
+                                </div>
                             </div>
                         </div>
 
-                        <!-- Champs secondaires -->
-                        <div class="grid gap-4 sm:grid-cols-2">
-                            <div class="space-y-2">
-                                <Label for="nom_classeur">Nom du classeur <span class="text-red-600">*</span></Label>
-                                <Input
-                                    id="nom_classeur"
-                                    v-model="form.nom_classeur"
-                                    type="text"
-                                    placeholder="Libellé du classeur"
-                                />
-                                <InputError :message="form.errors.nom_classeur" />
-                            </div>
-                            <div class="space-y-2">
-                                <div class="flex flex-wrap items-center justify-between gap-2">
-                                    <Label for="fichier_integration">
+                        <div class="space-y-4 p-5 sm:p-6 lg:col-span-3">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-[11px] font-semibold uppercase tracking-wider text-primary dark:text-red-300">
+                                        Étape 2
+                                    </p>
+                                    <h2 class="mt-0.5 text-sm font-semibold text-foreground">
                                         Fichier CSV
                                         <span v-if="!editing" class="text-red-600">*</span>
-                                    </Label>
-                                    <a
-                                        v-if="templateCsvUrl"
-                                        :href="templateCsvUrl"
-                                        class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
-                                    >
-                                        <Download class="size-3.5" />
-                                        Modèle CSV
-                                    </a>
+                                    </h2>
+                                    <p class="mt-0.5 text-xs text-muted-foreground">
+                                        Glissez le fichier ou cliquez pour le sélectionner (max.
+                                        {{ maxUploadMo }} Mo).
+                                    </p>
                                 </div>
-
-                                <Input
-                                    id="fichier_integration"
-                                    type="file"
-                                    accept=".csv,.txt,text/csv"
-                                    class="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-violet-800 hover:file:bg-violet-200 dark:file:bg-violet-950 dark:file:text-violet-200"
-                                    @change="onIntegrationFile"
-                                />
-                                <p v-if="editing && classeur?.fichier" class="text-xs text-muted-foreground">
-                                    Actuel : {{ classeur.fichier }} — laissez vide pour conserver.
-                                </p>
-                                <p
-                                    v-if="comptableImportApiConfigured === false"
-                                    class="rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                <a
+                                    v-if="templateCsvUrl"
+                                    :href="templateCsvUrl"
+                                    class="inline-flex items-center gap-1.5 rounded-lg border border-primary/25 bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary transition hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/15 dark:text-red-200 dark:hover:bg-primary/20"
                                 >
-                                   Non intégré : le fichier sera enregistré mais non transmis.
-                                </p>
-                                <InputError :message="form.errors.fichier_integration" />
+                                    <Download class="size-3.5" />
+                                    Modèle CSV
+                                </a>
                             </div>
+
+                            <input
+                                id="fichier_integration"
+                                ref="csvInputRef"
+                                type="file"
+                                accept=".csv,.txt,text/csv"
+                                class="sr-only"
+                                @change="onIntegrationFile"
+                            />
+
+                            <div
+                                role="button"
+                                tabindex="0"
+                                class="group relative flex min-h-[180px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-8 text-center transition outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                                :class="
+                                    csvDragOver
+                                        ? 'border-primary bg-primary/5 dark:bg-primary/15'
+                                        : form.fichier_integration
+                                          ? 'border-primary/40 bg-primary/5 dark:border-primary/40 dark:bg-primary/10'
+                                          : 'border-slate-300 bg-slate-50/80 hover:border-primary/50 hover:bg-primary/5 dark:border-slate-600 dark:hover:border-primary/40'
+                                "
+                                @click="csvInputRef?.click()"
+                                @keydown.enter.prevent="csvInputRef?.click()"
+                                @keydown.space.prevent="csvInputRef?.click()"
+                                @dragenter.prevent="csvDragOver = true"
+                                @dragover.prevent="csvDragOver = true"
+                                @dragleave.prevent="csvDragOver = false"
+                                @drop.prevent="onCsvDrop"
+                            >
+                                <template v-if="form.fichier_integration">
+                                    <div
+                                        class="flex size-12 items-center justify-center rounded-xl bg-primary text-white shadow-sm"
+                                    >
+                                        <FileSpreadsheet class="size-6" />
+                                    </div>
+                                    <p class="mt-3 text-sm font-semibold text-foreground">
+                                        {{ form.fichier_integration.name }}
+                                    </p>
+                                    <p class="mt-1 text-xs text-muted-foreground">
+                                        {{ formatBytes(form.fichier_integration.size) }} — cliquez
+                                        pour remplacer
+                                    </p>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        class="mt-3 text-muted-foreground hover:text-destructive"
+                                        @click.stop="clearCsvFile"
+                                    >
+                                        <Trash2 class="size-3.5" />
+                                        Retirer
+                                    </Button>
+                                </template>
+                                <template v-else>
+                                    <div
+                                        class="flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground transition group-hover:bg-primary/10 group-hover:text-primary dark:group-hover:bg-primary/20 dark:group-hover:text-red-300"
+                                    >
+                                        <Upload class="size-6" />
+                                    </div>
+                                    <p class="mt-3 text-sm font-medium text-foreground">
+                                        Glissez un fichier CSV ici
+                                    </p>
+                                    <p class="mt-1 text-xs text-muted-foreground">
+                                        ou cliquez pour parcourir · .csv, .txt
+                                    </p>
+                                    <p
+                                        v-if="editing && classeur?.fichier"
+                                        class="mt-3 rounded-lg bg-background/80 px-3 py-1.5 text-xs text-muted-foreground ring-1 ring-border"
+                                    >
+                                        Fichier actuel :
+                                        <span class="font-medium text-foreground">{{
+                                            classeur.fichier
+                                        }}</span>
+                                        — laissez vide pour conserver.
+                                    </p>
+                                </template>
+                            </div>
+
+                            <p
+                                v-if="comptableImportApiConfigured === false"
+                                class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                            >
+                                API non configurée : le fichier sera enregistré mais non transmis à
+                                la plateforme.
+                            </p>
+                            <InputError :message="form.errors.fichier_integration" />
                         </div>
                     </div>
-                </div>
+                </section>
 
                 <!-- Pièces justificatives -->
-                <div class="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-                    <div class="border-b border-border bg-muted/70 px-4 py-3 dark:bg-muted/40">
-                        <h2 class="text-sm font-semibold text-foreground">Pièces justificatives</h2>
-                        <p class="mt-0.5 text-xs text-muted-foreground">
-                            <template v-if="editing">
-                                Documents déjà joints — utilisez + Ajouter pour en joindre d’autres.
-                            </template>
-                            <template v-else>
-                                Libellé et document à joindre. Utilisez + Ajouter pour plusieurs pièces.
-                            </template>
-                        </p>
-                    </div>
-
-                    <ul v-if="editing && classeur?.pieces?.length" class="divide-y divide-border border-b border-border">
-                        <li v-for="p in classeur.pieces" :key="p.id" class="flex items-center justify-between px-4 py-3">
-                            <div class="flex items-center gap-2 text-sm">
-                                <FileText class="size-4" :class="p.is_piece_comptable ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'" />
-                                <span class="font-medium text-foreground">{{ p.description || p.original_name }}</span>
-                                <span class="text-xs text-muted-foreground">({{ p.original_name }})</span>
-                            </div>
-                            <div class="flex items-center gap-3">
-                                <a
-                                    v-if="p.preview_url"
-                                    :href="p.preview_url"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
-                                    title="Visualiser"
-                                >
-                                    <Eye class="size-3.5" /> Voir
-                                </a>
-                                <a :href="p.url" class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
-                                    <Download class="size-3.5" /> Télécharger
-                                </a>
-                            </div>
-                        </li>
-                    </ul>
-
-                    <div class="space-y-4 p-4" :class="{ 'border-t border-border': editing && classeur?.pieces?.length }">
-                        <div
-                            v-for="(ligne, index) in form.justificatifs"
-                            :key="`${justificatifListKey}-${index}`"
-                            class="relative rounded-lg border border-border bg-background p-4 pr-14 shadow-xs dark:bg-card/50"
-                        >
-                            <Button
-                                v-if="editing || form.justificatifs.length > 1"
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                class="absolute right-2 top-2 size-8 text-muted-foreground hover:text-destructive"
-                                :aria-label="'Supprimer la pièce ' + (index + 1)"
-                                @click="retirerJustificatif(index)"
-                            >
-                                <Trash2 class="size-4" />
-                            </Button>
-
-                            <div class="grid gap-3 sm:grid-cols-2">
-                                <div class="space-y-2">
-                                    <Label :for="'pj-desc-' + index">Texte à afficher <span class="text-red-600">*</span></Label>
-                                    <Input
-                                        :id="'pj-desc-' + index"
-                                        v-model="ligne.description"
-                                        type="text"
-                                        placeholder="Texte à afficher"
-                                    />
-                                    <InputError :message="form.errors[`justificatifs.${index}.description`]" />
-                                </div>
-
-                                <div class="space-y-2">
-                                    <Label :for="'pj-file-' + index">Joindre la pièce <span class="text-red-600">*</span></Label>
-                                    <Input
-                                        :id="'pj-file-' + index"
-                                        type="file"
-                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml"
-                                        class="cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1 file:text-sm file:font-medium file:text-violet-800 hover:file:bg-violet-200 dark:file:bg-violet-950 dark:file:text-violet-200"
-                                        @change="onJustificatifFile(index, $event)"
-                                    />
-                                    <InputError
-                                        :message="(form.errors as Record<string, string>)[`justificatifs.${index}.file`]"
-                                    />
-                                </div>
-                            </div>
+                <section
+                    class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+                >
+                    <div
+                        class="flex flex-wrap items-start justify-between gap-3 border-b border-border/80 px-5 py-4 sm:px-6"
+                    >
+                        <div>
+                            <p class="text-[11px] font-semibold uppercase tracking-wider text-primary dark:text-red-300">
+                                Étape 3
+                            </p>
+                            <h2 class="mt-0.5 text-sm font-semibold text-foreground">
+                                Pièces justificatives
+                            </h2>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                <template v-if="editing">
+                                    Documents déjà joints — ajoutez-en d’autres si besoin.
+                                </template>
+                                <template v-else>
+                                    Au moins une pièce avec libellé et fichier.
+                                </template>
+                            </p>
                         </div>
-
                         <Button
                             type="button"
-                            class="bg-violet-600 text-white hover:bg-violet-700 dark:bg-violet-600 dark:hover:bg-violet-500"
+                            variant="outline"
+                            size="sm"
+                            class="border-primary/25 text-primary hover:bg-primary/5 dark:border-primary/30 dark:text-red-200 dark:hover:bg-primary/15"
                             @click="ajouterJustificatif"
                         >
                             <Plus class="size-4" />
@@ -376,42 +562,175 @@ function submit() {
                         </Button>
                     </div>
 
-                    <div class="flex flex-wrap items-center justify-end gap-2 border-t border-border bg-muted/40 px-4 py-3 dark:bg-muted/25">
-                        <Button
-                            v-if="!editing"
-                            type="button"
-                            variant="outline"
-                            class="border-violet-200 bg-background text-violet-800 hover:bg-violet-50 dark:border-violet-900 dark:text-violet-200 dark:hover:bg-violet-950/50"
-                            @click="effacerTout"
-                        >
-                            <Eraser class="size-4" />
-                            Effacer
-                        </Button>
-                        <Button
-                            v-if="!editing"
-                            type="submit"
-                            class="bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500"
-                            :disabled="form.processing"
-                        >
-                            <Save class="size-4" />
-                            {{ form.processing ? 'Enregistrement…' : 'Enregistrer' }}
-                        </Button>
-                    </div>
-                </div>
-
-                <div
-                    v-if="editing"
-                    class="flex flex-wrap items-center justify-end gap-2 rounded-lg border border-border bg-card px-4 py-3"
-                >
-                    <Button
-                        type="submit"
-                        class="bg-violet-700 text-white hover:bg-violet-800 dark:bg-violet-600 dark:hover:bg-violet-500"
-                        :disabled="form.processing"
+                    <ul
+                        v-if="editing && classeur?.pieces?.length"
+                        class="divide-y divide-border border-b border-border"
                     >
-                        <Save class="size-4" />
-                        {{ form.processing ? 'Enregistrement…' : 'Enregistrer les modifications' }}
-                    </Button>
-                </div>
+                        <li
+                            v-for="p in classeur.pieces"
+                            :key="p.id"
+                            class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6"
+                        >
+                            <div class="flex min-w-0 items-center gap-2.5 text-sm">
+                                <div
+                                    class="flex size-8 shrink-0 items-center justify-center rounded-lg"
+                                    :class="
+                                        p.is_piece_comptable
+                                            ? 'bg-primary/10 text-primary dark:bg-primary/20 dark:text-red-300'
+                                            : 'bg-muted text-muted-foreground'
+                                    "
+                                >
+                                    <FileText class="size-4" />
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="truncate font-medium text-foreground">
+                                        {{ p.description || p.original_name }}
+                                    </p>
+                                    <p class="truncate text-xs text-muted-foreground">
+                                        {{ p.original_name }}
+                                    </p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <a
+                                    v-if="p.preview_url"
+                                    :href="p.preview_url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline dark:text-red-300"
+                                    title="Visualiser"
+                                >
+                                    <Eye class="size-3.5" /> Voir
+                                </a>
+                                <a
+                                    :href="p.url"
+                                    class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                                >
+                                    <Download class="size-3.5" /> Télécharger
+                                </a>
+                            </div>
+                        </li>
+                    </ul>
+
+                    <div class="space-y-3 p-5 sm:p-6">
+                        <div
+                            v-for="(ligne, index) in form.justificatifs"
+                            :key="`${justificatifListKey}-${index}`"
+                            class="relative rounded-xl border border-border bg-muted/20 p-4 transition hover:border-primary/25/80 dark:hover:border-primary/30"
+                        >
+                            <div class="mb-3 flex items-center justify-between gap-2">
+                                <span class="text-xs font-medium text-muted-foreground">
+                                    Pièce {{ index + 1 }}
+                                </span>
+                                <Button
+                                    v-if="editing || form.justificatifs.length > 1"
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    class="size-8 text-muted-foreground hover:text-destructive"
+                                    :aria-label="'Supprimer la pièce ' + (index + 1)"
+                                    @click="retirerJustificatif(index)"
+                                >
+                                    <Trash2 class="size-4" />
+                                </Button>
+                            </div>
+
+                            <div class="grid gap-3 sm:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label :for="'pj-desc-' + index">
+                                        Texte à afficher <span class="text-red-600">*</span>
+                                    </Label>
+                                    <Input
+                                        :id="'pj-desc-' + index"
+                                        v-model="ligne.description"
+                                        type="text"
+                                        placeholder="Ex. Email, Facture…"
+                                        :class="fieldClass"
+                                    />
+                                    <InputError
+                                        :message="form.errors[`justificatifs.${index}.description`]"
+                                    />
+                                </div>
+
+                                <div class="space-y-2">
+                                    <Label :for="'pj-file-' + index">
+                                        Joindre la pièce <span class="text-red-600">*</span>
+                                    </Label>
+                                    <Input
+                                        :id="'pj-file-' + index"
+                                        type="file"
+                                        accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml"
+                                        :class="[
+                                            fieldClass,
+                                            'cursor-pointer file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary hover:file:bg-primary/15 dark:file:bg-primary/20 dark:file:text-red-200',
+                                        ]"
+                                        @change="onJustificatifFile(index, $event)"
+                                    />
+                                    <p
+                                        v-if="ligne.file"
+                                        class="truncate text-xs text-muted-foreground"
+                                    >
+                                        {{ ligne.file.name }} ({{ formatBytes(ligne.file.size) }})
+                                    </p>
+                                    <InputError
+                                        :message="
+                                            (form.errors as Record<string, string>)[
+                                                `justificatifs.${index}.file`
+                                            ]
+                                        "
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <p
+                            v-if="editing && form.justificatifs.length === 0"
+                            class="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground"
+                        >
+                            Aucune nouvelle pièce. Cliquez sur « Ajouter une pièce » pour en joindre.
+                        </p>
+                    </div>
+
+                    <!-- Actions -->
+                    <div
+                        class="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border/80 bg-card/95 px-5 py-4 backdrop-blur sm:px-6"
+                    >
+                        <p class="text-xs text-muted-foreground">
+                            <template v-if="editing">
+                                Seules les nouvelles pièces ajoutées seront jointes.
+                            </template>
+                            <template v-else>
+                                Enregistrement en brouillon, puis validation depuis le résumé.
+                            </template>
+                        </p>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <Button
+                                v-if="!editing"
+                                type="button"
+                                variant="outline"
+                                class="border-border"
+                                @click="effacerTout"
+                            >
+                                <Eraser class="size-4" />
+                                Effacer
+                            </Button>
+                            <Button
+                                type="submit"
+                                class="bg-primary text-white hover:bg-primary/90 dark:bg-primary dark:hover:bg-primary/90"
+                                :disabled="form.processing"
+                            >
+                                <Save class="size-4" />
+                                {{
+                                    form.processing
+                                        ? 'Enregistrement…'
+                                        : editing
+                                          ? 'Enregistrer les modifications'
+                                          : 'Enregistrer'
+                                }}
+                            </Button>
+                        </div>
+                    </div>
+                </section>
             </form>
         </div>
     </AppLayout>

@@ -124,6 +124,12 @@ const selectedId = ref<string | null>(null);
 const selectedPiece = ref<ArchiveFolder | null>(null);
 const expanded = ref<Set<string>>(new Set(['root']));
 
+const fieldClass =
+    'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
+
+const selectClass =
+    'flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
+
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 
@@ -384,296 +390,470 @@ watch(
 
 <template>
     <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-        <!-- Flash -->
-        <div v-if="flash?.success" class="shrink-0 rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-800">{{ flash.success }}</div>
-        <div v-if="flash?.warning" class="shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">{{ flash.warning }}</div>
-
-        <!-- En-tête -->
-        <div class="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-                <h1 class="text-2xl font-semibold tracking-tight text-foreground">Archivage</h1>
-                <p class="mt-1 text-sm text-muted-foreground">
-                    Intégrations validées — les agents OPS voient toutes les pièces OPS ; Finance voit toutes les pièces Finance.
-                </p>
-            </div>
-            <div class="inline-flex items-center gap-2 rounded-lg border border-green-200/80 bg-green-50/80 px-3 py-1.5 text-sm text-green-800">
-                <Archive class="size-3.5" />
-                <span class="font-medium">{{ stats.total }}</span>
-                <span>pièce(s) archivée(s)</span>
-            </div>
+        <div
+            v-if="flash?.success"
+            class="shrink-0 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"
+        >
+            {{ flash.success }}
+        </div>
+        <div
+            v-if="flash?.warning"
+            class="shrink-0 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-800"
+        >
+            {{ flash.warning }}
         </div>
 
-        <!-- Recherche -->
-        <div class="shrink-0 rounded-xl border border-border bg-card shadow-sm">
-            <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-                <div class="relative flex-1">
-                    <Search class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                        v-model="searchForm.q"
-                        class="h-9 border-0 bg-muted/40 pl-9 shadow-none focus-visible:ring-1"
-                        placeholder="Rechercher par classeur, batch, agent…"
-                        @keydown.enter="applySearch"
-                    />
-                </div>
-                <div class="flex shrink-0 gap-2">
-                    <Button variant="outline" size="sm" class="h-9" @click="showFilters = !showFilters">
-                        <SlidersHorizontal class="size-4" />
-                        Filtres
-                        <span v-if="searchActive" class="ml-0.5 size-1.5 rounded-full bg-red-600" />
-                    </Button>
-                    <Button size="sm" class="h-9" @click="applySearch">Rechercher</Button>
+        <section
+            class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+        >
+            <!-- En-tête -->
+            <div
+                class="shrink-0 border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
+            >
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div class="flex items-start gap-3">
+                        <div
+                            class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
+                        >
+                            <Archive class="size-5" />
+                        </div>
+                        <div>
+                            <h1 class="text-xl font-semibold tracking-tight text-foreground">
+                                Archivage
+                            </h1>
+                            <p class="mt-1 max-w-xl text-sm text-muted-foreground">
+                                Intégrations validées — OPS voit les pièces OPS ; Finance voit les
+                                pièces Finance.
+                            </p>
+                        </div>
+                    </div>
+                    <div
+                        class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+                    >
+                        <Archive class="size-3.5" />
+                        <span class="font-semibold tabular-nums">{{ stats.total }}</span>
+                        <span>pièce(s) archivée(s)</span>
+                    </div>
                 </div>
             </div>
 
-            <div v-show="showFilters" class="space-y-4 border-t border-border px-4 py-4">
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    <div class="space-y-1.5">
-                        <Label for="filtre-nom-classeur" class="text-xs text-muted-foreground">Nom du classeur</Label>
-                        <Input id="filtre-nom-classeur" v-model="searchForm.nom_classeur" placeholder="Nom du classeur" class="h-9" />
+            <!-- Recherche -->
+            <div class="shrink-0 space-y-3 border-b border-border/80 p-5 sm:p-6">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <div class="relative flex-1">
+                        <Search
+                            class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                        />
+                        <Input
+                            v-model="searchForm.q"
+                            :class="[fieldClass, 'pl-9']"
+                            placeholder="Rechercher par classeur, batch, agent…"
+                            @keydown.enter="applySearch"
+                        />
                     </div>
-                    <div class="space-y-1.5">
-                        <Label for="filtre-batch" class="text-xs text-muted-foreground">N° batch</Label>
-                        <Input id="filtre-batch" v-model="searchForm.numero_batch" placeholder="N° batch" class="h-9" />
-                    </div>
-                    <div v-if="canViewAllAgents" class="space-y-1.5">
-                        <Label for="filtre-agent" class="text-xs text-muted-foreground">Agent</Label>
-                        <select id="filtre-agent" v-model="searchForm.user_id" class="flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm">
-                            <option value="">Tous agents</option>
-                            <option v-for="a in agents" :key="a.id" :value="String(a.id)">{{ a.name }}</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div class="space-y-1.5">
-                        <Label for="filtre-archive-du" class="text-xs text-muted-foreground">Archivé du</Label>
-                        <Input id="filtre-archive-du" v-model="searchForm.archive_du" type="date" class="h-9" />
-                    </div>
-                    <div class="space-y-1.5">
-                        <Label for="filtre-archive-au" class="text-xs text-muted-foreground">Archivé au</Label>
-                        <Input id="filtre-archive-au" v-model="searchForm.archive_au" type="date" class="h-9" />
-                    </div>
-                    <div v-if="searchActive" class="flex items-end sm:col-span-2">
-                        <Button variant="ghost" size="sm" class="h-9" @click="resetSearch">
-                            <X class="size-4" /> Effacer les filtres
+                    <div class="flex shrink-0 gap-2">
+                        <Button
+                            variant="outline"
+                            class="h-10 border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-foreground"
+                            @click="showFilters = !showFilters"
+                        >
+                            <SlidersHorizontal class="size-4" />
+                            Filtres
+                            <span
+                                v-if="searchActive"
+                                class="ml-0.5 size-1.5 rounded-full bg-primary"
+                            />
+                        </Button>
+                        <Button
+                            class="h-10 bg-primary text-primary-foreground hover:bg-primary/90"
+                            @click="applySearch"
+                        >
+                            Rechercher
                         </Button>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Résultats recherche -->
-        <div v-if="searchActive" class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div class="border-b border-border px-4 py-3">
-                <p class="text-sm font-medium">{{ searchResults?.length ?? 0 }} résultat(s)</p>
-            </div>
-            <div v-if="!searchResults?.length" class="py-20 text-center text-sm text-muted-foreground">
-                Aucun résultat pour ces critères.
-            </div>
-            <div v-else class="min-h-0 flex-1 divide-y divide-border overflow-y-auto">
-                <button
-                    v-for="(row, i) in searchResults"
-                    :key="i"
-                    type="button"
-                    class="flex w-full items-center gap-4 px-4 py-3 text-left transition hover:bg-muted/40"
-                    @click="openSearchResult(row)"
+                <div
+                    v-show="showFilters"
+                    class="space-y-4 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-muted/20"
                 >
-                    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600">
-                        <FileText class="size-4" />
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <div class="space-y-1.5">
+                            <Label
+                                for="filtre-nom-classeur"
+                                class="text-xs text-muted-foreground"
+                            >
+                                Nom du classeur
+                            </Label>
+                            <Input
+                                id="filtre-nom-classeur"
+                                v-model="searchForm.nom_classeur"
+                                placeholder="Nom du classeur"
+                                :class="fieldClass"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="filtre-batch" class="text-xs text-muted-foreground">
+                                N° batch
+                            </Label>
+                            <Input
+                                id="filtre-batch"
+                                v-model="searchForm.numero_batch"
+                                placeholder="N° batch"
+                                :class="fieldClass"
+                            />
+                        </div>
+                        <div v-if="canViewAllAgents" class="space-y-1.5">
+                            <Label for="filtre-agent" class="text-xs text-muted-foreground">
+                                Agent
+                            </Label>
+                            <select
+                                id="filtre-agent"
+                                v-model="searchForm.user_id"
+                                :class="selectClass"
+                            >
+                                <option value="">Tous agents</option>
+                                <option
+                                    v-for="a in agents"
+                                    :key="a.id"
+                                    :value="String(a.id)"
+                                >
+                                    {{ a.name }}
+                                </option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <p class="truncate text-sm font-medium">{{ row.classeur.nom_classeur }}</p>
-                        <p class="truncate text-xs text-muted-foreground">
-                            {{ row.agent_name }} · {{ row.classeur.numero_batch }}
+
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="space-y-1.5">
+                            <Label for="filtre-archive-du" class="text-xs text-muted-foreground">
+                                Archivé du
+                            </Label>
+                            <Input
+                                id="filtre-archive-du"
+                                v-model="searchForm.archive_du"
+                                type="date"
+                                :class="fieldClass"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label for="filtre-archive-au" class="text-xs text-muted-foreground">
+                                Archivé au
+                            </Label>
+                            <Input
+                                id="filtre-archive-au"
+                                v-model="searchForm.archive_au"
+                                type="date"
+                                :class="fieldClass"
+                            />
+                        </div>
+                        <div v-if="searchActive" class="flex items-end sm:col-span-2">
+                            <Button
+                                variant="ghost"
+                                class="h-10 text-muted-foreground"
+                                @click="resetSearch"
+                            >
+                                <X class="size-4" /> Effacer les filtres
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Résultats recherche -->
+            <div
+                v-if="searchActive"
+                class="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+                <div class="border-b border-border/80 px-5 py-3 sm:px-6">
+                    <p class="text-sm font-medium">
+                        {{ searchResults?.length ?? 0 }} résultat(s)
+                    </p>
+                </div>
+                <div
+                    v-if="!searchResults?.length"
+                    class="flex flex-1 items-center justify-center py-16 text-sm text-muted-foreground"
+                >
+                    Aucun résultat pour ces critères.
+                </div>
+                <div v-else class="min-h-0 flex-1 space-y-2 overflow-y-auto p-4 sm:p-5">
+                    <button
+                        v-for="(row, i) in searchResults"
+                        :key="i"
+                        type="button"
+                        class="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:border-primary/30 hover:shadow-md dark:border-slate-700 dark:bg-card"
+                        @click="openSearchResult(row)"
+                    >
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                        >
+                            <FileText class="size-4" />
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <p class="truncate text-sm font-medium">
+                                {{ row.classeur.nom_classeur }}
+                            </p>
+                            <p class="truncate text-xs text-muted-foreground">
+                                {{ row.agent_name }} · {{ row.classeur.numero_batch }}
+                            </p>
+                        </div>
+                        <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
+                    </button>
+                </div>
+            </div>
+
+            <!-- Explorateur arbre + aperçu -->
+            <div
+                v-else
+                class="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row"
+            >
+                <div
+                    class="flex min-h-0 w-full flex-col border-b border-border/80 lg:w-[min(420px,35%)] lg:shrink-0 lg:border-b-0 lg:border-r"
+                >
+                    <div
+                        class="flex items-center justify-between border-b border-border/80 bg-slate-50/80 px-3 py-2.5 dark:bg-muted/30"
+                    >
+                        <p
+                            class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground"
+                        >
+                            Arborescence
+                        </p>
+                        <div class="flex gap-1">
+                            <button
+                                type="button"
+                                class="rounded-md px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-white hover:text-foreground dark:hover:bg-muted"
+                                @click="expandAll"
+                            >
+                                Tout déplier
+                            </button>
+                            <button
+                                type="button"
+                                class="rounded-md px-2 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-white hover:text-foreground dark:hover:bg-muted"
+                                @click="collapseAll"
+                            >
+                                Replier
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto py-1 font-mono text-[13px]">
+                        <div
+                            v-if="treeRoot.children.length === 0"
+                            class="px-4 py-16 text-center text-sm text-muted-foreground"
+                        >
+                            Aucun dossier archivé.
+                        </div>
+                        <div
+                            v-for="node in flatTree"
+                            v-else
+                            :key="node.id"
+                            class="group flex w-full min-w-0 items-center gap-0.5 pr-2 transition"
+                            :class="
+                                selectedId === node.id
+                                    ? 'bg-primary/5 dark:bg-primary/10'
+                                    : 'hover:bg-slate-50 dark:hover:bg-muted/40'
+                            "
+                            :style="{ paddingLeft: `${8 + node.depth * 18}px` }"
+                        >
+                            <button
+                                v-if="hasChildren(node)"
+                                type="button"
+                                class="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted"
+                                @click.stop="toggleExpand(node.id)"
+                            >
+                                <ChevronDown v-if="isExpanded(node)" class="size-3.5" />
+                                <ChevronRight v-else class="size-3.5" />
+                            </button>
+                            <span v-else class="inline-block w-5 shrink-0" />
+
+                            <button
+                                type="button"
+                                class="flex min-w-0 flex-1 items-center gap-2 rounded py-1.5 text-left"
+                                @click="onNodeClick(node)"
+                            >
+                                <FolderOpen
+                                    v-if="
+                                        node.kind !== 'piece' &&
+                                        isExpanded(node) &&
+                                        hasChildren(node)
+                                    "
+                                    class="size-4 shrink-0 text-amber-500"
+                                />
+                                <Folder
+                                    v-else-if="node.kind !== 'piece'"
+                                    class="size-4 shrink-0 text-amber-500"
+                                />
+                                <FileText v-else class="size-4 shrink-0 text-primary" />
+                                <span
+                                    class="truncate"
+                                    :class="
+                                        node.kind === 'root'
+                                            ? 'font-semibold text-foreground'
+                                            : 'text-foreground/90'
+                                    "
+                                >
+                                    {{ node.label }}
+                                </span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex min-h-0 flex-1 flex-col bg-slate-50/40 dark:bg-muted/10">
+                    <div
+                        v-if="!selectedPiece"
+                        class="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center"
+                    >
+                        <div
+                            class="mb-4 flex size-16 items-center justify-center rounded-2xl bg-primary/10 text-primary"
+                        >
+                            <FolderOpen class="size-8" />
+                        </div>
+                        <p class="text-sm font-medium text-foreground">
+                            Sélectionnez un dossier ou une pièce comptable
+                        </p>
+                        <p class="mt-1 max-w-sm text-xs text-muted-foreground">
+                            Dépliez l’arborescence à gauche puis cliquez sur une pièce comptable.
+                        </p>
+                        <p
+                            class="mt-4 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-[11px] text-muted-foreground dark:border-slate-600"
+                        >
+                            Finance / Operations → Année → Mois → Journée → Agent → Pièce
                         </p>
                     </div>
-                    <ChevronRight class="size-4 shrink-0 text-muted-foreground" />
-                </button>
-            </div>
-        </div>
 
-        <!-- Explorateur arbre + aperçu -->
-        <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm lg:flex-row">
-            <!-- Arbre dossiers -->
-            <div class="flex min-h-0 w-full flex-col border-b border-border lg:w-[min(420px,35%)] lg:shrink-0 lg:border-b-0 lg:border-r">
-                <div class="flex items-center justify-between border-b border-border bg-muted/30 px-3 py-2.5">
-                    <p class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Arborescence</p>
-                    <div class="flex gap-1">
-                        <button type="button" class="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground" @click="expandAll">
-                            Tout déplier
-                        </button>
-                        <button type="button" class="rounded px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted hover:text-foreground" @click="collapseAll">
-                            Replier
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex-1 overflow-y-auto py-1 font-mono text-[13px]">
-                    <div v-if="treeRoot.children.length === 0" class="px-4 py-16 text-center text-sm text-muted-foreground">
-                        Aucun dossier archivé.
-                    </div>
-                    <div
-                        v-for="node in flatTree"
-                        v-else
-                        :key="node.id"
-                        class="group flex w-full min-w-0 items-center gap-0.5 pr-2 transition"
-                        :class="selectedId === node.id ? 'bg-amber-50/90 dark:bg-amber-950/30' : 'hover:bg-muted/40'"
-                        :style="{ paddingLeft: `${8 + node.depth * 18}px` }"
-                    >
-                        <!-- Chevron -->
-                        <button
-                            v-if="hasChildren(node)"
-                            type="button"
-                            class="flex h-6 w-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted"
-                            @click.stop="toggleExpand(node.id)"
-                        >
-                            <ChevronDown v-if="isExpanded(node)" class="size-3.5" />
-                            <ChevronRight v-else class="size-3.5" />
-                        </button>
-                        <span v-else class="inline-block w-5 shrink-0" />
-
-                        <!-- Ligne -->
-                        <button
-                            type="button"
-                            class="flex min-w-0 flex-1 items-center gap-2 rounded py-1.5 text-left"
-                            @click="onNodeClick(node)"
-                        >
-                            <FolderOpen
-                                v-if="node.kind !== 'piece' && isExpanded(node) && hasChildren(node)"
-                                class="size-4 shrink-0 text-amber-500"
-                            />
-                            <Folder
-                                v-else-if="node.kind !== 'piece'"
-                                class="size-4 shrink-0 text-amber-500"
-                            />
-                            <FileText
-                                v-else
-                                class="size-4 shrink-0 text-red-500"
-                            />
-                            <span
-                                class="truncate"
-                                :class="node.kind === 'root' ? 'font-semibold text-foreground' : 'text-foreground/90'"
-                            >
-                                {{ node.label }}
-                            </span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Panneau aperçu -->
-            <div class="flex min-h-0 flex-1 flex-col bg-muted/10">
-                <div
-                    v-if="!selectedPiece"
-                    class="flex flex-1 flex-col items-center justify-center px-8 py-16 text-center"
-                >
-                    <div class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-100/60">
-                        <FolderOpen class="size-8 text-amber-500/60" />
-                    </div>
-                    <p class="text-sm font-medium text-foreground">Sélectionnez un dossier ou une pièce comptable</p>
-                    <p class="mt-1 max-w-sm text-xs text-muted-foreground">
-                        Dépliez l'arborescence à gauche puis cliquez sur une pièce comptable.
-                    </p>
-                    <p class="mt-4 rounded-lg border border-dashed border-border px-3 py-2 text-[11px] text-muted-foreground">
-                        Finance / Operations → Année → Mois → Journée → Agent → Pièce
-                    </p>
-                </div>
-
-                <div v-else class="flex flex-1 flex-col overflow-y-auto">
-                    <div class="border-b border-border bg-card px-6 py-5">
-                        <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0">
-                                <div class="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-red-100 text-red-600">
-                                    <FileText class="size-5" />
+                    <div v-else class="flex flex-1 flex-col overflow-y-auto">
+                        <div class="border-b border-border/80 bg-card px-6 py-5">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div
+                                        class="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                                    >
+                                        <FileText class="size-5" />
+                                    </div>
+                                    <h2 class="text-lg font-semibold leading-tight">
+                                        {{ selectedPiece.nom_classeur }}
+                                    </h2>
+                                    <p
+                                        v-if="selectedPiece.numero_batch"
+                                        class="mt-1 text-xs text-muted-foreground"
+                                    >
+                                        N° batch {{ selectedPiece.numero_batch }}
+                                    </p>
                                 </div>
-                                <h2 class="text-lg font-semibold leading-tight">{{ selectedPiece.nom_classeur }}</h2>
-                                <p v-if="selectedPiece.numero_batch" class="mt-1 text-xs text-muted-foreground">
-                                    N° batch {{ selectedPiece.numero_batch }}
+                                <span
+                                    class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+                                >
+                                    Intégré · Archivé
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="grid gap-px bg-border sm:grid-cols-2">
+                            <div class="bg-card px-6 py-4">
+                                <p
+                                    class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                                >
+                                    N° batch
+                                </p>
+                                <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                    <Hash class="size-3.5 text-primary" />
+                                    {{ selectedPiece.numero_batch }}
                                 </p>
                             </div>
-                            <span class="rounded-full bg-green-100 px-2.5 py-1 text-xs font-semibold text-green-800">
-                                Intégré · Archivé
-                            </span>
+                            <div class="bg-card px-6 py-4">
+                                <p
+                                    class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                                >
+                                    Date valeur
+                                </p>
+                                <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                    <CalendarDays class="size-3.5 text-primary" />
+                                    {{ dateValeurFmt(selectedPiece.date_valeur) }}
+                                </p>
+                            </div>
+                            <div class="bg-card px-6 py-4">
+                                <p
+                                    class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                                >
+                                    Agent
+                                </p>
+                                <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                    <User class="size-3.5 text-primary" />
+                                    {{ selectedPiece.user_name }}
+                                </p>
+                            </div>
+                            <div class="bg-card px-6 py-4">
+                                <p
+                                    class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
+                                >
+                                    Archivé le
+                                </p>
+                                <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
+                                    <Clock class="size-3.5 text-primary" />
+                                    {{ horodatage(selectedPiece.archived_at) }}
+                                </p>
+                            </div>
                         </div>
-                    </div>
 
-                    <div class="grid gap-px bg-border sm:grid-cols-2">
-                        <div class="bg-card px-6 py-4">
-                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">N° batch</p>
-                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                                <Hash class="size-3.5 text-muted-foreground" />
-                                {{ selectedPiece.numero_batch }}
-                            </p>
-                        </div>
-                        <div class="bg-card px-6 py-4">
-                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Date valeur</p>
-                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                                <CalendarDays class="size-3.5 text-muted-foreground" />
-                                {{ dateValeurFmt(selectedPiece.date_valeur) }}
-                            </p>
-                        </div>
-                        <div class="bg-card px-6 py-4">
-                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Agent</p>
-                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                                <User class="size-3.5 text-muted-foreground" />
-                                {{ selectedPiece.user_name }}
-                            </p>
-                        </div>
-                        <div class="bg-card px-6 py-4">
-                            <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Archivé le</p>
-                            <p class="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                                <Clock class="size-3.5 text-muted-foreground" />
-                                {{ horodatage(selectedPiece.archived_at) }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="flex flex-wrap gap-2 border-b border-border bg-card px-6 py-4">
-                        <Link
-                            :href="selectedPiece.resume_url"
-                            class="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-background px-4 text-sm font-medium transition hover:bg-muted"
-                        >
-                            <FileSearch class="size-4" />
-                            Voir le résumé
-                        </Link>
-                    </div>
-
-                    <div v-if="selectedPiece.pieces.length" class="flex-1 bg-card px-6 py-4">
-                        <p class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Justificatifs ({{ selectedPiece.pieces.length }})
-                        </p>
-                        <div class="space-y-1">
-                            <div
-                                v-for="p in selectedPiece.pieces"
-                                :key="p.id"
-                                class="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition hover:border-border hover:bg-muted/30"
+                        <div class="flex flex-wrap gap-2 border-b border-border/80 bg-card px-6 py-4">
+                            <Link
+                                :href="selectedPiece.resume_url"
+                                class="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-4 text-sm font-medium transition hover:bg-slate-50 dark:border-slate-600 dark:bg-card dark:hover:bg-muted"
                             >
-                                <FileText class="size-4 shrink-0" :class="p.is_piece_comptable ? 'text-violet-600 dark:text-violet-400' : 'text-muted-foreground'" />
-                                <span class="min-w-0 flex-1 truncate">{{ p.description || p.original_name }}</span>
-                                <div class="flex shrink-0 items-center gap-2">
-                                    <a
-                                        v-if="p.preview_url"
-                                        :href="p.preview_url"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        class="inline-flex items-center gap-1 text-xs font-medium text-violet-700 hover:underline dark:text-violet-300"
-                                        title="Visualiser"
-                                    >
-                                        <Eye class="size-3.5" /> Voir
-                                    </a>
-                                    <a
-                                        :href="p.url"
-                                        class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                                        title="Télécharger"
-                                    >
-                                        <Download class="size-3.5" /> Télécharger
-                                    </a>
+                                <FileSearch class="size-4" />
+                                Voir le résumé
+                            </Link>
+                        </div>
+
+                        <div v-if="selectedPiece.pieces.length" class="flex-1 bg-card px-6 py-4">
+                            <p
+                                class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                            >
+                                Justificatifs ({{ selectedPiece.pieces.length }})
+                            </p>
+                            <div class="space-y-1">
+                                <div
+                                    v-for="p in selectedPiece.pieces"
+                                    :key="p.id"
+                                    class="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-muted/30"
+                                >
+                                    <FileText
+                                        class="size-4 shrink-0"
+                                        :class="
+                                            p.is_piece_comptable
+                                                ? 'text-primary'
+                                                : 'text-muted-foreground'
+                                        "
+                                    />
+                                    <span class="min-w-0 flex-1 truncate">{{
+                                        p.description || p.original_name
+                                    }}</span>
+                                    <div class="flex shrink-0 items-center gap-2">
+                                        <a
+                                            v-if="p.preview_url"
+                                            :href="p.preview_url"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                                            title="Visualiser"
+                                        >
+                                            <Eye class="size-3.5" /> Voir
+                                        </a>
+                                        <a
+                                            :href="p.url"
+                                            class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+                                            title="Télécharger"
+                                        >
+                                            <Download class="size-3.5" /> Télécharger
+                                        </a>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
     </div>
 </template>
