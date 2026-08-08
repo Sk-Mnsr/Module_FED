@@ -187,6 +187,19 @@
 .border-gray-200 {
 }
 
+/* Accent violet — Monétique, Opérations diverses & FED */
+.theme-module-violet {
+    --primary: hsl(262 83% 58%);
+    --primary-foreground: hsl(0 0% 100%);
+    --ring: hsl(262 83% 58%);
+}
+
+.dark .theme-module-violet {
+    --primary: hsl(263 70% 65%);
+    --primary-foreground: hsl(0 0% 100%);
+    --ring: hsl(263 70% 65%);
+}
+
 /* Masquer la barre latérale et le fil d'Ariane (chemin) lors de l'impression */
 @media print {
     /* Barre latérale */

@@ -20,6 +20,21 @@ type CoficarteAlert = { niveau: string; message: string };
 
 const page = usePage();
 const coficarteAlerts = computed(() => (page.props.coficarteAlerts as CoficarteAlert[] | undefined) ?? []);
+
+/** Violet pour Monétique, OD & FED ; rouge Cofina ailleurs */
+const useVioletAccent = computed(() => {
+    const path = (page.url || '').split('?')[0];
+    return (
+        path.startsWith('/monetique') ||
+        path.startsWith('/operations-diverses') ||
+        path.startsWith('/feds') ||
+        path.startsWith('/achats') ||
+        path.startsWith('/appel-offres') ||
+        path.startsWith('/bons-de-commande') ||
+        path.startsWith('/comites') ||
+        path.startsWith('/fournisseurs')
+    );
+});
 </script>
 
 <template>
@@ -27,7 +42,10 @@ const coficarteAlerts = computed(() => (page.props.coficarteAlerts as CoficarteA
         <AppSidebar />
         <AppContent
             variant="sidebar"
-            class="flex min-h-0 flex-1 flex-col overflow-x-hidden md:!m-0 md:!ml-0 md:!rounded-none md:!shadow-none"
+            :class="[
+                'flex min-h-0 flex-1 flex-col overflow-x-hidden md:!m-0 md:!ml-0 md:!rounded-none md:!shadow-none',
+                useVioletAccent ? 'theme-module-violet' : '',
+            ]"
         >
             <AppSidebarHeader :breadcrumbs="breadcrumbs" />
             <div v-if="coficarteAlerts.length" class="shrink-0 px-4 pt-3 space-y-2">

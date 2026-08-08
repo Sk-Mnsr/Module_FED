@@ -11,10 +11,9 @@ Route::get('/', function () {
     ]);
 })->name('home');
 
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PortalController;
 
-Route::get('dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+Route::redirect('dashboard', '/portal')->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('portal', [PortalController::class, 'index'])->name('portal');
