@@ -31,8 +31,9 @@ import {
     Upload,
     Wifi,
     WifiOff,
+    Loader2,
 } from 'lucide-vue-next';
-import { computed, ref, type Component } from 'vue';
+import { computed, onUnmounted, ref, type Component } from 'vue';
 
 type Partenaire = {
     id: number;
@@ -88,6 +89,9 @@ const dateFin = ref('');
 const files = ref<UploadedFile[]>([]);
 const fileInputKey = ref(0);
 const busy = ref(false);
+const busyLabel = ref('');
+const busyProgress = ref(0);
+let busyProgressTimer: ReturnType<typeof setInterval> | null = null;
 const filesLoaded = ref(false);
 /** true uniquement après un POST /run réussi — évite d’afficher d’anciens graphes/tables. */
 const reconciliationDone = ref(false);
@@ -108,6 +112,43 @@ const graphsBusy = ref(false);
 const grapheStatut = ref<PlotlyFigure | null>(null);
 const grapheEvolution = ref<PlotlyFigure | null>(null);
 const evolutionType = ref<'W2B' | 'B2W'>('W2B');
+
+function clearBusyProgressTimer() {
+    if (busyProgressTimer) {
+        clearInterval(busyProgressTimer);
+        busyProgressTimer = null;
+    }
+}
+
+function startBusy(label: string) {
+    clearBusyProgressTimer();
+    busy.value = true;
+    busyLabel.value = label;
+    busyProgress.value = 12;
+    message.value = null;
+    busyProgressTimer = setInterval(() => {
+        if (busyProgress.value < 90) {
+            busyProgress.value = Math.min(
+                90,
+                busyProgress.value + Math.max(0.4, (90 - busyProgress.value) * 0.035),
+            );
+        }
+    }, 180);
+}
+
+function stopBusy() {
+    clearBusyProgressTimer();
+    busyProgress.value = 100;
+    window.setTimeout(() => {
+        busy.value = false;
+        busyLabel.value = '';
+        busyProgress.value = 0;
+    }, 220);
+}
+
+onUnmounted(() => {
+    clearBusyProgressTimer();
+});
 
 /** Aligné sur streambase / reconciliation_engine — libellés orientés métier. */
 type StatutMeta = {
@@ -429,7 +470,7 @@ async function reinitialiser() {
         return;
     }
 
-    busy.value = true;
+    startBusy('Réinitialisation du gateway…');
     try {
         const res = await fetch(`${baseUrl.value}/reset`, {
             method: 'POST',
@@ -449,7 +490,7 @@ async function reinitialiser() {
             text: e instanceof Error ? e.message : 'Échec du reset gateway.',
         };
     } finally {
-        busy.value = false;
+        stopBusy();
     }
 }
 
@@ -467,8 +508,7 @@ async function charger() {
         return;
     }
 
-    busy.value = true;
-    message.value = { type: 'info', text: 'Chargement des fichiers vers le gateway…' };
+    startBusy('Chargement des fichiers vers le gateway…');
     clearReconciliationUi();
 
     try {
@@ -514,7 +554,7 @@ async function charger() {
             text: e instanceof Error ? e.message : 'Échec du chargement.',
         };
     } finally {
-        busy.value = false;
+        stopBusy();
     }
 }
 
@@ -675,8 +715,7 @@ async function lancer() {
         return;
     }
 
-    busy.value = true;
-    message.value = { type: 'info', text: 'Lancement de la réconciliation via le gateway…' };
+    startBusy('Lancement de la réconciliation via le gateway…');
     revokeExcelUrl();
 
     try {
@@ -746,7 +785,7 @@ async function lancer() {
             text: e instanceof Error ? e.message : 'Échec de la réconciliation.',
         };
     } finally {
-        busy.value = false;
+        stopBusy();
     }
 }
 
@@ -1025,7 +1064,39 @@ const setupStep = computed(() => {
                 </header>
 
                 <div
-                    v-if="message"
+                    v-if="busy"
+                    class="overflow-hidden rounded-xl border border-cyan-200 bg-gradient-to-r from-cyan-50 via-sky-50 to-white px-4 py-3.5 shadow-sm"
+                    role="status"
+                    aria-live="polite"
+                >
+                    <div class="flex items-center gap-3">
+                        <div
+                            class="flex size-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-800"
+                        >
+                            <Loader2 class="size-4 animate-spin" />
+                        </div>
+                        <div class="min-w-0 flex-1 space-y-2">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-sm font-medium text-cyan-950">{{ busyLabel }}</p>
+                                <span class="tabular-nums text-xs font-semibold text-cyan-800">
+                                    {{ Math.round(busyProgress) }} %
+                                </span>
+                            </div>
+                            <div class="h-2 overflow-hidden rounded-full bg-cyan-100/90 ring-1 ring-cyan-200/60">
+                                <div
+                                    class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-sky-600 transition-[width] duration-200 ease-out"
+                                    :style="{ width: `${busyProgress}%` }"
+                                />
+                            </div>
+                            <p class="text-[11px] text-cyan-800/70">
+                                Traitement en cours — merci de patienter…
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div
+                    v-else-if="message"
                     class="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm"
                     :class="{
                         'border-sky-200 bg-sky-50 text-sky-950': message.type === 'info',
@@ -1320,13 +1391,17 @@ const setupStep = computed(() => {
                                         :disabled="busy || files.length === 0 || !gateway.online"
                                         @click="charger"
                                     >
-                                        <Upload class="size-4" />
+                                        <Loader2
+                                            v-if="busy && busyLabel.includes('Chargement')"
+                                            class="size-4 animate-spin"
+                                        />
+                                        <Upload v-else class="size-4" />
                                         Charger
                                     </Button>
                                     <Button
                                         type="button"
                                         class="h-11 min-w-[200px] rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-md shadow-slate-900/20 hover:from-slate-800 hover:to-slate-700 disabled:opacity-50"
-                                        :disabled="!canLaunch || !gateway.online"
+                                        :disabled="!canLaunch || !gateway.online || busy"
                                         :title="
                                             filesLoaded
                                                 ? 'Lancer la réconciliation'
@@ -1334,7 +1409,11 @@ const setupStep = computed(() => {
                                         "
                                         @click="lancer"
                                     >
-                                        <Play class="size-4" />
+                                        <Loader2
+                                            v-if="busy && busyLabel.includes('réconciliation')"
+                                            class="size-4 animate-spin"
+                                        />
+                                        <Play v-else class="size-4" />
                                         Lancer la réconciliation
                                     </Button>
                                 </div>
