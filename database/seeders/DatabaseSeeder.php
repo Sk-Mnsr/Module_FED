@@ -3,10 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\Role;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,8 +13,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
         $this->call([
             RoleSeeder::class,
             AgenceSeeder::class,
@@ -26,14 +22,22 @@ class DatabaseSeeder extends Seeder
             SousCategorieDepenseSeeder::class,
         ]);
 
-        $user = User::factory()->create([
-            'name' => 'Mansour SECK',
-            'email' => 'mansour.seck@cofinacorp.com',
-            'fonction' => 'Agent IT',
-            'password' => Hash::make('Cofina@123'),
-            'profile' => 'admin',
-            'password_change_required' => false,
-        ]);
-        
+        // Idempotent : ne plante pas si l’email existe déjà
+        $user = User::query()->updateOrCreate(
+            ['email' => 'mansour.seck@cofinacorp.com'],
+            [
+                'name' => 'Mansour SECK',
+                'fonction' => 'Agent IT',
+                'password' => 'Cofina@123', // cast « hashed » sur le modèle
+                'profile' => 'admin',
+                'password_change_required' => false,
+                'activated' => true,
+            ],
+        );
+
+        $superAdminRole = Role::query()->where('slug', 'it')->first();
+        if ($superAdminRole) {
+            $user->roles()->syncWithoutDetaching([$superAdminRole->id]);
+        }
     }
 }
