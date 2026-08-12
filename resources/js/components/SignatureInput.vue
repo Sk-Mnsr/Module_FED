@@ -218,7 +218,7 @@ defineExpose({
                 <Input
                     type="file"
                     accept="image/png,image/jpeg,image/jpg,image/webp"
-                    class="cursor-pointer border-dashed bg-muted/20 file:mr-3 file:rounded-md file:border-0 file:bg-violet-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-violet-800"
+                    class="cursor-pointer border-dashed bg-muted/20 file:mr-3 file:rounded-md file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary"
                     @change="onFileChange"
                 />
                 <p v-if="uploadError" class="text-sm text-destructive">{{ uploadError }}</p>

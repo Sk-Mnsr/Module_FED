@@ -56,11 +56,11 @@ onUnmounted(() => {
                 class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-100"
             >
                 <div
-                    class="border-b border-gray-100 bg-gradient-to-r from-violet-50/80 to-white px-6 py-5 md:px-8"
+                    class="border-b border-gray-100 bg-gradient-to-r from-primary/5 to-white px-6 py-5 md:px-8"
                 >
                     <div class="flex items-start gap-4">
                         <div
-                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700"
+                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
                         >
                             <Shield class="h-6 w-6" />
                         </div>
@@ -90,7 +90,7 @@ onUnmounted(() => {
                         <div class="flex flex-wrap gap-3 pt-1">
                             <Button
                                 v-if="hasSetupData"
-                                class="h-11 bg-violet-600 px-6 font-medium hover:bg-violet-700"
+                                class="h-11 bg-primary px-6 font-medium hover:bg-primary/90"
                                 @click="showSetupModal = true"
                             >
                                 <ShieldCheck class="mr-2 h-4 w-4" />
@@ -104,7 +104,7 @@ onUnmounted(() => {
                             >
                                 <Button
                                     type="submit"
-                                    class="h-11 bg-violet-600 px-6 font-medium hover:bg-violet-700"
+                                    class="h-11 bg-primary px-6 font-medium hover:bg-primary/90"
                                     :disabled="processing"
                                 >
                                     <ShieldCheck class="mr-2 h-4 w-4" />

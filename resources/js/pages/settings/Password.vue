@@ -49,11 +49,11 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                     class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-100"
                 >
                     <div
-                        class="border-b border-gray-100 bg-gradient-to-r from-violet-50/80 to-white px-6 py-5 md:px-8"
+                        class="border-b border-gray-100 bg-gradient-to-r from-primary/5 to-white px-6 py-5 md:px-8"
                     >
                         <div class="flex items-start gap-4">
                             <div
-                                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700"
+                                class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
                             >
                                 <KeyRound class="h-6 w-6" />
                             </div>
@@ -68,10 +68,10 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
 
                     <div class="px-6 py-6 md:px-8 md:py-8">
                         <div
-                            class="mb-8 flex gap-3 rounded-lg border border-violet-100 bg-violet-50/50 px-4 py-3 text-sm text-gray-700"
+                            class="mb-8 flex gap-3 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-gray-700"
                         >
-                            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-violet-600" />
-                            <ul class="list-inside list-disc space-y-1 marker:text-violet-400">
+                            <Shield class="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                            <ul class="list-inside list-disc space-y-1 marker:text-primary/60">
                                 <li>Minimum <strong>8 caractères</strong></li>
                                 <li>Privilégiez lettres, chiffres et signes (ex. ! ? %)</li>
                                 <li>Évitez le mot de passe temporaire fourni par l’équipe IT</li>
@@ -101,7 +101,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                                     ref="currentPasswordInput"
                                     name="current_password"
                                     type="password"
-                                    class="h-11 border-gray-300 bg-white shadow-sm focus-visible:border-violet-400 focus-visible:ring-violet-400/20"
+                                    class="h-11 border-gray-300 bg-white shadow-sm focus-visible:border-primary focus-visible:ring-primary/30"
                                     autocomplete="current-password"
                                     placeholder="Saisissez votre mot de passe actuel"
                                 />
@@ -117,7 +117,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                                     ref="passwordInput"
                                     name="password"
                                     type="password"
-                                    class="h-11 border-gray-300 bg-white shadow-sm focus-visible:border-violet-400 focus-visible:ring-violet-400/20"
+                                    class="h-11 border-gray-300 bg-white shadow-sm focus-visible:border-primary focus-visible:ring-primary/30"
                                     autocomplete="new-password"
                                     placeholder="Nouveau mot de passe (min. 8 caractères)"
                                 />
@@ -132,7 +132,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                                     id="password_confirmation"
                                     name="password_confirmation"
                                     type="password"
-                                    class="h-11 border-gray-300 bg-white shadow-sm focus-visible:border-violet-400 focus-visible:ring-violet-400/20"
+                                    class="h-11 border-gray-300 bg-white shadow-sm focus-visible:border-primary focus-visible:ring-primary/30"
                                     autocomplete="new-password"
                                     placeholder="Répétez le nouveau mot de passe"
                                 />
@@ -144,7 +144,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                                     type="submit"
                                     :disabled="processing"
                                     data-test="update-password-button"
-                                    class="h-11 bg-violet-600 px-8 text-base font-medium shadow-sm hover:bg-violet-700"
+                                    class="h-11 bg-primary px-8 text-base font-medium shadow-sm hover:bg-primary/90"
                                 >
                                     {{ processing ? 'Enregistrement…' : 'Enregistrer le mot de passe' }}
                                 </Button>

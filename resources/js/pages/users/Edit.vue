@@ -23,6 +23,12 @@ interface ModuleOption {
     label: string;
 }
 
+interface ModuleMatrixRow {
+    key: string;
+    label: string;
+    roles: string[];
+}
+
 interface Props {
     user: {
         id: number;
@@ -38,6 +44,7 @@ interface Props {
     };
     roles: Role[];
     modules: ModuleOption[];
+    moduleMatrix: ModuleMatrixRow[];
     departments: Array<{ id: number; name: string }>;
     agences: Array<{ id: number; code: string; nom: string }>;
     supervisors: Array<{ id: number; name: string; email: string }>;
@@ -176,6 +183,7 @@ const submit = () => {
                         v-model="form.role_ids"
                         :roles="props.roles"
                         :modules="props.modules"
+                        :module-matrix="props.moduleMatrix"
                         :error="form.errors.role_ids"
                     />
                 </FormSection>

@@ -27,11 +27,11 @@ const breadcrumbItems: BreadcrumbItem[] = [
                 class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-100"
             >
                 <div
-                    class="border-b border-gray-100 bg-gradient-to-r from-violet-50/80 to-white px-6 py-5 md:px-8"
+                    class="border-b border-gray-100 bg-gradient-to-r from-primary/5 to-white px-6 py-5 md:px-8"
                 >
                     <div class="flex items-start gap-4">
                         <div
-                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700"
+                            class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
                         >
                             <Palette class="h-6 w-6" />
                         </div>

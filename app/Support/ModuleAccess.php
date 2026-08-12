@@ -42,7 +42,7 @@ final class ModuleAccess
         'ecritures' => 'Écritures comptables',
         'monetique' => 'Monétique',
         'od' => 'Opérations diverses',
-        'reconciliation' => 'Reconciliation Flexcube',
+        'reconciliation' => 'Réconciliation Flexcube',
         'config' => 'Configuration',
     ];
 

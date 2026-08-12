@@ -280,11 +280,21 @@ class UserController extends Controller
             ]);
         }
 
-        $modules = $roles->pluck('module')->filter()->values();
-        if ($modules->count() !== $modules->unique()->count()) {
-            throw ValidationException::withMessages([
-                'role_ids' => 'Un seul rôle par module est autorisé.',
-            ]);
+        $claimedModules = [];
+        foreach ($roles as $role) {
+            $moduleKeys = ModuleAccess::inferredModuleKeysForSlug($role->slug);
+            if ($moduleKeys === [] && filled($role->module)) {
+                $moduleKeys = [$role->module];
+            }
+
+            foreach ($moduleKeys as $moduleKey) {
+                if (isset($claimedModules[$moduleKey])) {
+                    throw ValidationException::withMessages([
+                        'role_ids' => 'Un seul rôle par module est autorisé.',
+                    ]);
+                }
+                $claimedModules[$moduleKey] = $role->id;
+            }
         }
 
         return $roleIds;
@@ -301,6 +311,7 @@ class UserController extends Controller
                 ->orderBy('nom')
                 ->get(['id', 'nom', 'slug', 'module', 'access_profile', 'description']),
             'modules' => ModuleAccess::moduleOptions(),
+            'moduleMatrix' => ModuleAccess::moduleMatrix(),
             'departments' => Department::orderBy('name')->get(['id', 'name']),
             'agences' => Agence::orderBy('nom')->get(['id', 'code', 'nom']),
             'supervisors' => $this->supervisorOptions(),

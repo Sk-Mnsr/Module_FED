@@ -153,7 +153,7 @@ final class AppNavigation
         if ($reconciliationItems !== []) {
             $groups[] = [
                 'module' => 'reconciliation',
-                'label' => 'Reconciliation Flexcube',
+                'label' => 'Réconciliation Flexcube',
                 'items' => $reconciliationItems,
             ];
         }
