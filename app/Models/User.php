@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\ModuleAccess;
+use App\Support\RoleAccessProfile;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Notifications\Notifiable;
@@ -24,6 +25,13 @@ class User extends AuthenticatableBase
         'name',
         'email',
         'password',
+        'fonction',
+        'matricule',
+        'agence_id',
+        'department_id',
+        'n_plus_1_user_id',
+        'n_plus_2_user_id',
+        'profile',
         'activated',
         'password_change_required',
     ];
@@ -200,11 +208,16 @@ class User extends AuthenticatableBase
      */
     public function isSuperAdmin(): bool
     {
-        if ($this->profile === 'admin') {
-            return true;
-        }
+        return ModuleAccess::isAdminUser($this);
+    }
 
-        return in_array('it', ModuleAccess::normalizedRoleSlugs($this), true);
+    /**
+     * Aligne users.profile (admin|other) sur les rôles assignés.
+     */
+    public function syncAccessProfileFromRoles(): void
+    {
+        $this->loadMissing('roles');
+        $this->profile = RoleAccessProfile::forRoles($this->roles);
     }
 
     /**

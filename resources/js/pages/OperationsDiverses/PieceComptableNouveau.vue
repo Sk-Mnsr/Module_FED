@@ -46,7 +46,7 @@ type EditClasseur = {
 };
 
 const props = defineProps<{
-    comptableImportApiConfigured?: boolean;
+    odIntegrationConfigured?: boolean;
     templateCsvUrl?: string;
     maxUploadMo?: number;
     editing?: boolean;
@@ -90,10 +90,7 @@ const csvInputRef = ref<HTMLInputElement | null>(null);
 const csvDragOver = ref(false);
 
 const stepIdentifiantsOk = computed(
-    () =>
-        form.numero_batch.trim() !== '' &&
-        form.date_valeur !== '' &&
-        form.nom_classeur.trim() !== '',
+    () => form.date_valeur !== '' && form.nom_classeur.trim() !== '',
 );
 
 const stepCsvOk = computed(
@@ -187,15 +184,16 @@ function effacerTout() {
 
 function submit() {
     if (props.editing && props.classeur) {
-        const hasNewFiles =
-            form.fichier_integration !== null || form.justificatifs.some((j) => j.file !== null);
+        // PUT + multipart FormData : PHP ne parse pas le corps → champs « required » vides.
+        // On spoofe via POST + _method=PUT (compatible fichiers CSV / pièces).
         form
             .transform((data) => ({
                 ...data,
+                _method: 'put',
                 justificatifs: data.justificatifs.filter((j) => j.file !== null),
             }))
-            .put(`/operations-diverses/piece-comptable/${props.classeur.id}`, {
-                forceFormData: hasNewFiles,
+            .post(`/operations-diverses/piece-comptable/${props.classeur.id}`, {
+                forceFormData: true,
                 preserveScroll: true,
             });
         return;
@@ -364,23 +362,24 @@ function formatBytes(size: number): string {
                                     Identifiants
                                 </h2>
                                 <p class="mt-0.5 text-xs text-muted-foreground">
-                                    Batch, date valeur et libellé du classeur.
+                                    Date valeur et libellé du classeur. Le n° de batch est attribué à l’intégration.
                                 </p>
                             </div>
 
                             <div class="space-y-4">
                                 <div class="space-y-2">
-                                    <Label for="numero_batch">
-                                        Numéro batch <span class="text-red-600">*</span>
-                                    </Label>
+                                    <Label for="numero_batch">Numéro batch</Label>
                                     <Input
                                         id="numero_batch"
                                         v-model="form.numero_batch"
                                         type="text"
                                         autocomplete="off"
-                                        placeholder="xxxx"
+                                        placeholder="Laissé vide : attribué automatiquement"
                                         :class="[fieldClass, 'font-medium tracking-wide']"
                                     />
+                                    <p class="text-xs text-muted-foreground">
+                                        Optionnel. Sera remplacé par le numéro généré à l’intégration.
+                                    </p>
                                     <InputError :message="form.errors.numero_batch" />
                                 </div>
 
@@ -516,11 +515,10 @@ function formatBytes(size: number): string {
                             </div>
 
                             <p
-                                v-if="comptableImportApiConfigured === false"
+                                v-if="odIntegrationConfigured === false"
                                 class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
                             >
-                                API non configurée : le fichier sera enregistré mais non transmis à
-                                la plateforme.
+                                Le service d’intégration n’est pas disponible. Contactez le support.
                             </p>
                             <InputError :message="form.errors.fichier_integration" />
                         </div>

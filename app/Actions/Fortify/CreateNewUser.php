@@ -28,12 +28,17 @@ class CreateNewUser implements CreatesNewUsers
                 Rule::unique(User::class),
             ],
             'password' => $this->passwordRules(),
+            'fonction' => ['nullable', 'string', 'max:255'],
         ])->validate();
+
+        $fonction = trim((string) ($input['fonction'] ?? ''));
 
         return User::create([
             'name' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
+            'fonction' => $fonction !== '' ? $fonction : 'Non renseignée',
+            'password_change_required' => true,
         ]);
     }
 }

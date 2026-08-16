@@ -37,7 +37,6 @@ const props = defineProps<{
     classeurs?: ClasseurRow[];
     filters?: { q?: string; nom_classeur?: string; numero_batch?: string };
     canViewAllAgents?: boolean;
-    comptableImportApiConfigured?: boolean;
 }>();
 
 const breadcrumbs = [

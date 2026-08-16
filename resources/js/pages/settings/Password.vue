@@ -3,9 +3,8 @@ import PasswordController from '@/actions/App/Http/Controllers/Settings/Password
 import InputError from '@/components/InputError.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { edit } from '@/routes/user-password';
-import { Form, Head, usePage } from '@inertiajs/vue3';
+import { Form, Head } from '@inertiajs/vue3';
 import { ref } from 'vue';
 
 import HeadingSmall from '@/components/HeadingSmall.vue';
@@ -13,9 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { type BreadcrumbItem } from '@/types';
-import { AlertTriangle, CheckCircle2, KeyRound, Shield } from 'lucide-vue-next';
-
-const page = usePage<{ flash?: { warning?: string } }>();
+import { CheckCircle2, KeyRound, Shield } from 'lucide-vue-next';
 
 const breadcrumbItems: BreadcrumbItem[] = [
     {
@@ -34,17 +31,6 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
 
         <SettingsLayout>
             <div class="space-y-8">
-                <Alert
-                    v-if="page.props.flash?.warning"
-                    class="border-amber-200 bg-amber-50 text-amber-950 [&>svg]:text-amber-600"
-                >
-                    <AlertTriangle class="size-4 shrink-0" />
-                    <AlertTitle>Action requise</AlertTitle>
-                    <AlertDescription>
-                        {{ page.props.flash.warning }}
-                    </AlertDescription>
-                </Alert>
-
                 <div
                     class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-gray-100"
                 >
@@ -60,7 +46,7 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                             <div class="min-w-0 flex-1">
                                 <HeadingSmall
                                     title="Mot de passe"
-                                    description="Choisissez un mot de passe solide. Surtout si votre compte a été récemment créé ou modifié par un administrateur."
+                                    description="Choisissez un mot de passe solide pour protéger votre compte."
                                 />
                             </div>
                         </div>
@@ -74,7 +60,6 @@ const currentPasswordInput = ref<HTMLInputElement | null>(null);
                             <ul class="list-inside list-disc space-y-1 marker:text-primary/60">
                                 <li>Minimum <strong>8 caractères</strong></li>
                                 <li>Privilégiez lettres, chiffres et signes (ex. ! ? %)</li>
-                                <li>Évitez le mot de passe temporaire fourni par l’équipe IT</li>
                             </ul>
                         </div>
 

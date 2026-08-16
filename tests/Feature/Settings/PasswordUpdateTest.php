@@ -27,9 +27,31 @@ test('password can be updated', function () {
 
     $response
         ->assertSessionHasNoErrors()
-        ->assertRedirect(route('user-password.edit'));
+        ->assertRedirect();
 
     expect(Hash::check('new-password', $user->refresh()->password))->toBeTrue();
+});
+
+test('forced password change redirects to dedicated page and then portal', function () {
+    $user = User::factory()->create([
+        'password_change_required' => true,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('user-password.edit'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('auth/ForcePasswordChange'));
+
+    $this->actingAs($user)
+        ->put(route('user-password.update'), [
+            'current_password' => 'password',
+            'password' => 'new-password',
+            'password_confirmation' => 'new-password',
+        ])
+        ->assertSessionHasNoErrors()
+        ->assertRedirect(route('portal'));
+
+    expect($user->refresh()->password_change_required)->toBeFalse();
 });
 
 test('correct password must be provided to update password', function () {

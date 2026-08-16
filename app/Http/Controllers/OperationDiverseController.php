@@ -3,13 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Agence;
-use App\Models\FicheIntegration;
 use App\Models\OdClasseur;
 use App\Models\OdClasseurPiece;
-use App\Services\Integrations\EcritureComptableImportApiClient;
+use App\Services\Integrations\FlexcubeOnlineJournalClient;
 use App\Support\FlashDialog;
 use App\Support\OdArchivage;
 use App\Support\OdChecker;
+use App\Support\OdFlexcubeJournalPayload;
 use App\Support\OdIntegrationCsv;
 use App\Support\OdIntegrationCsvTemplate;
 use App\Support\OdSimpleIntegrationCsv;
@@ -44,10 +44,10 @@ class OperationDiverseController extends Controller
         return redirect()->route('operations-diverses.piece-comptable');
     }
 
-    public function pieceComptable(EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function pieceComptable(): InertiaResponse
     {
         return Inertia::render('OperationsDiverses/PieceComptableNouveau', [
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
+            'odIntegrationConfigured' => $this->odIntegrationConfigured(),
             'templateCsvUrl' => route('operations-diverses.piece-comptable.template-csv'),
             ...$this->odUploadProps(),
         ]);
@@ -66,18 +66,11 @@ class OperationDiverseController extends Controller
         );
     }
 
-    public function pieceComptableManuelle(EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function pieceComptableManuelle(): InertiaResponse
     {
         return Inertia::render('OperationsDiverses/PieceComptableManuelle', [
             'agences' => Agence::query()->orderBy('nom')->get(['id', 'code', 'nom']),
-            'codesOperation' => FicheIntegration::query()
-                ->whereNotNull('code_operation')
-                ->distinct()
-                ->orderBy('code_operation')
-                ->pluck('code_operation')
-                ->map(fn ($c) => (string) $c)
-                ->values(),
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
+            'odIntegrationConfigured' => $this->odIntegrationConfigured(),
             ...$this->odUploadProps(),
         ]);
     }
@@ -89,7 +82,7 @@ class OperationDiverseController extends Controller
         }
 
         $validated = $this->validateOd($request, [
-            'numero_batch' => ['required', 'string', 'max:100'],
+            'numero_batch' => ['nullable', 'string', 'max:100'],
             'date_valeur' => ['required', 'date'],
             'nom_classeur' => ['required', 'string', 'max:255'],
             'fichier_integration' => ['required', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKb()],
@@ -98,10 +91,12 @@ class OperationDiverseController extends Controller
             'justificatifs.*.file' => $this->justificatifFileRules(),
         ]);
 
+        $numeroBatch = $this->resolveNumeroBatch($validated['numero_batch'] ?? null);
+
         $integFile = $request->file('fichier_integration');
         $normalized = OdSimpleIntegrationCsv::normalizeUpload(
             file_get_contents($integFile->getRealPath()) ?: null,
-            $validated['numero_batch'],
+            $numeroBatch,
             $validated['date_valeur'],
             auth()->user(),
         );
@@ -118,7 +113,7 @@ class OperationDiverseController extends Controller
             [
                 'nom_classeur' => $validated['nom_classeur'],
                 'date_valeur' => $validated['date_valeur'],
-                'numero_batch' => $validated['numero_batch'],
+                'numero_batch' => $numeroBatch,
             ],
             function (string $baseDir) use ($flexContents) {
                 $path = $baseDir.'/integration/integration.csv';
@@ -140,7 +135,7 @@ class OperationDiverseController extends Controller
         }
 
         $validated = $this->validateOd($request, [
-            'numero_batch' => ['required', 'string', 'max:100'],
+            'numero_batch' => ['nullable', 'string', 'max:100'],
             'nom_classeur' => ['required', 'string', 'max:255'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.date_de_valeur' => ['required', 'string', 'max:20'],
@@ -168,9 +163,10 @@ class OperationDiverseController extends Controller
             ]);
         }
 
+        $numeroBatch = $this->resolveNumeroBatch($validated['numero_batch'] ?? null);
         $user = auth()->user();
         $csvContents = OdManualIntegrationCsv::build(
-            $validated['numero_batch'],
+            $numeroBatch,
             $validated['lignes'],
             $user,
         );
@@ -180,7 +176,7 @@ class OperationDiverseController extends Controller
             [
                 'nom_classeur' => $validated['nom_classeur'],
                 'date_valeur' => $dateValeur,
-                'numero_batch' => $validated['numero_batch'],
+                'numero_batch' => $numeroBatch,
             ],
             function (string $baseDir) use ($csvContents, $validated) {
                 $path = $baseDir.'/integration/integration-manuelle.csv';
@@ -199,7 +195,7 @@ class OperationDiverseController extends Controller
         return $this->finalizeClasseurCreation($classeur);
     }
 
-    public function pieceComptableModifier(OdClasseur $classeur, EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function pieceComptableModifier(OdClasseur $classeur): InertiaResponse
     {
         $this->authorizeClasseur($classeur);
         abort_unless($classeur->isEditable(), 403, 'Impossible de modifier une intégration en cours de validation ou archivée.');
@@ -222,14 +218,7 @@ class OperationDiverseController extends Controller
 
             return Inertia::render('OperationsDiverses/PieceComptableManuelle', [
                 'agences' => Agence::query()->orderBy('nom')->get(['id', 'code', 'nom']),
-                'codesOperation' => FicheIntegration::query()
-                    ->whereNotNull('code_operation')
-                    ->distinct()
-                    ->orderBy('code_operation')
-                    ->pluck('code_operation')
-                    ->map(fn ($c) => (string) $c)
-                    ->values(),
-                'comptableImportApiConfigured' => $importApi->isConfigured(),
+                'odIntegrationConfigured' => $this->odIntegrationConfigured(),
                 'editing' => true,
                 'classeur' => $this->editPayloadManuelle($classeur, $lignes),
                 ...$this->odUploadProps(),
@@ -237,7 +226,7 @@ class OperationDiverseController extends Controller
         }
 
         return Inertia::render('OperationsDiverses/PieceComptableNouveau', [
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
+            'odIntegrationConfigured' => $this->odIntegrationConfigured(),
             'templateCsvUrl' => route('operations-diverses.piece-comptable.template-csv'),
             'editing' => true,
             'classeur' => $this->editPayloadAutomatique($classeur),
@@ -251,27 +240,32 @@ class OperationDiverseController extends Controller
         abort_unless($classeur->isEditable(), 403, 'Impossible de modifier une intégration en cours de validation ou archivée.');
 
         $validated = $this->validateOd($request, [
-            'numero_batch' => ['required', 'string', 'max:100'],
+            'numero_batch' => ['nullable', 'string', 'max:100'],
             'date_valeur' => ['required', 'date'],
             'nom_classeur' => ['required', 'string', 'max:255'],
             'fichier_integration' => ['nullable', 'file', 'mimes:csv,txt', 'max:'.$this->maxUploadKb()],
         ]);
 
-        $batchOrDateChanged = $classeur->numero_batch !== $validated['numero_batch']
+        $numeroBatch = $this->resolveNumeroBatch(
+            $validated['numero_batch'] ?? null,
+            $classeur->numero_batch,
+        );
+
+        $batchOrDateChanged = $classeur->numero_batch !== $numeroBatch
             || optional($classeur->date_valeur)->toDateString() !== $validated['date_valeur'];
 
         $classeur->update([
             'nom_classeur' => $validated['nom_classeur'],
             'date_valeur' => $validated['date_valeur'],
-            'numero_batch' => $validated['numero_batch'],
-            'numero_piece' => $validated['numero_batch'],
+            'numero_batch' => $numeroBatch,
+            'numero_piece' => $numeroBatch,
         ]);
 
         if ($request->hasFile('fichier_integration')) {
             $integFile = $request->file('fichier_integration');
             $normalized = OdSimpleIntegrationCsv::normalizeUpload(
                 file_get_contents($integFile->getRealPath()) ?: null,
-                $validated['numero_batch'],
+                $numeroBatch,
                 $validated['date_valeur'],
                 $classeur->user ?? auth()->user(),
             );
@@ -296,7 +290,7 @@ class OperationDiverseController extends Controller
         } elseif ($batchOrDateChanged) {
             $this->refreshStoredIntegrationCsv(
                 $classeur,
-                $validated['numero_batch'],
+                $numeroBatch,
                 $validated['date_valeur'],
             );
         }
@@ -313,7 +307,7 @@ class OperationDiverseController extends Controller
         abort_unless($this->isManuelleIntegration($classeur), 403, 'Cette intégration n’est pas une saisie manuelle.');
 
         $validated = $this->validateOd($request, [
-            'numero_batch' => ['required', 'string', 'max:100'],
+            'numero_batch' => ['nullable', 'string', 'max:100'],
             'nom_classeur' => ['required', 'string', 'max:255'],
             'lignes' => ['required', 'array', 'min:1'],
             'lignes.*.date_de_valeur' => ['required', 'string', 'max:20'],
@@ -338,9 +332,13 @@ class OperationDiverseController extends Controller
             ]);
         }
 
+        $numeroBatch = $this->resolveNumeroBatch(
+            $validated['numero_batch'] ?? null,
+            $classeur->numero_batch,
+        );
         $user = $classeur->user ?? auth()->user();
         $csvContents = OdManualIntegrationCsv::build(
-            $validated['numero_batch'],
+            $numeroBatch,
             $validated['lignes'],
             $user,
         );
@@ -356,8 +354,8 @@ class OperationDiverseController extends Controller
         $classeur->update([
             'nom_classeur' => $validated['nom_classeur'],
             'date_valeur' => $dateValeur,
-            'numero_batch' => $validated['numero_batch'],
-            'numero_piece' => $validated['numero_batch'],
+            'numero_batch' => $numeroBatch,
+            'numero_piece' => $numeroBatch,
             'fichier_integration_path' => $path,
             'fichier_integration_original_name' => 'integration-manuelle.csv',
         ]);
@@ -367,7 +365,7 @@ class OperationDiverseController extends Controller
         return $this->finalizeClasseurUpdate($classeur);
     }
 
-    public function pieceComptableResume(OdClasseur $classeur, EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function pieceComptableResume(OdClasseur $classeur): InertiaResponse
     {
         $this->authorizeClasseur($classeur);
         $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy']);
@@ -378,7 +376,7 @@ class OperationDiverseController extends Controller
         return Inertia::render('OperationsDiverses/PieceComptableResume', [
             'classeur' => $this->classeurResumePayload($classeur, $user),
             'apercu' => $this->apercuPayload($parsed),
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
+            'odIntegrationConfigured' => $this->odIntegrationConfigured(),
             'eligibleCheckers' => $classeur->canBeIntegratedBy($user)
                 ? OdChecker::eligibleFor($user)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values()
                 : [],
@@ -386,8 +384,11 @@ class OperationDiverseController extends Controller
         ]);
     }
 
-    public function pieceComptableIntegrer(Request $request, OdClasseur $classeur, EcritureComptableImportApiClient $importApi): RedirectResponse
-    {
+    public function pieceComptableIntegrer(
+        Request $request,
+        OdClasseur $classeur,
+        FlexcubeOnlineJournalClient $journalApi,
+    ): RedirectResponse {
         $this->authorizeClasseur($classeur);
         $user = auth()->user();
 
@@ -421,22 +422,30 @@ class OperationDiverseController extends Controller
             ));
         }
 
-        if (! $importApi->isConfigured()) {
+        if (! $this->odIntegrationConfigured($journalApi)) {
             return $redirect->with('error', FlashDialog::error(
-                'L’URL ou la clé API de la plateforme comptable n’est pas configurée. Contactez l’équipe IT.',
-                title: 'Configuration manquante',
+                'Le service d’intégration n’est pas disponible. Contactez le support.',
+                title: 'Service indisponible',
             ));
         }
 
-        $name = $classeur->fichier_integration_original_name
-            ?: (string) config('services.ecritures_comptables_import.csv_filename', 'RQFT.csv');
-
         try {
-            $response = $importApi->uploadFileContents($contents, $name);
+            $response = $this->dispatchOdIntegration($classeur, $journalApi, $user);
+        } catch (\InvalidArgumentException $e) {
+            return $redirect->with('error', FlashDialog::error($e->getMessage(), title: 'Intégration impossible'));
         } catch (\Throwable $e) {
             report($e);
 
-            return $redirect->with('error', FlashDialog::fromThrowable('Envoi vers la plateforme', $e));
+            return $redirect->with('error', FlashDialog::fromThrowable('Envoi intégration OD', $e));
+        }
+
+        $flexErrors = $journalApi->extractErrors($response);
+
+        if ($flexErrors !== []) {
+            return $redirect->with(
+                'error',
+                FlashDialog::flexcubeRejected($flexErrors, $response->status(), (string) $response->body()),
+            );
         }
 
         if (! $response->successful()) {
@@ -446,13 +455,21 @@ class OperationDiverseController extends Controller
             );
         }
 
-        $classeur->forceFill([
+        $updates = [
             'statut' => OdClasseur::STATUT_ATTENTE_VALIDATION,
             'integrated_at' => now(),
             'integrated_by_user_id' => $user->id,
             'assigned_checker_user_id' => $checker->id,
             'integration_status_code' => $response->status(),
-        ])->save();
+        ];
+
+        $flexBatch = $journalApi->extractBatchNo($response);
+        if ($flexBatch !== null) {
+            $updates['numero_batch'] = $flexBatch;
+            $updates['numero_piece'] = $flexBatch;
+        }
+
+        $classeur->forceFill($updates)->save();
 
         try {
             $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy']));
@@ -461,16 +478,19 @@ class OperationDiverseController extends Controller
 
             return $redirect->with(
                 'warning',
-                'Intégration transmise, mais la génération du PDF de la pièce comptable a échoué : '.$e->getMessage()
+                'Intégration transmise, mais la pièce comptable PDF n’a pas pu être générée. Contactez le support.'
             );
+        }
+
+        $batchLabel = $classeur->fresh()->numero_batch;
+        $success = 'Intégration transmise. En attente de validation par '.$checker->name.'.';
+        if (filled($batchLabel) && ! self::isProvisionalBatch((string) $batchLabel)) {
+            $success = 'Intégration transmise (batch '.$batchLabel.'). En attente de validation par '.$checker->name.'.';
         }
 
         return redirect()
             ->route('operations-diverses.piece-comptable.resume', $classeur)
-            ->with(
-                'success',
-                'Intégration transmise à la plateforme. En attente de validation par '.$checker->name.'.'
-            );
+            ->with('success', $success);
     }
 
     public function pieceComptableValiderChecker(OdClasseur $classeur): RedirectResponse
@@ -593,7 +613,7 @@ class OperationDiverseController extends Controller
         ]);
     }
 
-    public function integrations(Request $request, EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function integrations(Request $request): InertiaResponse
     {
         $user = auth()->user();
 
@@ -642,11 +662,11 @@ class OperationDiverseController extends Controller
             'canViewAllAgents' => false,
             'eligibleCheckers' => OdChecker::eligibleFor($user)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
             'checkerPole' => OdChecker::departmentLabelForUser($user),
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
+            'odIntegrationConfigured' => $this->odIntegrationConfigured(),
         ]);
     }
 
-    public function attenteValidation(Request $request, EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function attenteValidation(Request $request): InertiaResponse
     {
         $user = auth()->user();
         $canViewAll = $this->voitTousLesClasseurs($user);
@@ -692,11 +712,10 @@ class OperationDiverseController extends Controller
             'classeurs' => $classeurs,
             'filters' => $filters,
             'canViewAllAgents' => $canViewAll,
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
         ]);
     }
 
-    public function archivage(Request $request, EcritureComptableImportApiClient $importApi): InertiaResponse
+    public function archivage(Request $request): InertiaResponse
     {
         $user = auth()->user();
         $canViewAllAgents = OdArchivage::viewerCanFilterByAgent($user);
@@ -752,7 +771,6 @@ class OperationDiverseController extends Controller
                 : [],
             'canViewAllAgents' => $canViewAllAgents,
             'totalClasseurs' => $classeurs->count(),
-            'comptableImportApiConfigured' => $importApi->isConfigured(),
         ]);
     }
 
@@ -905,6 +923,7 @@ class OperationDiverseController extends Controller
 
         return [
             'numero_batch.required' => 'Veuillez saisir le numéro de batch.',
+            'numero_batch.max' => 'Le numéro de batch est trop long.',
             'date_valeur.required' => 'Veuillez indiquer la date valeur.',
             'date_valeur.date' => 'La date valeur n\'est pas valide.',
             'nom_classeur.required' => 'Veuillez indiquer le nom du classeur.',
@@ -1340,5 +1359,60 @@ class OperationDiverseController extends Controller
     private function voitTousLesClasseurs(\App\Models\User $user): bool
     {
         return $user->isSuperAdmin() || $user->hasRole('it') || $user->hasRole('admin');
+    }
+
+    /**
+     * Numéro de batch : saisi librement, ou provisoire jusqu’à attribution par Flexcube.
+     */
+    private function resolveNumeroBatch(?string $input, ?string $existing = null): string
+    {
+        $value = trim((string) ($input ?? ''));
+        if ($value !== '') {
+            return $value;
+        }
+
+        $existing = trim((string) ($existing ?? ''));
+        if ($existing !== '' && ! self::isProvisionalBatch($existing)) {
+            return $existing;
+        }
+
+        return 'EN_ATTENTE';
+    }
+
+    private static function isProvisionalBatch(string $batch): bool
+    {
+        return $batch === '' || str_starts_with(strtoupper($batch), 'EN_ATTENTE');
+    }
+
+    private function odIntegrationConfigured(?FlexcubeOnlineJournalClient $journalApi = null): bool
+    {
+        $journalApi ??= app(FlexcubeOnlineJournalClient::class);
+
+        return $journalApi->isConfigured();
+    }
+
+    /**
+     * @return \Illuminate\Http\Client\Response
+     */
+    private function dispatchOdIntegration(
+        OdClasseur $classeur,
+        FlexcubeOnlineJournalClient $journalApi,
+        \App\Models\User $user,
+    ) {
+        $parsed = $this->parseIntegration($classeur);
+        if (($parsed['error'] ?? null) !== null) {
+            throw new \InvalidArgumentException((string) $parsed['error']);
+        }
+
+        $maker = $user->flexComptaUserIdentifier();
+        if ($maker === '') {
+            throw new \InvalidArgumentException(
+                'Votre identifiant Flexcube (IDFLEX) n’est pas renseigné. Contactez un administrateur.'
+            );
+        }
+
+        $payload = OdFlexcubeJournalPayload::fromParsed($classeur, $parsed, $maker);
+
+        return $journalApi->createJournal($payload, $maker);
     }
 }

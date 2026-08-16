@@ -12,6 +12,8 @@ use App\Models\RubriqueDepense;
 use App\Models\User;
 use App\Models\SousCategorieDepense;
 use App\Models\TypologieDepense;
+use App\Support\ModuleAccess;
+use App\Support\ModuleAbilities;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,7 +41,11 @@ class BudgetController extends Controller
         $articles   = Article::with(['typeDepense', 'sousCategorie.categorie.famille'])->orderBy('description')->get();
         $agences    = Agence::orderBy('nom')->get(['id', 'code', 'nom']);
 
-        $canEdit = $request->user()?->hasAnyRole(['it', 'admin']) ?? false;
+        $abilities = ModuleAbilities::forUser($request->user(), ModuleAbilities::BUDGET);
+        $canEdit = ($abilities['create'] ?? false)
+            || ($abilities['update'] ?? false)
+            || ($abilities['delete'] ?? false)
+            || ($abilities['import'] ?? false);
 
         return Inertia::render('budgets/Index', [
             'departments'         => $departments,
@@ -52,6 +58,7 @@ class BudgetController extends Controller
             'articles'            => $articles,
             'agences'             => $agences,
             'canEdit'             => $canEdit,
+            'budgetAbilities'     => $abilities,
         ]);
     }
 
@@ -113,6 +120,8 @@ class BudgetController extends Controller
 
     public function create()
     {
+        $this->authorizeBudgetAbility('create');
+
         $departments = Department::orderBy('name')->get(['id', 'name', 'code']);
         $typologies  = TypologieDepense::orderBy('type')->get(['type', 'libelle']);
         $categories  = CategorieDepense::with('sousCategories')->orderBy('categorie')->get();
@@ -130,6 +139,8 @@ class BudgetController extends Controller
 
     public function store(Request $request)
     {
+        $this->authorizeBudgetAbility('create');
+
         $validated = $this->validateBudget($request);
 
         DB::beginTransaction();
@@ -154,6 +165,8 @@ class BudgetController extends Controller
 
     public function edit(Budget $budget)
     {
+        $this->authorizeBudgetAbility('update');
+
         $departments = Department::orderBy('name')->get(['id', 'name', 'code']);
         $typologies  = TypologieDepense::orderBy('type')->get(['type', 'libelle']);
         $categories  = CategorieDepense::with('sousCategories')->orderBy('categorie')->get();
@@ -178,6 +191,8 @@ class BudgetController extends Controller
 
     public function update(Request $request, Budget $budget)
     {
+        $this->authorizeBudgetAbility('update');
+
         $validated = $this->validateBudget($request, $budget->id);
 
         DB::beginTransaction();
@@ -201,6 +216,8 @@ class BudgetController extends Controller
 
     public function destroy(Budget $budget)
     {
+        $this->authorizeBudgetAbility('delete');
+
         $budget->delete();
 
         return redirect()->route('budgets.index')
@@ -209,6 +226,8 @@ class BudgetController extends Controller
 
     public function updateLine(Request $request, BudgetLine $line)
     {
+        $this->authorizeBudgetAbility('update');
+
         $validated = Validator::make($request->all(), [
             'label'                   => 'required|string|max:255',
             'type'                    => 'required|string|exists:typologie_depenses,type',
@@ -273,6 +292,8 @@ class BudgetController extends Controller
 
     public function destroyLine(BudgetLine $line)
     {
+        $this->authorizeBudgetAbility('delete');
+
         $budget = $line->budget;
 
         // Supprimer aussi les lignes entité associées
@@ -288,6 +309,8 @@ class BudgetController extends Controller
 
     public function exportExcel(Request $request)
     {
+        $this->authorizeBudgetAbility('import');
+
         $departmentId = $request->integer('department_id');
         $year = $request->integer('year');
 
@@ -384,6 +407,8 @@ class BudgetController extends Controller
 
     public function exportPdf(Request $request)
     {
+        $this->authorizeBudgetAbility('import');
+
         $budget = $this->resolveBudgetForExport($request);
         if (!$budget) {
             abort(404, 'Budget introuvable.');
@@ -406,6 +431,8 @@ class BudgetController extends Controller
      */
     public function import(Request $request)
     {
+        $this->authorizeBudgetAbility('import');
+
         $validated = $request->validate([
             'department_id' => ['required', 'integer', 'exists:departments,id'],
             'year' => ['required', 'integer', 'min:2000', 'max:2100'],
@@ -876,5 +903,15 @@ class BudgetController extends Controller
             ->where('department_id', $departmentId)
             ->where('year', $year)
             ->first();
+    }
+
+    private function authorizeBudgetAbility(string $ability): void
+    {
+        $user = auth()->user();
+        abort_unless(
+            $user !== null && ModuleAbilities::userCan($user, ModuleAbilities::BUDGET, $ability),
+            403,
+            'Vous n’avez pas le droit Budget requis pour cette action.',
+        );
     }
 }

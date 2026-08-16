@@ -27,6 +27,8 @@ interface ModuleMatrixRow {
     key: string;
     label: string;
     roles: string[];
+    access_only?: boolean;
+    abilities?: Array<{ key: string; label: string }>;
 }
 
 interface Props {
@@ -45,6 +47,8 @@ interface Props {
     roles: Role[];
     modules: ModuleOption[];
     moduleMatrix: ModuleMatrixRow[];
+    moduleAbilities?: Record<string, Record<string, boolean>>;
+    moduleAbilityOptions?: Record<string, Array<{ key: string; label: string }>>;
     departments: Array<{ id: number; name: string }>;
     agences: Array<{ id: number; code: string; nom: string }>;
     supervisors: Array<{ id: number; name: string; email: string }>;
@@ -71,6 +75,7 @@ const form = useForm({
     password: '',
     password_confirmation: '',
     role_ids: (props.user.roles ?? []).map((role) => role.id),
+    module_abilities: props.moduleAbilities ?? {},
     department_id: props.user.department_id ?? null,
     agence_id: props.user.agence_id ?? null,
     n_plus_1_user_id: props.user.n_plus_1_user_id ?? null,
@@ -181,6 +186,7 @@ const submit = () => {
                 <FormSection title="Accès & rôle" :columns="1">
                     <RoleModuleSelect
                         v-model="form.role_ids"
+                        v-model:module-abilities="form.module_abilities"
                         :roles="props.roles"
                         :modules="props.modules"
                         :module-matrix="props.moduleMatrix"

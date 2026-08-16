@@ -103,7 +103,6 @@ final class AppNavigation
         $roleSlugs = ModuleAccess::normalizedRoleSlugs($user);
         $modules = ModuleAccess::accessibleModuleKeys($user);
         $hasConfigAccess = ModuleAccess::isAdminUser($user);
-        $profileType = $user->profile;
         $isInCommittee = self::userIsInCommittee($user->id);
         $hasModule = fn (string $module): bool => in_array($module, $modules, true);
 
@@ -139,14 +138,14 @@ final class AppNavigation
             $groups[] = ['module' => 'ecritures', 'label' => 'Écritures comptables', 'items' => $ecrituresItems];
         }
 
-        $monetiqueItems = self::monetiqueItems($user, $roleSlugs, $modules, $profileType, $hasConfigAccess);
+        $monetiqueItems = self::monetiqueItems($user, $roleSlugs, $modules, $hasConfigAccess);
         if ($monetiqueItems !== []) {
             $groups[] = ['module' => 'monetique', 'label' => 'Monétique', 'items' => $monetiqueItems];
         }
 
         $odItems = self::odItems($modules);
         if ($odItems !== []) {
-            $groups[] = ['module' => 'od', 'label' => 'OD', 'items' => $odItems];
+            $groups[] = ['module' => 'od', 'label' => 'Opérations diverses', 'items' => $odItems];
         }
 
         $reconciliationItems = self::reconciliationItems($modules);
@@ -158,9 +157,9 @@ final class AppNavigation
             ];
         }
 
-        $configItems = self::configItems($hasConfigAccess);
+        $configItems = self::configItems($hasModule('config'));
         if ($configItems !== []) {
-            $groups[] = ['module' => 'config', 'label' => 'Configuration', 'items' => $configItems];
+            $groups[] = ['module' => 'config', 'label' => 'Référentiels', 'items' => $configItems];
         }
 
         return $groups;
@@ -220,7 +219,7 @@ final class AppNavigation
         ]);
 
         if ($achatsItems !== []) {
-            $items[] = self::section('Achats & consultations', 'shopping-cart', $achatsItems);
+            $items[] = self::section('Achats', 'shopping-cart', $achatsItems);
         }
 
         return $items;
@@ -292,11 +291,10 @@ final class AppNavigation
         User $user,
         array $roleSlugs,
         array $modules,
-        ?string $profileType,
         bool $hasConfigAccess,
     ): array {
         $hasRole = fn (string $slug): bool => in_array($slug, $roleSlugs, true);
-        $hasMonetiqueModule = in_array('monetique', $modules, true) || $profileType === 'monetique';
+        $hasMonetiqueModule = in_array('monetique', $modules, true);
 
         if (! $hasMonetiqueModule) {
             return [];
@@ -309,154 +307,140 @@ final class AppNavigation
             || $hasRole('monetique')
             || $hasRole('it');
 
-        $rechargesItems = self::section('Recharges', null, self::compact([
+        if ($canMonetiqueCentral) {
+            $sections = self::coficarteCentralItems($user, $canResponsableMonetique);
+        } elseif ($hasRole('ca')) {
+            $sections = self::coficarteChefAgenceItems($user, $roleSlugs);
+        } else {
+            $sections = self::coficarteOperationalItems($user, $roleSlugs);
+        }
+
+        if ($canEncaissement) {
+            $sections[] = self::section('Caisse', 'banknote', [
+                self::link('Encaissement', '/monetique/encaissements'),
+            ]);
+        }
+
+        return $sections;
+    }
+
+    /**
+     * @return array{title: string, icon?: string, items: list<array<string, mixed>>}
+     */
+    private static function monetiqueRechargesSection(User $user): array
+    {
+        return self::section('Recharges', 'wallet', self::compact([
             CoficarteAgenceAccess::canInitiateCoficarteRecharge($user)
                 ? self::link('Nouvelle recharge', '/monetique/recharges/nouveau')
                 : null,
             self::link('Historique', '/monetique/recharges/historique'),
         ]));
-
-        $encaissementsItems = self::section('Caisse', null, [
-            self::link('Encaissement', '/monetique/encaissements'),
-        ]);
-
-        if ($canMonetiqueCentral) {
-            $coficarteChildren = self::coficarteCentralItems($canResponsableMonetique, $rechargesItems, $canEncaissement, $encaissementsItems);
-        } elseif ($hasRole('ca')) {
-            $coficarteChildren = self::coficarteChefAgenceItems($roleSlugs, $rechargesItems, $canEncaissement, $encaissementsItems);
-        } else {
-            $coficarteChildren = self::coficarteOperationalItems($user, $roleSlugs, $rechargesItems, $canEncaissement, $encaissementsItems);
-        }
-
-        return [
-            self::section('Coficarte', 'credit-card', $coficarteChildren),
-        ];
     }
 
     /**
      * @return list<array<string, mixed>>
      */
-    private static function coficarteCentralItems(
-        bool $canResponsableMonetique,
-        array $rechargesItems,
-        bool $canEncaissement,
-        array $encaissementsItems,
-    ): array {
+    private static function coficarteCentralItems(User $user, bool $canResponsableMonetique): array
+    {
         $cartesItems = self::compact([
             ...($canResponsableMonetique ? [
                 self::link('Ajouter', '/monetique/cartes/ajouter'),
                 self::link('Modifier prix', '/monetique/cartes/modifier-prix'),
             ] : []),
-            self::link('En Stock', '/monetique/cartes/en-stock'),
-            self::link('Vendus', '/monetique/cartes/vendus'),
+            self::link('En stock', '/monetique/cartes/en-stock'),
+            self::link('Vendues', '/monetique/cartes/vendus'),
         ]);
 
-        return self::compact([
-            self::section('Pilotage & paramètres', null, [
+        return [
+            self::section('Pilotage', 'gauge', [
                 self::link('Tableau de bord', '/monetique/pilotage'),
                 self::link('Campagnes', '/monetique/campagnes'),
                 self::link('Seuils & objectifs', '/monetique/parametrage/seuils-stock'),
             ]),
-            self::section('Cartes', null, $cartesItems),
-            self::section('Transferts & approvisionnement', null, [
+            self::section('Cartes', 'credit-card', $cartesItems),
+            self::section('Transferts', 'arrow-left-right', [
                 self::link("Demandes d'agences", '/monetique/demandes-approvisionnement'),
                 self::link('Nouveau transfert', '/monetique/transferts/nouveau'),
                 self::link('En attente', '/monetique/transferts/en-attente'),
                 self::link('Historique', '/monetique/transferts/historique'),
             ]),
-            self::section('Ventes', null, [
-                self::link('Nouveau', '/monetique/ventes/nouveau'),
+            self::section('Ventes', 'shopping-cart', [
+                self::link('Nouvelle vente', '/monetique/ventes/nouveau'),
                 self::link('Historique', '/monetique/ventes/historique'),
             ]),
-            $rechargesItems,
-            $canEncaissement ? $encaissementsItems : null,
-        ]);
+            self::monetiqueRechargesSection($user),
+        ];
     }
 
     /**
      * @param  list<string>  $roleSlugs
      * @return list<array<string, mixed>>
      */
-    private static function coficarteChefAgenceItems(
-        array $roleSlugs,
-        array $rechargesItems,
-        bool $canEncaissement,
-        array $encaissementsItems,
-    ): array {
+    private static function coficarteChefAgenceItems(User $user, array $roleSlugs): array
+    {
         $hasRole = fn (string $slug): bool => in_array($slug, $roleSlugs, true);
 
-        $ventesItems = $hasRole('cc')
-            ? [
-                self::link('Nouvelle vente', '/monetique/ventes/nouveau'),
-                self::link('Historique des ventes', '/monetique/ventes/historique'),
-            ]
-            : [self::link('Historique des ventes', '/monetique/ventes/historique')];
-
-        $agenceSectionItems = self::compact([
-            self::link('Retour au siège', '/monetique/agence/retour-cartes'),
-            $hasRole('cc') ? self::link('Délester vers le chef d’agence', '/monetique/cc/delester-chef-agence') : null,
-            self::link('Approvisionnement CC', '/monetique/agence/approvisionnement-cc'),
-            self::link('Apporteurs', '/monetique/agence/apporteurs'),
-            self::link('Suivi ventes & recharges', '/monetique/agence/suivi'),
-        ]);
-
-        return self::compact([
-            self::section('Cartes (stock agence)', null, [
-                self::link('En stock', '/monetique/cartes/en-stock'),
-                self::link('Vendus', '/monetique/cartes/vendus'),
+        return [
+            self::section('Pilotage', 'gauge', [
+                self::link('Vue agence', '/monetique/pilotage'),
+                self::link('Suivi ventes & recharges', '/monetique/agence/suivi'),
             ]),
-            self::section('Transferts & approvisionnement', null, [
+            self::section('Cartes', 'credit-card', [
+                self::link('En stock', '/monetique/cartes/en-stock'),
+                self::link('Vendues', '/monetique/cartes/vendus'),
+            ]),
+            self::section('Transferts', 'arrow-left-right', self::compact([
                 self::link('Demandes au siège', '/monetique/agence/demandes-approvisionnement'),
                 self::link('Réception des cartes', '/monetique/transferts/en-attente'),
-                self::link('Historique des transferts', '/monetique/transferts/historique'),
-            ]),
-            self::section('Agence', null, $agenceSectionItems),
-            self::section('Ventes', null, $ventesItems),
-            $rechargesItems,
-            $canEncaissement ? $encaissementsItems : null,
-            self::section('Pilotage', null, [
-                self::link('Vue agence', '/monetique/pilotage'),
-            ]),
-        ]);
+                self::link('Retour au siège', '/monetique/agence/retour-cartes'),
+                self::link('Approvisionnement CC', '/monetique/agence/approvisionnement-cc'),
+                $hasRole('cc')
+                    ? self::link('Délester vers le chef d’agence', '/monetique/cc/delester-chef-agence')
+                    : null,
+                self::link('Historique', '/monetique/transferts/historique'),
+            ])),
+            self::section('Ventes', 'shopping-cart', self::compact([
+                $hasRole('cc') ? self::link('Nouvelle vente', '/monetique/ventes/nouveau') : null,
+                self::link('Historique', '/monetique/ventes/historique'),
+            ])),
+            self::monetiqueRechargesSection($user),
+        ];
     }
 
     /**
      * @param  list<string>  $roleSlugs
      * @return list<array<string, mixed>>
      */
-    private static function coficarteOperationalItems(
-        User $user,
-        array $roleSlugs,
-        array $rechargesItems,
-        bool $canEncaissement,
-        array $encaissementsItems,
-    ): array {
+    private static function coficarteOperationalItems(User $user, array $roleSlugs): array
+    {
         $hasRole = fn (string $slug): bool => in_array($slug, $roleSlugs, true);
 
-        $ventesItems = CoficarteAgenceAccess::canInitiateCoficarteVente($user)
-            ? [
-                self::link('Nouvelle vente', '/monetique/ventes/nouveau'),
-                self::link('Historique', '/monetique/ventes/historique'),
-            ]
-            : [self::link('Historique', '/monetique/ventes/historique')];
-
-        return self::compact([
-            self::section('Pilotage', null, [
+        $sections = [
+            self::section('Pilotage', 'gauge', [
                 self::link('Indicateurs', '/monetique/pilotage'),
             ]),
-            self::section('Cartes', null, [
+            self::section('Cartes', 'credit-card', [
                 self::link('En stock', '/monetique/cartes/en-stock'),
-                self::link('Vendus', '/monetique/cartes/vendus'),
+                self::link('Vendues', '/monetique/cartes/vendus'),
             ]),
-            $hasRole('cc')
-                ? self::section('Délestage (CC)', null, [
-                    self::link('Délester vers le chef d’agence', '/monetique/cc/delester-chef-agence'),
-                ])
+        ];
+
+        if ($hasRole('cc')) {
+            $sections[] = self::section('Transferts', 'arrow-left-right', [
+                self::link('Délester vers le chef d’agence', '/monetique/cc/delester-chef-agence'),
+            ]);
+        }
+
+        $sections[] = self::section('Ventes', 'shopping-cart', self::compact([
+            CoficarteAgenceAccess::canInitiateCoficarteVente($user)
+                ? self::link('Nouvelle vente', '/monetique/ventes/nouveau')
                 : null,
-            self::section('Ventes', null, $ventesItems),
-            $rechargesItems,
-            $canEncaissement ? $encaissementsItems : null,
-        ]);
+            self::link('Historique', '/monetique/ventes/historique'),
+        ]));
+
+        $sections[] = self::monetiqueRechargesSection($user);
+
+        return $sections;
     }
 
     /**
@@ -470,15 +454,13 @@ final class AppNavigation
         }
 
         return [
-            self::section('Opérations diverses', 'layers', [
-                self::section('Intégration', null, [
-                    self::link('Automatique', '/operations-diverses/piece-comptable'),
-                    self::link('Manuelle', '/operations-diverses/piece-comptable/manuelle'),
-                    self::link('Mes brouillons', '/operations-diverses/integrations'),
-                    self::link('En attente de validation', '/operations-diverses/attente-validation'),
-                ]),
-                self::link('Archivage', '/operations-diverses/archivage'),
+            self::section('Intégration', 'layers', [
+                self::link('Automatique', '/operations-diverses/piece-comptable'),
+                self::link('Manuelle', '/operations-diverses/piece-comptable/manuelle'),
+                self::link('Mes brouillons', '/operations-diverses/integrations'),
+                self::link('En attente', '/operations-diverses/attente-validation'),
             ]),
+            self::link('Archivage', '/operations-diverses/archivage', 'archive'),
         ];
     }
 
@@ -500,31 +482,22 @@ final class AppNavigation
     }
 
     /**
+     * Référentiels dépenses (module `config`).
+     *
      * @return list<array<string, mixed>>
      */
-    private static function configItems(bool $hasConfigAccess): array
+    private static function configItems(bool $hasAccess): array
     {
-        if (! $hasConfigAccess) {
+        if (! $hasAccess) {
             return [];
         }
 
         return [
-            self::section('Paramétrage', 'settings', [
-                self::link('Départements', '/departments'),
-                self::link('Typologies de dépenses', '/typologies'),
-                self::link('Catégories de dépenses', '/categories'),
-                self::link('Banques', '/banques'),
-                self::link('Fournisseurs', '/fournisseurs'),
-                self::link('Types de dépense', '/type-depenses'),
-                self::link('Fiches d\'Intégration', '/fiche-integrations'),
-                self::link('Agences', '/agences'),
-                self::link('Apporteurs d’affaires', '/apporteurs-affaires'),
-                self::link('Articles', '/articles'),
-                self::link('Familles de produits', '/familles'),
-                self::link('Utilisateurs', '/users'),
-                self::link('Rôles', '/roles'),
-                self::link('Paramètres applicatifs', '/settings/app'),
-            ]),
+            self::link('Typologies de dépenses', '/typologies', 'tags'),
+            self::link('Catégories de dépenses', '/categories', 'folder-tree'),
+            self::link('Banques', '/banques', 'landmark'),
+            self::link('Fournisseurs', '/fournisseurs', 'building-2'),
+            self::link('Types de dépense', '/type-depenses', 'list'),
         ];
     }
 

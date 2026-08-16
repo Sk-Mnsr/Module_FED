@@ -20,7 +20,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'Configuration', href: '#' },
+    { title: 'Référentiels', href: '#' },
     { title: 'Comptes de Charges', href: '/comptes-charges' },
 ];
 

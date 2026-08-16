@@ -27,6 +27,9 @@ final class ModuleAccess
         'responsable_stock' => 'stock',
         'ops' => 'od',
         'finance' => 'od',
+        'reconciliation' => 'reconciliation',
+        'budget' => 'budget',
+        'referentiels' => 'config',
         'monetique' => 'monetique',
         'monetique_ops' => 'monetique',
         'ca' => 'monetique',
@@ -43,9 +46,24 @@ final class ModuleAccess
         'monetique' => 'Monétique',
         'od' => 'Opérations diverses',
         'reconciliation' => 'Réconciliation Flexcube',
-        'config' => 'Configuration',
+        'config' => 'Référentiels',
     ];
 
+    /**
+     * Modules sans choix de rôle métier : on/off d’autorisation uniquement.
+     *
+     * @var list<string>
+     */
+    public const ACCESS_ONLY_MODULES = [
+        'budget',
+        'reconciliation',
+        'config',
+    ];
+
+    public static function isAccessOnlyModule(string $module): bool
+    {
+        return in_array($module, self::ACCESS_ONLY_MODULES, true);
+    }
     public static function clearModuleRolesCache(): void
     {
         Cache::forget(self::CACHE_KEY);
@@ -82,11 +100,13 @@ final class ModuleAccess
             return false;
         }
 
-        if ($user->profile === 'admin') {
+        // Source de vérité : rôles IT / admin
+        if (count(array_intersect(self::normalizedRoleSlugs($user), ['it', 'admin'])) > 0) {
             return true;
         }
 
-        return count(array_intersect(self::normalizedRoleSlugs($user), ['it', 'admin'])) > 0;
+        // Compatibilité legacy (anciens comptes)
+        return $user->profile === 'admin';
     }
 
     /**
@@ -188,6 +208,10 @@ final class ModuleAccess
         return null;
     }
 
+    /**
+     * Profil legacy pour la colonne roles.access_profile (UI admin).
+     * Ne pilote plus users.profile hors admin — voir RoleAccessProfile.
+     */
     public static function accessProfileForRoleSlug(?string $slug): string
     {
         $slug = self::normalizeRoleSlug($slug);
@@ -225,7 +249,7 @@ final class ModuleAccess
     }
 
     /**
-     * @return list<array{key: string, label: string, roles: list<string>}>
+     * @return list<array{key: string, label: string, roles: list<string>, access_only: bool, abilities: list<array{key: string, label: string}>}>
      */
     public static function moduleMatrix(): array
     {
@@ -236,6 +260,8 @@ final class ModuleAccess
                 'key' => $key,
                 'label' => $label,
                 'roles' => $byModule[$key] ?? [],
+                'access_only' => self::isAccessOnlyModule($key),
+                'abilities' => ModuleAbilities::optionsFor($key),
             ],
             array_keys(self::MODULE_LABELS),
             self::MODULE_LABELS,
@@ -335,13 +361,13 @@ final class ModuleAccess
                 'it', 'demandeur', 'n_plus_1', 'responsable_achats', 'responsable_facilities',
                 'responsable_stock', 'controle_de_gestion', 'daf', 'dga', 'assistant_comptable',
             ],
-            'budget' => ['it', 'n_plus_1', 'controle_de_gestion', 'daf', 'demandeur'],
+            'budget' => ['budget'],
             'stock' => ['it', 'responsable_achats', 'responsable_stock'],
             'ecritures' => ['it', 'controle_de_gestion', 'daf'],
             'monetique' => ['it', 'monetique', 'monetique_ops', 'ca', 'cc', 'caissier'],
             'od' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
-            'reconciliation' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
-            'config' => ['it', 'admin'],
+            'reconciliation' => ['reconciliation'],
+            'config' => ['referentiels'],
         ];
 
         return array_map(

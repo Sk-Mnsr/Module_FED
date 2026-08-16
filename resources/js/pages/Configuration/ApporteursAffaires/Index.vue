@@ -26,7 +26,7 @@ defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'Configuration', href: '#' },
+    { title: 'Administration', href: '#' },
     { title: 'Apporteurs d’affaires', href: '/apporteurs-affaires' },
 ];
 
@@ -105,7 +105,7 @@ const submitForm = () => {
 </script>
 
 <template>
-    <Head title="Apporteurs d’affaires — Configuration" />
+    <Head title="Apporteurs d’affaires — Administration" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">

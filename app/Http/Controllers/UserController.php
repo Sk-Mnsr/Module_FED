@@ -9,7 +9,7 @@ use App\Models\Department;
 use App\Models\Role;
 use App\Models\User;
 use App\Support\ModuleAccess;
-use App\Support\RoleAccessProfile;
+use App\Support\ModuleAbilities;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -91,6 +91,13 @@ class UserController extends Controller
             'password' => 'required|string|min:8|confirmed',
             'role_ids' => ['required', 'array', 'min:1'],
             'role_ids.*' => ['integer', 'exists:roles,id'],
+            'module_abilities' => ['nullable', 'array'],
+            'module_abilities.budget' => ['nullable', 'array'],
+            'module_abilities.budget.view' => ['nullable', 'boolean'],
+            'module_abilities.budget.create' => ['nullable', 'boolean'],
+            'module_abilities.budget.update' => ['nullable', 'boolean'],
+            'module_abilities.budget.delete' => ['nullable', 'boolean'],
+            'module_abilities.budget.import' => ['nullable', 'boolean'],
             'department_id' => 'nullable|integer|exists:departments,id',
             'agence_id' => 'nullable|integer|exists:agences,id',
             'matricule' => [
@@ -122,10 +129,11 @@ class UserController extends Controller
             'password_change_required' => true,
         ]);
 
-        // Attacher les rôles (un par module)
+        // Attacher les rôles (un par module) — accès métier via matrice modules
         $user->roles()->sync($roleIds);
-        $user->profile = RoleAccessProfile::forRoleIds($roleIds);
+        $user->syncAccessProfileFromRoles();
         $user->save();
+        ModuleAbilities::syncForUser($user->fresh(['roles']), $validated['module_abilities'] ?? []);
 
         return redirect()->route('users.index')
             ->with('success', 'Utilisateur créé avec succès !');
@@ -155,6 +163,7 @@ class UserController extends Controller
         return Inertia::render('users/Edit', [
             ...$this->userFormProps(),
             'user' => $user,
+            'moduleAbilities' => ModuleAbilities::payloadForUser($user),
             'supervisors' => $this->supervisorOptions($user->id),
         ]);
     }
@@ -175,6 +184,13 @@ class UserController extends Controller
             'password' => 'nullable|string|min:8|confirmed',
             'role_ids' => ['required', 'array', 'min:1'],
             'role_ids.*' => ['integer', 'exists:roles,id'],
+            'module_abilities' => ['nullable', 'array'],
+            'module_abilities.budget' => ['nullable', 'array'],
+            'module_abilities.budget.view' => ['nullable', 'boolean'],
+            'module_abilities.budget.create' => ['nullable', 'boolean'],
+            'module_abilities.budget.update' => ['nullable', 'boolean'],
+            'module_abilities.budget.delete' => ['nullable', 'boolean'],
+            'module_abilities.budget.import' => ['nullable', 'boolean'],
             'department_id' => 'nullable|integer|exists:departments,id',
             'agence_id' => 'nullable|integer|exists:agences,id',
             'matricule' => [
@@ -212,10 +228,11 @@ class UserController extends Controller
 
         $user->update($data);
 
-        // Synchroniser les rôles (un par module)
+        // Synchroniser les rôles (un par module) — accès métier via matrice modules
         $user->roles()->sync($roleIds);
-        $user->profile = RoleAccessProfile::forRoleIds($roleIds);
+        $user->syncAccessProfileFromRoles();
         $user->save();
+        ModuleAbilities::syncForUser($user->fresh(['roles']), $validated['module_abilities'] ?? []);
 
         return redirect()->route('users.index')
             ->with('success', 'Utilisateur mis à jour avec succès !');
@@ -312,6 +329,7 @@ class UserController extends Controller
                 ->get(['id', 'nom', 'slug', 'module', 'access_profile', 'description']),
             'modules' => ModuleAccess::moduleOptions(),
             'moduleMatrix' => ModuleAccess::moduleMatrix(),
+            'moduleAbilityOptions' => ModuleAbilities::catalog(),
             'departments' => Department::orderBy('name')->get(['id', 'name']),
             'agences' => Agence::orderBy('nom')->get(['id', 'code', 'nom']),
             'supervisors' => $this->supervisorOptions(),

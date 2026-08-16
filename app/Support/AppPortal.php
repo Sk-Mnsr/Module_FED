@@ -15,7 +15,7 @@ final class AppPortal
         'monetique' => 'credit-card',
         'od' => 'file-spreadsheet',
         'reconciliation' => 'git-compare',
-        'config' => 'settings',
+        'config' => 'book-marked',
     ];
 
     /** @var array<string, string> */
@@ -27,7 +27,7 @@ final class AppPortal
         'monetique' => 'Coficarte, ventes, recharges, transferts et encaissements.',
         'od' => 'Intégration automatique ou manuelle des opérations diverses.',
         'reconciliation' => 'Réconciliation des écritures et soldes Flexcube.',
-        'config' => 'Paramétrage et administration de la plateforme.',
+        'config' => 'Typologies, catégories, banques, fournisseurs et types de dépense.',
     ];
 
     /** @var array<string, string> */
@@ -39,7 +39,7 @@ final class AppPortal
         'monetique' => 'violet',
         'od' => 'orange',
         'reconciliation' => 'cyan',
-        'config' => 'slate',
+        'config' => 'teal',
     ];
 
     /** @var array<string, list<string>> */
@@ -54,9 +54,7 @@ final class AppPortal
         'od' => ['operations-diverses'],
         'reconciliation' => ['reconciliation-flexcube'],
         'config' => [
-            'users', 'roles', 'departments', 'typologies', 'categories', 'banques',
-            'fournisseurs', 'type-depenses', 'fiche-integrations', 'agences',
-            'apporteurs-affaires', 'articles', 'familles', 'settings',
+            'typologies', 'categories', 'banques', 'fournisseurs', 'type-depenses',
         ],
     ];
 
@@ -97,6 +95,11 @@ final class AppPortal
         return [
             ['label' => 'Utilisateurs', 'href' => '/users'],
             ['label' => 'Rôles', 'href' => '/roles'],
+            ['label' => 'Départements', 'href' => '/departments'],
+            ['label' => 'Agences', 'href' => '/agences'],
+            ['label' => 'Articles', 'href' => '/articles'],
+            ['label' => 'Familles de produits', 'href' => '/familles'],
+            ['label' => 'Apporteurs d’affaires', 'href' => '/apporteurs-affaires'],
             ['label' => 'Paramètres applicatifs', 'href' => '/settings/app'],
         ];
     }

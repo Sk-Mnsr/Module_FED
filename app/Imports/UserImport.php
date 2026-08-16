@@ -6,7 +6,6 @@ use App\Models\Agence;
 use App\Models\Department;
 use App\Models\Role;
 use App\Models\User;
-use App\Support\RoleAccessProfile;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -66,7 +65,6 @@ class UserImport implements ToCollection, WithHeadingRow
                 'agence_id' => $agenceId,
                 'department_id' => $departmentId,
                 'activated' => true,
-                'profile' => RoleAccessProfile::forRole($role),
             ];
 
             if ($matricule !== null) {
@@ -96,6 +94,8 @@ class UserImport implements ToCollection, WithHeadingRow
             $user->save();
 
             $user->roles()->sync([$role->id]);
+            $user->syncAccessProfileFromRoles();
+            $user->save();
             $this->registerUserInCache($user);
         }
     }

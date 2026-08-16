@@ -12,10 +12,15 @@ use Inertia\Response;
 class PasswordController extends Controller
 {
     /**
-     * Show the user's password settings page.
+     * Show the user's password settings page,
+     * or the dedicated first-login page when a change is required.
      */
-    public function edit(): Response
+    public function edit(Request $request): Response
     {
+        if ($request->user()?->password_change_required) {
+            return Inertia::render('auth/ForcePasswordChange');
+        }
+
         return Inertia::render('settings/Password');
     }
 
@@ -29,11 +34,20 @@ class PasswordController extends Controller
             'password' => ['required', Password::defaults(), 'confirmed'],
         ]);
 
-        $request->user()->update([
+        $user = $request->user();
+        $wasRequired = (bool) $user->password_change_required;
+
+        $user->update([
             'password' => $validated['password'],
             'password_change_required' => false,
         ]);
 
-        return back();
+        if ($wasRequired) {
+            return redirect()
+                ->route('portal')
+                ->with('success', 'Mot de passe mis à jour. Vous pouvez continuer.');
+        }
+
+        return back()->with('success', 'Mot de passe mis à jour.');
     }
 }

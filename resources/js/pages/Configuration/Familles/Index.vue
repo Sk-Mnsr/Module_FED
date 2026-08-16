@@ -19,7 +19,7 @@ interface Famille { id: number; nom: string; categories: Categorie[]; }
 const props = defineProps<{ familles: Famille[] }>();
 
 const breadcrumbs = [
-    { title: 'Configuration', href: '#' },
+    { title: 'Administration', href: '#' },
     { title: 'Familles', href: '/familles' },
 ];
 

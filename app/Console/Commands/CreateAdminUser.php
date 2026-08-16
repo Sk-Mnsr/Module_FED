@@ -73,10 +73,15 @@ class CreateAdminUser extends Command
                 'name' => $name,
                 'email' => $email,
                 'password' => Hash::make($password),
+                'fonction' => 'SuperAdmin',
+                'password_change_required' => false,
+                'activated' => true,
             ]);
 
             // Assigner le rôle SuperAdmin
             $user->roles()->attach($superAdminRole->id);
+            $user->syncAccessProfileFromRoles();
+            $user->save();
 
             $this->newLine();
             $this->info('✓ Utilisateur SuperAdmin créé avec succès !');

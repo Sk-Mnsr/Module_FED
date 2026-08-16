@@ -109,6 +109,10 @@ const submit = () => {
                                 {{ profile.label }}
                             </option>
                         </select>
+                        <p class="mt-1 text-xs text-muted-foreground">
+                            « Administrateur » = bypass IT. L’accès aux modules métier se configure
+                            via les modules accessibles ci-dessous.
+                        </p>
                         <InputError :message="form.errors.access_profile" />
                     </div>
 

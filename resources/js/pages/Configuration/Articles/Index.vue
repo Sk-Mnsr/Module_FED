@@ -32,7 +32,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'Configuration', href: '#' },
+    { title: 'Administration', href: '#' },
     { title: 'Articles', href: '/articles' },
 ];
 

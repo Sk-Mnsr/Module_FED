@@ -21,7 +21,6 @@ class RequirePasswordChange
         }
 
         return redirect()
-            ->route('user-password.edit')
-            ->with('warning', 'Vous devez changer votre mot de passe pour continuer.');
+            ->route('user-password.edit');
     }
 }

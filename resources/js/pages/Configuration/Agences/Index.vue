@@ -69,7 +69,7 @@ const onSort = (column: string, direction: 'asc' | 'desc') => {
 };
 
 const breadcrumbs = [
-    { title: 'Configuration', href: '#' },
+    { title: 'Administration', href: '#' },
     { title: 'Entités', href: '/agences' },
 ];
 

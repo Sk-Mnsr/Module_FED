@@ -31,6 +31,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const breadcrumbs: BreadcrumbItem[] = [
+    { title: 'Référentiels', href: '#' },
     { title: 'Types de dépense', href: '/type-depenses' },
 ];
 

@@ -200,7 +200,7 @@ class AgenceController extends Controller
         $user->agence_id = $agence->id;
         if ($roleId) {
             $user->roles()->sync([$roleId]);
-            $user->profile = 'monetique';
+            $user->syncAccessProfileFromRoles();
         }
         $user->save();
     }

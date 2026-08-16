@@ -62,8 +62,7 @@ type EditClasseur = {
 
 const props = defineProps<{
     agences?: Agence[];
-    codesOperation?: string[];
-    comptableImportApiConfigured?: boolean;
+    odIntegrationConfigured?: boolean;
     maxUploadMo?: number;
     editing?: boolean;
     classeur?: EditClasseur;
@@ -112,7 +111,7 @@ const form = useForm<{
 });
 
 const stepIdentifiantsOk = computed(
-    () => form.numero_batch.trim() !== '' && form.nom_classeur.trim() !== '',
+    () => form.nom_classeur.trim() !== '',
 );
 
 const stepLignesOk = computed(() =>
@@ -196,14 +195,14 @@ function effacerTout() {
 
 function submit() {
     if (props.editing && props.classeur) {
-        const hasNewJustificatifs = form.justificatifs.some((j) => j.file !== null);
         form
             .transform((data) => ({
                 ...data,
+                _method: 'put',
                 justificatifs: data.justificatifs.filter((j) => j.file !== null),
             }))
-            .put(`/operations-diverses/piece-comptable/${props.classeur.id}/manuelle`, {
-                forceFormData: hasNewJustificatifs,
+            .post(`/operations-diverses/piece-comptable/${props.classeur.id}/manuelle`, {
+                forceFormData: true,
                 preserveScroll: true,
             });
         return;
@@ -373,23 +372,24 @@ function formatBytes(size: number): string {
                             </p>
                             <h2 class="mt-0.5 text-sm font-semibold text-foreground">Identifiants</h2>
                             <p class="mt-0.5 text-xs text-muted-foreground">
-                                Batch et libellé du classeur.
+                                Libellé du classeur. Le n° de batch est attribué à l’intégration.
                             </p>
                         </div>
 
                         <div class="grid gap-4 sm:grid-cols-2">
                             <div class="space-y-2">
-                                <Label for="numero_batch">
-                                    Numéro batch <span class="text-red-600">*</span>
-                                </Label>
+                                <Label for="numero_batch">Numéro batch</Label>
                                 <Input
                                     id="numero_batch"
                                     v-model="form.numero_batch"
                                     type="text"
                                     autocomplete="off"
-                                    placeholder="xxxx"
+                                    placeholder="Laissé vide : attribué automatiquement"
                                     :class="[fieldClass, 'font-medium tracking-wide']"
                                 />
+                                <p class="text-xs text-muted-foreground">
+                                    Optionnel. Sera remplacé par le numéro généré à l’intégration.
+                                </p>
                                 <InputError :message="form.errors.numero_batch" />
                             </div>
                             <div class="space-y-2">
@@ -408,11 +408,10 @@ function formatBytes(size: number): string {
                         </div>
 
                         <p
-                            v-if="comptableImportApiConfigured === false"
+                            v-if="odIntegrationConfigured === false"
                             class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
                         >
-                            API non configurée : les lignes seront enregistrées en brouillon mais
-                            non transmises à la plateforme.
+                            Le service d’intégration n’est pas disponible. Contactez le support.
                         </p>
                     </div>
 
@@ -588,17 +587,9 @@ function formatBytes(size: number): string {
                                         </Label>
                                         <Input
                                             v-model="ligne.code_operation"
-                                            list="codes-operation"
                                             placeholder="Code"
                                             :class="[fieldClass, 'h-9']"
                                         />
-                                        <datalist id="codes-operation">
-                                            <option
-                                                v-for="code in codesOperation"
-                                                :key="code"
-                                                :value="code"
-                                            />
-                                        </datalist>
                                         <InputError
                                             :message="ligneError(index, 'code_operation')"
                                         />

@@ -4,17 +4,23 @@ import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
 import {
     ArrowRight,
+    BookMarked,
+    Building2,
     Calculator,
     CreditCard,
     FileSpreadsheet,
     FileText,
+    FolderTree,
     GitCompare,
     Layers,
     LayoutGrid,
+    MapPin,
+    Package,
     Settings,
     Shield,
     Table2,
     Users,
+    UserPlus,
     Wrench,
 } from 'lucide-vue-next';
 import type { Component } from 'vue';
@@ -51,6 +57,7 @@ const iconMap: Record<string, Component> = {
     'file-spreadsheet': FileSpreadsheet,
     'git-compare': GitCompare,
     settings: Settings,
+    'book-marked': BookMarked,
 };
 
 const accentStyles: Record<string, { ring: string; icon: string; hover: string }> = {
@@ -89,6 +96,11 @@ const accentStyles: Record<string, { ring: string; icon: string; hover: string }
         icon: 'bg-cyan-50 text-cyan-700',
         hover: 'hover:border-cyan-300/80 hover:bg-cyan-50/40',
     },
+    teal: {
+        ring: 'ring-teal-200/80',
+        icon: 'bg-teal-50 text-teal-700',
+        hover: 'hover:border-teal-300/80 hover:bg-teal-50/40',
+    },
     slate: {
         ring: 'ring-slate-200/80',
         icon: 'bg-slate-100 text-slate-600',
@@ -107,6 +119,11 @@ function resolveIcon(name: string) {
 function adminIcon(label: string) {
     if (label.includes('Utilisateur')) return Users;
     if (label.includes('Rôle')) return Shield;
+    if (label.includes('Département')) return Building2;
+    if (label.includes('Agence')) return MapPin;
+    if (label.includes('Article')) return Package;
+    if (label.includes('Famille')) return FolderTree;
+    if (label.includes('Apporteur')) return UserPlus;
     return Wrench;
 }
 </script>
@@ -222,7 +239,7 @@ function adminIcon(label: string) {
                             Administration plateforme
                         </p>
                     </div>
-                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
                         <Link
                             v-for="link in adminLinks"
                             :key="link.href"

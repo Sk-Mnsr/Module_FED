@@ -72,6 +72,13 @@ interface Props {
     budget?: Budget | null;
     isN1View?: boolean;
     canEdit?: boolean;
+    budgetAbilities?: {
+        view?: boolean;
+        create?: boolean;
+        update?: boolean;
+        delete?: boolean;
+        import?: boolean;
+    };
     typologies?: Array<{ type: string; libelle: string }>;
     categories?: Array<{ id: number; categorie: string; code: string; sous_categories: Array<{ id: number; sous_categorie: string; code: string }> }>;
     articles?: Array<{
@@ -91,7 +98,12 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const canEdit = computed(() => props.canEdit !== false);
+const abilities = computed(() => props.budgetAbilities ?? {});
+const canCreate = computed(() => Boolean(abilities.value.create) && !props.isN1View);
+const canUpdate = computed(() => Boolean(abilities.value.update) && !props.isN1View);
+const canDelete = computed(() => Boolean(abilities.value.delete) && !props.isN1View);
+const canImportExport = computed(() => Boolean(abilities.value.import) && !props.isN1View);
+const canEdit = computed(() => props.canEdit === true || canCreate.value || canUpdate.value || canDelete.value || canImportExport.value);
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 
@@ -151,9 +163,9 @@ const exportQuery = computed(() => {
     return params.toString();
 });
 
-const canExportExcel = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear));
-const canExportPdf = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && globalLines.value.length));
-const canImport = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && canEdit.value && !props.isN1View));
+const canExportExcel = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && canImportExport.value));
+const canExportPdf = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && globalLines.value.length && canImportExport.value));
+const canImport = computed(() => Boolean(props.selectedDepartmentId && props.selectedYear && canImportExport.value));
 
 const showImportModal = ref(false);
 const importFile = ref<File | null>(null);
@@ -294,7 +306,7 @@ const deleteLine = () => {
 };
 
 const onRowDoubleClick = (line: BudgetLine) => {
-    if (canEdit.value && !props.isN1View) openLineModal(line);
+    if (canUpdate.value) openLineModal(line);
 };
 
 const responsableBadge = (r?: string | null) => {
@@ -337,12 +349,12 @@ const responsableBadge = (r?: string | null) => {
                     <p class="text-sm text-gray-500">Paramétrage annuel et suivi par département.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <template v-if="canEdit && !props.isN1View">
-                        <Link href="/budgets/create">
-                            <Button class="bg-purple-600 hover:bg-purple-700">
-                                <Plus class="mr-2 h-4 w-4" /> Nouveau
-                            </Button>
-                        </Link>
+                    <Link v-if="canCreate" href="/budgets/create">
+                        <Button class="bg-purple-600 hover:bg-purple-700">
+                            <Plus class="mr-2 h-4 w-4" /> Nouveau
+                        </Button>
+                    </Link>
+                    <template v-if="canImportExport">
                         <Button
                             type="button"
                             variant="outline"
@@ -428,7 +440,7 @@ const responsableBadge = (r?: string | null) => {
                                 <!-- Ligne globale -->
                                 <tr
                                     class="bg-purple-50/40 font-medium"
-                                    :class="{ 'cursor-pointer hover:bg-purple-100/60': canEdit && !props.isN1View }"
+                                    :class="{ 'cursor-pointer hover:bg-purple-100/60': canUpdate }"
                                     @dblclick="onRowDoubleClick(line)"
                                 >
                                     <td class="px-2 py-3 text-center">
@@ -620,12 +632,17 @@ const responsableBadge = (r?: string | null) => {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button v-if="!showDeleteConfirm" variant="destructive" class="mr-auto" @click="showDeleteConfirm = true">
+                        <Button
+                            v-if="!showDeleteConfirm && canDelete"
+                            variant="destructive"
+                            class="mr-auto"
+                            @click="showDeleteConfirm = true"
+                        >
                             <Trash2 class="mr-2 h-4 w-4" /> Supprimer
                         </Button>
                         <div class="flex gap-2">
                             <Button variant="outline" @click="closeModal">Annuler</Button>
-                            <Button :disabled="isSubmitting" @click="saveLine">
+                            <Button v-if="canUpdate" :disabled="isSubmitting" @click="saveLine">
                                 {{ isSubmitting ? 'Enregistrement...' : 'Enregistrer' }}
                             </Button>
                         </div>

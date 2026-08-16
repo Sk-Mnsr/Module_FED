@@ -115,7 +115,6 @@ const props = defineProps<{
     searchResults?: SearchResultRow[];
     canViewAllAgents?: boolean;
     totalClasseurs?: number;
-    comptableImportApiConfigured?: boolean;
 }>();
 
 const tree = computed<ArchiveTree>(() => normalizeTree(props.tree ?? {}));

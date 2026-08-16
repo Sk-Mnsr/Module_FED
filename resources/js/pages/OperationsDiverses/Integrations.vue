@@ -53,7 +53,7 @@ const props = defineProps<{
     canViewAllAgents?: boolean;
     eligibleCheckers?: Checker[];
     checkerPole?: string;
-    comptableImportApiConfigured?: boolean;
+    odIntegrationConfigured?: boolean;
 }>();
 
 const breadcrumbs = [
@@ -497,11 +497,10 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
             </p>
 
             <p
-                v-if="comptableImportApiConfigured === false"
+                v-if="odIntegrationConfigured === false"
                 class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
             >
-                API plateforme non configurée : l’intégration échouera tant que l’URL d’import n’est
-                pas renseignée.
+                Le service d’intégration n’est pas disponible. Contactez le support.
             </p>
 
             <Dialog v-model:open="showIntegrerModal">

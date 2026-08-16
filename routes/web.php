@@ -50,9 +50,7 @@ use App\Http\Controllers\Reconciliation\HistoriqueController;
 use App\Http\Controllers\EvaluationController;
 use App\Http\Controllers\FacilitiesFedController;
 use App\Http\Controllers\FedController;
-use App\Http\Controllers\FicheIntegrationController;
 use App\Http\Controllers\FournisseurController;
-use App\Http\Controllers\Monetique\ApporteurController;
 use App\Http\Controllers\Monetique\CampaignController;
 use App\Http\Controllers\Monetique\CarteController;
 use App\Http\Controllers\Monetique\ChefAgenceController;
@@ -83,32 +81,31 @@ Route::middleware(['auth'])->group(function () {
     Route::post('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle')->middleware('role:it');
     Route::resource('departments', DepartmentController::class)->middleware('role:it');
     Route::resource('roles', RoleController::class)->middleware('role:it')->except(['show']);
-    Route::get('budgets', [BudgetController::class, 'index'])->name('budgets.index');
-    Route::get('budgets/n1', [BudgetController::class, 'indexForN1'])
-        ->name('budgets.n1')
-        ->middleware('role:n_plus_1');
-    Route::get('budgets/create', [BudgetController::class, 'create'])->name('budgets.create')->middleware('role:it');
-    Route::post('budgets', [BudgetController::class, 'store'])->name('budgets.store')->middleware('role:it');
-    Route::get('budgets/{budget}/edit', [BudgetController::class, 'edit'])->name('budgets.edit')->middleware('role:it');
-    Route::put('budgets/{budget}', [BudgetController::class, 'update'])->name('budgets.update')->middleware('role:it');
-    Route::delete('budgets/{budget}', [BudgetController::class, 'destroy'])->name('budgets.destroy')->middleware('role:it');
-    Route::put('budget-lines/{line}', [BudgetController::class, 'updateLine'])->name('budget-lines.update')->middleware('role:it');
-    Route::delete('budget-lines/{line}', [BudgetController::class, 'destroyLine'])->name('budget-lines.destroy')->middleware('role:it');
-    Route::resource('typologies', TypologieDepenseController::class)->middleware('role:it');
-    Route::resource('categories', CategorieDepenseController::class)->middleware('role:it');
-    Route::get('budgets/export/excel', [BudgetController::class, 'exportExcel'])
-        ->name('budgets.export.excel')
-        ->middleware('role:it');
-    Route::get('budgets/export/pdf', [BudgetController::class, 'exportPdf'])
-        ->name('budgets.export.pdf')
-        ->middleware('role:it');
-    Route::post('budgets/import', [BudgetController::class, 'import'])
-        ->name('budgets.import')
-        ->middleware('role:it');
-
-    // Entités partagées (IT et Responsable Achats)
-    Route::middleware('role:it,responsable_achats')->group(function () {
-        // Fournisseurs
+    Route::middleware('module:budget')->group(function () {
+        Route::get('budgets', [BudgetController::class, 'index'])->name('budgets.index');
+        Route::get('budgets/n1', [BudgetController::class, 'indexForN1'])->name('budgets.n1');
+        Route::get('budgets/create', [BudgetController::class, 'create'])->name('budgets.create');
+        Route::post('budgets', [BudgetController::class, 'store'])->name('budgets.store');
+        Route::get('budgets/{budget}/edit', [BudgetController::class, 'edit'])->name('budgets.edit');
+        Route::put('budgets/{budget}', [BudgetController::class, 'update'])->name('budgets.update');
+        Route::delete('budgets/{budget}', [BudgetController::class, 'destroy'])->name('budgets.destroy');
+        Route::put('budget-lines/{line}', [BudgetController::class, 'updateLine'])->name('budget-lines.update');
+        Route::delete('budget-lines/{line}', [BudgetController::class, 'destroyLine'])->name('budget-lines.destroy');
+        Route::get('budgets/export/excel', [BudgetController::class, 'exportExcel'])->name('budgets.export.excel');
+        Route::get('budgets/export/pdf', [BudgetController::class, 'exportPdf'])->name('budgets.export.pdf');
+        Route::post('budgets/import', [BudgetController::class, 'import'])->name('budgets.import');
+    });
+    Route::middleware('module:config')->group(function () {
+        Route::resource('typologies', TypologieDepenseController::class);
+        Route::resource('categories', CategorieDepenseController::class);
+        Route::get('banques', [BanqueController::class, 'index'])->name('banques.index');
+        Route::post('banques', [BanqueController::class, 'store'])->name('banques.store');
+        Route::put('banques/{banque}', [BanqueController::class, 'update'])->name('banques.update');
+        Route::delete('banques/{banque}', [BanqueController::class, 'destroy'])->name('banques.destroy');
+        Route::get('type-depenses', [TypeDepenseController::class, 'index'])->name('type-depenses.index');
+        Route::post('type-depenses', [TypeDepenseController::class, 'store'])->name('type-depenses.store');
+        Route::put('type-depenses/{typeDepense}', [TypeDepenseController::class, 'update'])->name('type-depenses.update');
+        Route::delete('type-depenses/{typeDepense}', [TypeDepenseController::class, 'destroy'])->name('type-depenses.destroy');
         Route::get('fournisseurs', [FournisseurController::class, 'index'])->name('fournisseurs.index');
         Route::post('fournisseurs', [FournisseurController::class, 'store'])->name('fournisseurs.store');
         Route::put('fournisseurs/{fournisseur}', [FournisseurController::class, 'update'])->name('fournisseurs.update');
@@ -117,26 +114,6 @@ Route::middleware(['auth'])->group(function () {
 
     // Nouvelles routes pour les entités de base (IT uniquement)
     Route::middleware('role:it')->group(function () {
-        // Banques
-        Route::get('banques', [BanqueController::class, 'index'])->name('banques.index');
-        Route::post('banques', [BanqueController::class, 'store'])->name('banques.store');
-        Route::put('banques/{banque}', [BanqueController::class, 'update'])->name('banques.update');
-        Route::delete('banques/{banque}', [BanqueController::class, 'destroy'])->name('banques.destroy');
-
-        // Types de dépenses
-        Route::get('type-depenses', [TypeDepenseController::class, 'index'])->name('type-depenses.index');
-        Route::post('type-depenses', [TypeDepenseController::class, 'store'])->name('type-depenses.store');
-        Route::put('type-depenses/{typeDepense}', [TypeDepenseController::class, 'update'])->name('type-depenses.update');
-        Route::delete('type-depenses/{typeDepense}', [TypeDepenseController::class, 'destroy'])->name('type-depenses.destroy');
-
-        // Fiches d'intégration
-        Route::get('fiche-integrations/export', [FicheIntegrationController::class, 'export'])->name('fiche-integrations.export');
-        Route::post('fiche-integrations/import', [FicheIntegrationController::class, 'import'])->name('fiche-integrations.import');
-        Route::get('fiche-integrations', [FicheIntegrationController::class, 'index'])->name('fiche-integrations.index');
-        Route::post('fiche-integrations', [FicheIntegrationController::class, 'store'])->name('fiche-integrations.store');
-        Route::put('fiche-integrations/{ficheIntegration}', [FicheIntegrationController::class, 'update'])->name('fiche-integrations.update');
-        Route::delete('fiche-integrations/{ficheIntegration}', [FicheIntegrationController::class, 'destroy'])->name('fiche-integrations.destroy');
-
         // Articles & Agences & Familles
         Route::get('articles/export-template', [ArticleController::class, 'exportTemplate'])->name('articles.export-template');
         Route::post('articles/import', [ArticleController::class, 'import'])->name('articles.import');
@@ -219,9 +196,6 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware('module:ecritures')->group(function () {
         Route::get('ecritures-comptables/export', [EcritureComptableController::class, 'export'])->name('ecritures-comptables.export');
         Route::get('ecritures-comptables', [EcritureComptableController::class, 'index'])->name('ecritures-comptables.index');
-        Route::post('ecritures-comptables/push', [EcritureComptableController::class, 'push'])
-            ->name('ecritures-comptables.push')
-            ->middleware('role:it');
     });
 
     // Reconciliation Flexcube (front)
@@ -388,9 +362,6 @@ Route::middleware(['auth'])->group(function () {
             Route::post('demandes-approvisionnement', [SupplyRequestController::class, 'chefStore'])->name('monetique.agence.demandes-approvisionnement.store');
             Route::post('demandes-approvisionnement/{coficarte_supply_request}/annuler', [SupplyRequestController::class, 'chefAnnuler'])
                 ->name('monetique.agence.demandes-approvisionnement.annuler');
-            Route::get('apporteurs', [ApporteurController::class, 'index'])->name('monetique.agence.apporteurs');
-            Route::post('apporteurs', [ApporteurController::class, 'store'])->name('monetique.agence.apporteurs.store');
-            Route::delete('apporteurs/{coficarte_apporteur}', [ApporteurController::class, 'destroy'])->name('monetique.agence.apporteurs.destroy');
         });
 
         Route::middleware('role:cc')->prefix('cc')->group(function () {

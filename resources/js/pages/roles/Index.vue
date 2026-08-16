@@ -29,6 +29,7 @@ interface ModuleMatrixRow {
     key: string;
     label: string;
     roles: string[];
+    access_only?: boolean;
 }
 
 interface Props {
@@ -303,7 +304,15 @@ const deleteRole = (id: number, slug: string) => {
                         </thead>
                         <tbody class="divide-y divide-border">
                             <tr v-for="row in moduleMatrix" :key="row.key" class="hover:bg-muted/30">
-                                <td class="px-3 py-2.5 font-medium text-foreground">{{ row.label }}</td>
+                                <td class="px-3 py-2.5 font-medium text-foreground">
+                                    {{ row.label }}
+                                    <span
+                                        v-if="row.access_only"
+                                        class="ml-2 inline-block rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+                                    >
+                                        Autorisation seule
+                                    </span>
+                                </td>
                                 <td class="px-3 py-2.5">
                                     <span
                                         v-for="slug in row.roles"

@@ -192,8 +192,8 @@ class RoleController extends Controller
     private function accessProfileOptions(): array
     {
         return [
-            ['value' => 'admin', 'label' => 'Administrateur'],
-            ['value' => 'monetique', 'label' => 'Monétique'],
+            ['value' => 'admin', 'label' => 'Administrateur (bypass IT)'],
+            ['value' => 'monetique', 'label' => 'Monétique (libellé rôle)'],
             ['value' => 'other', 'label' => 'Métier'],
         ];
     }

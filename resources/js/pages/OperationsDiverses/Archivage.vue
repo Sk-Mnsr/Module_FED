@@ -16,7 +16,6 @@ defineProps<{
     searchResults?: SearchResultRow[];
     canViewAllAgents?: boolean;
     totalClasseurs?: number;
-    comptableImportApiConfigured?: boolean;
 }>();
 
 const breadcrumbs = [
@@ -38,7 +37,6 @@ const breadcrumbs = [
                 :search-results="searchResults ?? []"
                 :can-view-all-agents="canViewAllAgents"
                 :total-classeurs="totalClasseurs"
-                :comptable-import-api-configured="comptableImportApiConfigured"
             />
         </div>
     </AppLayout>

@@ -92,7 +92,7 @@ const props = defineProps<{
     apercu: Apercu;
     eligibleCheckers?: Checker[];
     checkerPole?: string;
-    comptableImportApiConfigured?: boolean;
+    odIntegrationConfigured?: boolean;
 }>();
 
 const breadcrumbs = [
@@ -636,10 +636,10 @@ function supprimer() {
                             {{ deleting ? 'Suppression…' : 'Supprimer' }}
                         </Button>
                         <p
-                            v-if="comptableImportApiConfigured === false && classeur.can_integrate"
+                            v-if="odIntegrationConfigured === false && classeur.can_integrate"
                             class="text-xs text-amber-700 dark:text-amber-300"
                         >
-                            API plateforme non configurée : l’intégration échouera.
+                            Le service d’intégration n’est pas disponible. Contactez le support.
                         </p>
                         <p
                             v-if="classeur.can_integrate && !(eligibleCheckers?.length ?? 0)"
