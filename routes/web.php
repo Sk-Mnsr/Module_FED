@@ -75,12 +75,12 @@ use App\Http\Controllers\UserController;
 // Routes pour les utilisateurs
 // - SuperAdmin uniquement : toutes les opérations (fait partie de Configuration)
 Route::middleware(['auth'])->group(function () {
-    Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('role:it');
-    Route::get('users/export-template', [UserController::class, 'exportTemplate'])->name('users.export-template')->middleware('role:it');
-    Route::resource('users', UserController::class)->middleware('role:it');
-    Route::post('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle')->middleware('role:it');
-    Route::resource('departments', DepartmentController::class)->middleware('role:it');
-    Route::resource('roles', RoleController::class)->middleware('role:it')->except(['show']);
+    Route::post('users/import', [UserController::class, 'import'])->name('users.import')->middleware('role:it,administrateur');
+    Route::get('users/export-template', [UserController::class, 'exportTemplate'])->name('users.export-template')->middleware('role:it,administrateur');
+    Route::resource('users', UserController::class)->middleware('role:it,administrateur');
+    Route::post('users/{user}/toggle', [UserController::class, 'toggle'])->name('users.toggle')->middleware('role:it,administrateur');
+    Route::resource('departments', DepartmentController::class)->middleware('role:it,administrateur');
+    Route::resource('roles', RoleController::class)->middleware('role:it,administrateur')->except(['show']);
     Route::middleware('module:budget')->group(function () {
         Route::get('budgets', [BudgetController::class, 'index'])->name('budgets.index');
         Route::get('budgets/n1', [BudgetController::class, 'indexForN1'])->name('budgets.n1');
@@ -112,8 +112,8 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('fournisseurs/{fournisseur}', [FournisseurController::class, 'destroy'])->name('fournisseurs.destroy');
     });
 
-    // Nouvelles routes pour les entités de base (IT uniquement)
-    Route::middleware('role:it')->group(function () {
+    // Administration système (SuperAdmin IT + Administrateur)
+    Route::middleware('role:it,administrateur')->group(function () {
         // Articles & Agences & Familles
         Route::get('articles/export-template', [ArticleController::class, 'exportTemplate'])->name('articles.export-template');
         Route::post('articles/import', [ArticleController::class, 'import'])->name('articles.import');
@@ -185,8 +185,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('feds/dga/{fed}/reject', [DgaFedController::class, 'reject'])->name('feds.dga.reject')->middleware('role:dga');
 
     // Routes pour les Paramètres (IT uniquement)
-    Route::get('settings/app', [AppSettingController::class, 'index'])->name('settings.app.index')->middleware('role:it');
-    Route::put('settings/app', [AppSettingController::class, 'update'])->name('settings.app.update')->middleware('role:it');
+    Route::get('settings/app', [AppSettingController::class, 'index'])->name('settings.app.index')->middleware('role:it,administrateur');
+    Route::put('settings/app', [AppSettingController::class, 'update'])->name('settings.app.update')->middleware('role:it,administrateur');
 
     // Routes pour les bons de commande
     Route::get('bons-de-commande', [BonDeCommandeController::class, 'index'])->name('bons-de-commande.index');

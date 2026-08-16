@@ -23,6 +23,7 @@ final class ModuleAccess
     private const PRIMARY_MODULE_OVERRIDES = [
         'it' => 'config',
         'admin' => 'config',
+        'administrateur' => 'administration',
         'controle_de_gestion' => 'fed',
         'responsable_stock' => 'stock',
         'ops' => 'od',
@@ -47,6 +48,7 @@ final class ModuleAccess
         'od' => 'Opérations diverses',
         'reconciliation' => 'Réconciliation Flexcube',
         'config' => 'Référentiels',
+        'administration' => 'Administration',
     ];
 
     /**
@@ -56,6 +58,23 @@ final class ModuleAccess
      */
     public const ACCESS_ONLY_MODULES = [
         'budget',
+        'reconciliation',
+        'config',
+        'administration',
+    ];
+
+    /**
+     * Modules métier affichés comme applications sur le portail (pas l’admin système).
+     *
+     * @var list<string>
+     */
+    public const PORTAL_APP_MODULES = [
+        'fed',
+        'budget',
+        'stock',
+        'ecritures',
+        'monetique',
+        'od',
         'reconciliation',
         'config',
     ];
@@ -100,13 +119,30 @@ final class ModuleAccess
             return false;
         }
 
-        // Source de vérité : rôles IT / admin
+        // Source de vérité : rôles IT / admin (SuperAdmin)
         if (count(array_intersect(self::normalizedRoleSlugs($user), ['it', 'admin'])) > 0) {
             return true;
         }
 
         // Compatibilité legacy (anciens comptes)
         return $user->profile === 'admin';
+    }
+
+    /**
+     * Accès à l’Administration système (utilisateurs, rôles, départements…).
+     * SuperAdmin (IT) ou rôle « Administrateur » — sans bypass des modules métier.
+     */
+    public static function canAdministerSystem(?User $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (self::isAdminUser($user)) {
+            return true;
+        }
+
+        return self::userCanAccess($user, 'administration');
     }
 
     /**
@@ -368,6 +404,7 @@ final class ModuleAccess
             'od' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
             'reconciliation' => ['reconciliation'],
             'config' => ['referentiels'],
+            'administration' => ['administrateur'],
         ];
 
         return array_map(

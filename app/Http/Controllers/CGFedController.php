@@ -6,6 +6,7 @@ use App\Models\Budget;
 use App\Models\BudgetLine;
 use App\Models\BudgetLineHistory;
 use App\Models\Fed;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -129,6 +130,15 @@ class CGFedController extends Controller
         ]);
 
         DB::commit();
+
+        FedWorkflowMail::notifyRole(
+            $fed,
+            'daf',
+            'FED à valider (DAF) — '.$fed->referenceLabel(),
+            'FED traitée par le Contrôle de gestion',
+            'Validation financière DAF requise.',
+            url('/feds/daf/'.$fed->id),
+        );
 
         return redirect()->route('feds.cg.show', $fed)
             ->with('success', 'Statut budgétaire enregistré.');

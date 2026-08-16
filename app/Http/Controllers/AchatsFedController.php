@@ -6,6 +6,7 @@ use App\Models\Fed;
 use App\Models\FedFournisseurOffre;
 use App\Models\FedFournisseurOffreAttachment;
 use App\Models\Fournisseur;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -155,6 +156,15 @@ class AchatsFedController extends Controller
             'achats_validated_by' => $request->user()->name,
         ]);
 
+        FedWorkflowMail::notifyRole(
+            $fed,
+            'responsable_facilities',
+            'FED à traiter (Facilities) — '.$fed->referenceLabel(),
+            $wasFacilitiesHold ? 'Complément Achats disponible' : 'Cotation Achats disponible',
+            'La FED est prête pour le choix d’offre / validation Facilities.',
+            url('/feds/facilities/'.$fed->id),
+        );
+
         return redirect()->route('feds.achats.index')
             ->with('success', $wasFacilitiesHold
                 ? 'Complément renvoyé au responsable Facilities.'
@@ -173,6 +183,8 @@ class AchatsFedController extends Controller
             'achats_validated_by' => $request->user()->name,
         ]);
 
+        FedWorkflowMail::toRequesterRejected($fed, 'Achats', $data['comment'] ?? null);
+
         return redirect()->route('feds.achats.show', $fed)
             ->with('success', 'FED rejetée.');
     }
@@ -188,6 +200,8 @@ class AchatsFedController extends Controller
             'achats_action_at' => now(),
             'achats_validated_by' => $request->user()->name,
         ]);
+
+        FedWorkflowMail::toRequesterNeedsInfo($fed, 'Achats', $data['comment'] ?? null);
 
         return redirect()->route('feds.achats.show', $fed)
             ->with('success', 'Complément demandé au demandeur.');

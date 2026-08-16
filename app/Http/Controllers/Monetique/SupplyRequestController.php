@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CoficarteSupplyRequest;
 use App\Models\CoficarteTransfer;
 use App\Support\CoficarteAgenceAccess;
+use App\Support\Mails\MonetiqueWorkflowMail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -60,13 +61,15 @@ class SupplyRequestController extends Controller
             'commentaire' => 'nullable|string|max:2000',
         ]);
 
-        CoficarteSupplyRequest::create([
+        $supply = CoficarteSupplyRequest::create([
             'agence_id' => $user->agence_id,
             'chef_user_id' => $user->id,
             'quantite_demandee' => $validated['quantite_demandee'],
             'commentaire' => $validated['commentaire'] ?? null,
             'status' => CoficarteSupplyRequest::STATUS_EN_ATTENTE,
         ]);
+
+        MonetiqueWorkflowMail::supplyRequestCreated($supply);
 
         return redirect()
             ->route('monetique.agence.demandes-approvisionnement')
@@ -158,6 +161,8 @@ class SupplyRequestController extends Controller
             'traite_par_user_id' => $request->user()->id,
             'traite_le' => now(),
         ]);
+
+        MonetiqueWorkflowMail::supplyRequestRefused($supplyRequest->fresh(), $validated['reponse_monetique']);
 
         return redirect()->back()->with('success', 'Demande refusée.');
     }

@@ -11,6 +11,7 @@ use App\Support\CoficarteAgenceAccess;
 use App\Support\CoficarteEncaissementCode;
 use App\Support\CoficarteEncaissementRows;
 use App\Support\CoficarteMovementLogger;
+use App\Support\Mails\MonetiqueWorkflowMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -208,6 +209,9 @@ class VenteController extends Controller
         });
 
         $sale->load(['user:id,name', 'card:id,numero_carte,agence_id,prix_vente', 'card.agence:id,nom']);
+
+        MonetiqueWorkflowMail::saleAwaitingCash($sale);
+        MonetiqueWorkflowMail::notifyIfStockLow($sale->card?->agence_id);
 
         return redirect()
             ->route('monetique.ventes.historique')

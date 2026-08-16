@@ -120,6 +120,15 @@ class Fed extends Model
         return $this->belongsTo(User::class, 'requester_id');
     }
 
+    public function referenceLabel(): string
+    {
+        if (filled($this->code)) {
+            return (string) $this->code;
+        }
+
+        return 'FED-'.$this->id;
+    }
+
     public function items()
     {
         return $this->hasMany(FedItem::class);

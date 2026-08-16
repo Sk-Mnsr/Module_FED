@@ -7,6 +7,7 @@ use App\Models\Department;
 use App\Models\Fed;
 use App\Models\FedAttachment;
 use App\Models\FedItem;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -230,6 +231,8 @@ class FedController extends Controller
         $this->storeAttachments($fed, $request);
 
         DB::commit();
+
+        FedWorkflowMail::submittedToN1($fed->fresh(['requester']));
 
         return redirect()->route('feds.edit', $fed)
             ->with('success', 'FED soumise au N+1.');

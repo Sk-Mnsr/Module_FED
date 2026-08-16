@@ -19,7 +19,15 @@ class RoleSeeder extends Seeder
                 'slug' => 'it',
                 'module' => 'config',
                 'access_profile' => 'admin',
-                'description' => 'SuperAdmin (IT) — tous les modules, référentiels et administration',
+                'description' => 'SuperAdmin (IT) — tous les modules métier + administration système (bypass)',
+                'actif' => true,
+            ],
+            [
+                'nom' => 'Administrateur',
+                'slug' => 'administrateur',
+                'module' => 'administration',
+                'access_profile' => 'other',
+                'description' => 'Administration système uniquement : utilisateurs, rôles, départements, agences, articles, familles, apporteurs, paramètres. Sans accès automatique aux modules métier.',
                 'actif' => true,
             ],
             [

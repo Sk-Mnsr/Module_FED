@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Fed;
 use App\Models\AppSetting;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -92,6 +93,19 @@ class DafFedController extends Controller
             'daf_validated_by' => $request->user()->name,
         ]);
 
+        if ($needsDga) {
+            FedWorkflowMail::notifyRole(
+                $fed,
+                'dga',
+                'FED à valider (DGA) — '.$fed->referenceLabel(),
+                'FED validée par le DAF',
+                'Validation DGA requise (montant au-dessus du seuil).',
+                url('/feds/dga/'.$fed->id),
+            );
+        } else {
+            FedWorkflowMail::readyForPurchaseOrder($fed);
+        }
+
         $message = $needsDga
             ? 'FED validée par le DAF. Transmise au DGA pour validation finale.'
             : 'FED validée par le DAF. Bon de commande généré directement (en dessous du seuil DGA).';
@@ -110,6 +124,8 @@ class DafFedController extends Controller
             'daf_action_at' => now(),
             'daf_validated_by' => $request->user()->name,
         ]);
+
+        FedWorkflowMail::toRequesterRejected($fed, 'DAF', $data['comment'] ?? null);
 
         return redirect()->route('feds.daf.index')
             ->with('success', 'FED rejetée par le DAF.');

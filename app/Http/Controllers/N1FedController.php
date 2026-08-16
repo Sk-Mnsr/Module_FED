@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Fed;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -93,6 +94,15 @@ class N1FedController extends Controller
             'n1_validated_by' => $request->user()->name,
         ]);
 
+        FedWorkflowMail::notifyRole(
+            $fed,
+            'responsable_achats',
+            'FED à traiter (Achats) — '.$fed->referenceLabel(),
+            'FED validée par le N+1',
+            'La FED est disponible pour cotation / consultation.',
+            url('/feds/achats'),
+        );
+
         return redirect()->route('feds.n1.show', $fed)
             ->with('success', 'FED validée.');
     }
@@ -109,6 +119,8 @@ class N1FedController extends Controller
             'n1_action_at' => now(),
             'n1_validated_by' => $request->user()->name,
         ]);
+
+        FedWorkflowMail::toRequesterRejected($fed, 'N+1', $data['comment'] ?? null);
 
         return redirect()->route('feds.n1.show', $fed)
             ->with('success', 'FED rejetée par le N+1.');
@@ -127,6 +139,7 @@ class N1FedController extends Controller
             'n1_validated_by' => $request->user()->name,
         ]);
 
+        FedWorkflowMail::toRequesterNeedsInfo($fed, 'N+1', $data['comment'] ?? null);
         return redirect()->route('feds.n1.show', $fed)
             ->with('success', 'Complément demandé au demandeur.');
     }
@@ -151,6 +164,15 @@ class N1FedController extends Controller
             'expert_opinion_offre_id' => $data['expert_opinion_offre_id'] ?? null,
             'expert_opinion_at' => now(),
         ]);
+
+        FedWorkflowMail::notifyRole(
+            $fed,
+            'responsable_facilities',
+            'Avis expert reçu — '.$fed->referenceLabel(),
+            'Avis expert métier disponible',
+            'Le N+1 a rendu son avis expert. Vous pouvez poursuivre le traitement Facilities.',
+            url('/feds/facilities/'.$fed->id),
+        );
 
         return redirect()->route('feds.n1.show', $fed)
             ->with('success', 'Votre avis expert métier a été enregistré.');

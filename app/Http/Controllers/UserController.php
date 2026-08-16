@@ -10,6 +10,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Support\ModuleAccess;
 use App\Support\ModuleAbilities;
+use App\Support\Mails\AdminWorkflowMail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -88,7 +89,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
+            'password' => 'required|string|min:8',
             'role_ids' => ['required', 'array', 'min:1'],
             'role_ids.*' => ['integer', 'exists:roles,id'],
             'module_abilities' => ['nullable', 'array'],
@@ -181,7 +182,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'fonction' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'password' => 'nullable|string|min:8|confirmed',
+            'password' => 'nullable|string|min:8',
             'role_ids' => ['required', 'array', 'min:1'],
             'role_ids.*' => ['integer', 'exists:roles,id'],
             'module_abilities' => ['nullable', 'array'],
@@ -221,7 +222,9 @@ class UserController extends Controller
         ];
 
         // Mettre à jour le mot de passe seulement s'il est fourni
+        $plainPassword = null;
         if (! empty($validated['password'])) {
+            $plainPassword = $validated['password'];
             $data['password'] = Hash::make($validated['password']);
             $data['password_change_required'] = true;
         }
@@ -233,6 +236,10 @@ class UserController extends Controller
         $user->syncAccessProfileFromRoles();
         $user->save();
         ModuleAbilities::syncForUser($user->fresh(['roles']), $validated['module_abilities'] ?? []);
+
+        if ($plainPassword !== null) {
+            AdminWorkflowMail::passwordResetByAdmin($user->fresh(), $plainPassword);
+        }
 
         return redirect()->route('users.index')
             ->with('success', 'Utilisateur mis à jour avec succès !');

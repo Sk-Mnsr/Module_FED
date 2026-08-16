@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Fed;
+use App\Support\AppMail;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -70,6 +72,30 @@ class FacilitiesFedController extends Controller
         $fed->update($updateData);
         $fed->update(['facilities_validated_by' => $request->user()->name]);
 
+        if ($request->boolean('request_expert_opinion')) {
+            $fed->loadMissing('requester.nPlus1', 'requester.department.manager');
+            $n1 = $fed->requester?->resolveNPlus1();
+            if ($n1 !== null) {
+                AppMail::notify($n1, 'Avis expert demandé — '.$fed->referenceLabel(), [
+                    'title' => 'Avis expert métier requis',
+                    'content' => 'Facilities demande votre avis expert sur cette FED.',
+                    'action_required' => 'Rendre votre avis dans la file N+1.',
+                    'details' => ['Référence' => $fed->referenceLabel()],
+                    'action_url' => url('/feds/n1/'.$fed->id),
+                    'action_text' => 'Donner mon avis',
+                ]);
+            }
+        } else {
+            FedWorkflowMail::notifyRole(
+                $fed,
+                'controle_de_gestion',
+                'FED à traiter (Contrôle de gestion) — '.$fed->referenceLabel(),
+                'FED validée par Facilities',
+                'Contrôle budgétaire à effectuer.',
+                url('/feds/cg/'.$fed->id),
+            );
+        }
+
         return redirect()->route('feds.facilities.show', $fed)
             ->with('success', $request->boolean('request_expert_opinion') ? 'FED transmise pour avis expert métier.' : 'Offre choisie et FED validée.');
     }
@@ -86,6 +112,8 @@ class FacilitiesFedController extends Controller
             'facilities_validated_by' => $request->user()->name,
         ]);
 
+        FedWorkflowMail::toRequesterRejected($fed, 'Facilities', $data['comment'] ?? null);
+
         return redirect()->route('feds.facilities.show', $fed)
             ->with('success', 'FED rejetée par Facilities.');
     }
@@ -100,6 +128,15 @@ class FacilitiesFedController extends Controller
             'facilities_comment' => $data['comment'],
             'facilities_action_at' => now(),
         ]);
+
+        FedWorkflowMail::notifyRole(
+            $fed,
+            'responsable_achats',
+            'Complément demandé (Facilities) — '.$fed->referenceLabel(),
+            'Complément demandé par Facilities',
+            $data['comment'],
+            url('/feds/achats/'.$fed->id),
+        );
 
         return redirect()->route('feds.facilities.index')
             ->with('success', 'FED mise en attente.');

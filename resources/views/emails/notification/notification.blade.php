@@ -8,10 +8,7 @@
     <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; padding: 20px;">
         <div style="max-width: 600px; margin: 40px auto; background-color: #ffffff; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
             
-            <!-- Logo -->
-            <div style="text-align: center; margin-bottom: 30px;">
-                <img src="{{ $message->embed(public_path('logo.png')) }}" alt="Logo" style="max-width: 350px;">
-            </div>
+            @include('emails.partials.logo')
             
             <!-- En-tête de notification -->
             <div style="background-color: #3498db; color: white; padding: 15px; border-radius: 6px; margin-bottom: 20px; text-align: center;">

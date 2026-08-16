@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Fed;
+use App\Support\Mails\FedWorkflowMail;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -50,6 +51,8 @@ class DgaFedController extends Controller
             'dga_validated_by' => $request->user()->name,
         ]);
 
+        FedWorkflowMail::readyForPurchaseOrder($fed);
+
         return redirect()->route('feds.dga.index')
             ->with('success', 'FED validée par le DGA. Prête pour le bon de commande.');
     }
@@ -65,6 +68,8 @@ class DgaFedController extends Controller
             'dga_action_at' => now(),
             'dga_validated_by' => $request->user()->name,
         ]);
+
+        FedWorkflowMail::toRequesterRejected($fed, 'DGA', $data['comment'] ?? null);
 
         return redirect()->route('feds.dga.index')
             ->with('success', 'FED rejetée par le DGA.');

@@ -343,7 +343,10 @@ const setAbility = (moduleKey: string, abilityKey: string, enabled: boolean) => 
 const descriptionForModule = (moduleKey: string) => {
     if (isAccessOnly(moduleKey)) {
         if (hasItSelected.value) {
-            return 'Inclus automatiquement pour le rôle IT / administrateur (tous les droits).';
+            return 'Inclus automatiquement pour le rôle SuperAdmin / IT (tous les droits).';
+        }
+        if (moduleKey === 'administration') {
+            return 'Autorise la gestion système (utilisateurs, rôles, départements…) sans ouvrir les modules métier.';
         }
         if (abilitiesFor(moduleKey).length > 0) {
             return 'Cochez l’accès puis les droits souhaités.';

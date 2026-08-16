@@ -92,8 +92,8 @@ class RoleController extends Controller
 
     public function update(Request $request, Role $role)
     {
-        if ($role->slug === 'it') {
-            $request->merge(['slug' => 'it']);
+        if ($role->slug === 'it' || $role->slug === 'administrateur') {
+            $request->merge(['slug' => $role->slug]);
         }
 
         [$attributes, $moduleKeys] = $this->validatedRolePayload($request, $role);
@@ -112,6 +112,11 @@ class RoleController extends Controller
         if ($role->slug === 'it') {
             return redirect()->route('roles.index')
                 ->with('error', 'Le rôle SuperAdmin (IT) ne peut pas être supprimé.');
+        }
+
+        if ($role->slug === 'administrateur') {
+            return redirect()->route('roles.index')
+                ->with('error', 'Le rôle Administrateur ne peut pas être supprimé.');
         }
 
         if ($role->users()->exists()) {
@@ -172,6 +177,19 @@ class RoleController extends Controller
             'actif' => $request->boolean('actif'),
         ];
 
+        // Seul un SuperAdmin (IT) peut créer / modifier un profil « bypass ».
+        if ($attributes['access_profile'] === 'admin' && ! ModuleAccess::isAdminUser($request->user())) {
+            throw ValidationException::withMessages([
+                'access_profile' => 'Seul un SuperAdmin (IT) peut attribuer le profil de bypass.',
+            ]);
+        }
+
+        if (in_array($attributes['slug'], ['it', 'admin'], true) && ! ModuleAccess::isAdminUser($request->user())) {
+            throw ValidationException::withMessages([
+                'slug' => 'Seul un SuperAdmin (IT) peut gérer ce slug réservé.',
+            ]);
+        }
+
         return [$attributes, $moduleKeys];
     }
 
@@ -192,9 +210,9 @@ class RoleController extends Controller
     private function accessProfileOptions(): array
     {
         return [
-            ['value' => 'admin', 'label' => 'Administrateur (bypass IT)'],
+            ['value' => 'admin', 'label' => 'SuperAdmin / IT (bypass tous les modules)'],
             ['value' => 'monetique', 'label' => 'Monétique (libellé rôle)'],
-            ['value' => 'other', 'label' => 'Métier'],
+            ['value' => 'other', 'label' => 'Métier / Administration'],
         ];
     }
 }

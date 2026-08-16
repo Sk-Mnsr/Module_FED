@@ -14,6 +14,7 @@ use App\Support\OdIntegrationCsv;
 use App\Support\OdIntegrationCsvTemplate;
 use App\Support\OdSimpleIntegrationCsv;
 use App\Support\OdManualIntegrationCsv;
+use App\Support\Mails\OdWorkflowMail;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -470,6 +471,8 @@ class OperationDiverseController extends Controller
         }
 
         $classeur->forceFill($updates)->save();
+
+        OdWorkflowMail::awaitingCheckerValidation($classeur->fresh(['assignedChecker', 'user', 'integratedBy']));
 
         try {
             $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy']));

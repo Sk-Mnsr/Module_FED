@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Support\CoficarteAgenceAccess;
 use App\Support\CoficarteBonNumeroGenerator;
 use App\Support\CoficarteMovementLogger;
+use App\Support\Mails\MonetiqueWorkflowMail;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -210,7 +211,7 @@ class TransfertController extends Controller
             ? "{$chef->name} — {$agence->nom} ({$agence->code})"
             : $agence->nom;
 
-        DB::transaction(function () use ($validated, $receveurLabel, $user, $supplyRequest, $cardIds, $prixParCarte) {
+        $transfer = DB::transaction(function () use ($validated, $receveurLabel, $user, $supplyRequest, $cardIds, $prixParCarte) {
             $bon = CoficarteBonNumeroGenerator::next();
 
             $cards = CoficarteCard::query()
@@ -272,7 +273,12 @@ class TransfertController extends Controller
                     'bon_numero' => $bon,
                 ], $user->id);
             }
+
+            return $transfer;
         });
+
+        MonetiqueWorkflowMail::transferCreated($transfer);
+        MonetiqueWorkflowMail::notifyIfStockLow(null);
 
         return redirect()
             ->route('monetique.transferts.en-attente')
@@ -413,6 +419,9 @@ class TransfertController extends Controller
         } catch (ValidationException $e) {
             return redirect()->back()->with('error', collect($e->errors())->flatten()->first() ?? 'Réception impossible.');
         }
+
+        MonetiqueWorkflowMail::transferReceived($coficarteTransfer->fresh());
+        MonetiqueWorkflowMail::notifyIfStockLow($user->agence_id);
 
         return redirect()->back()->with('success', 'Réception validée : les cartes sont affectées à votre agence.');
     }

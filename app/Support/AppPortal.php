@@ -88,7 +88,7 @@ final class AppPortal
      */
     public static function adminLinksForUser(User $user): array
     {
-        if (! ModuleAccess::isAdminUser($user)) {
+        if (! ModuleAccess::canAdministerSystem($user)) {
             return [];
         }
 
@@ -133,7 +133,10 @@ final class AppPortal
      */
     private static function portalModuleKeys(User $user): array
     {
-        return ModuleAccess::accessibleModuleKeys($user);
+        return array_values(array_filter(
+            ModuleAccess::accessibleModuleKeys($user),
+            fn (string $key) => in_array($key, ModuleAccess::PORTAL_APP_MODULES, true),
+        ));
     }
 
     /**
