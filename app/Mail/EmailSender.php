@@ -12,22 +12,27 @@ class EmailSender extends Mailable
 {
     use Queueable, SerializesModels;
 
+    /** @var array<string, mixed> */
+    private array $templateData;
+
     public function __construct(
-        public string $subject,
-        public string $view,
-        public array $data = []
-    ) {}
+        private string $mailSubject,
+        private string $templateView,
+        array $data = [],
+    ) {
+        $this->templateData = $data;
+    }
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: $this->subject);
+        return new Envelope(subject: $this->mailSubject);
     }
 
     public function content(): Content
     {
         return new Content(
-            view: $this->view,
-            with: ['data' => $this->data]
+            view: $this->templateView,
+            with: ['data' => $this->templateData],
         );
     }
 
