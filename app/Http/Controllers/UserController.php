@@ -116,6 +116,7 @@ class UserController extends Controller
         $matricule = $matricule === '' ? null : $matricule;
 
         $roleIds = $this->validatedRoleIds($validated['role_ids']);
+        $this->assertPrivilegedRoleAssignment($request, Role::whereIn('id', $roleIds)->get(['id', 'slug']));
 
         $user = User::create([
             'name' => $validated['name'],
@@ -209,6 +210,7 @@ class UserController extends Controller
         $matricule = $matricule === '' ? null : $matricule;
 
         $roleIds = $this->validatedRoleIds($validated['role_ids']);
+        $this->assertPrivilegedRoleAssignment($request, Role::whereIn('id', $roleIds)->get(['id', 'slug']));
 
         $data = [
             'name' => $validated['name'],
@@ -287,6 +289,28 @@ class UserController extends Controller
 
         return redirect()->route('users.index')
             ->with('success', "Utilisateur {$status} avec succès !");
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Role>  $roles
+     */
+    private function assertPrivilegedRoleAssignment(Request $request, $roles): void
+    {
+        $hasBypassRole = $roles->contains(
+            fn (Role $role) => in_array($role->slug, ['it', 'admin'], true),
+        );
+
+        if ($hasBypassRole && ! ModuleAccess::isAdminUser($request->user())) {
+            throw ValidationException::withMessages([
+                'role_ids' => 'Seul un SuperAdmin (IT) peut attribuer le rôle SuperAdmin.',
+            ]);
+        }
+
+        if ($roles->contains(fn (Role $role) => $role->slug === 'it') && $roles->count() > 1) {
+            throw ValidationException::withMessages([
+                'role_ids' => 'Le rôle SuperAdmin (IT) ne peut pas être combiné avec d’autres rôles.',
+            ]);
+        }
     }
 
     /**

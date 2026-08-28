@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import InputError from '@/components/InputError.vue';
 import { Label } from '@/components/ui/label';
+import { usePage } from '@inertiajs/vue3';
 import { computed, reactive, watch } from 'vue';
 
 interface Role {
@@ -50,6 +51,12 @@ const emit = defineEmits<{
     'update:modelValue': [value: number[]];
     'update:moduleAbilities': [value: Record<string, AbilityMap>];
 }>();
+
+const page = usePage();
+
+const canAssignSuperAdmin = computed(() => Boolean(page.props.auth?.isSuperAdmin));
+
+const superAdminRole = computed(() => props.roles.find((role) => role.slug === 'it') ?? null);
 
 const selectClass =
     'mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400';
@@ -340,6 +347,19 @@ const setAbility = (moduleKey: string, abilityKey: string, enabled: boolean) => 
     }
 };
 
+const toggleSuperAdmin = (enabled: boolean) => {
+    if (!superAdminRole.value) {
+        return;
+    }
+
+    if (enabled) {
+        emit('update:modelValue', [superAdminRole.value.id]);
+        return;
+    }
+
+    emit('update:modelValue', []);
+};
+
 const descriptionForModule = (moduleKey: string) => {
     if (isAccessOnly(moduleKey)) {
         if (hasItSelected.value) {
@@ -366,12 +386,52 @@ const descriptionForModule = (moduleKey: string) => {
 
 <template>
     <div class="grid gap-4">
-        <p class="text-sm text-gray-600">
+        <p v-if="!hasItSelected" class="text-sm text-gray-600">
             Attribuez un rôle par module. Pour Budget, cochez l’accès puis les droits (consultation, ajouter…).
         </p>
 
         <div
+            v-if="superAdminRole && (canAssignSuperAdmin || hasItSelected)"
+            class="rounded-lg border border-amber-200 bg-amber-50 p-4"
+        >
+            <label
+                for="role-superadmin"
+                class="flex cursor-pointer items-start gap-3"
+                :class="{ 'cursor-default': !canAssignSuperAdmin }"
+            >
+                <input
+                    id="role-superadmin"
+                    type="checkbox"
+                    class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    :checked="hasItSelected"
+                    :disabled="!canAssignSuperAdmin"
+                    @change="toggleSuperAdmin(($event.target as HTMLInputElement).checked)"
+                />
+                <span class="text-sm text-gray-800">
+                    <span class="font-medium">{{ superAdminRole.nom }} (IT)</span>
+                    <span class="mt-0.5 block text-xs text-gray-600">
+                        {{
+                            superAdminRole.description
+                                ?? 'Accès complet à tous les modules métier et à l’administration système.'
+                        }}
+                    </span>
+                    <span
+                        v-if="!canAssignSuperAdmin && hasItSelected"
+                        class="mt-1 block text-xs text-amber-800"
+                    >
+                        Seul un SuperAdmin peut modifier ce profil.
+                    </span>
+                </span>
+            </label>
+        </div>
+
+        <p v-if="hasItSelected" class="text-sm text-gray-600">
+            Tous les modules sont activés automatiquement. Décochez SuperAdmin pour attribuer des rôles module par module.
+        </p>
+
+        <div
             v-for="module in modulesWithRoles"
+            v-show="!hasItSelected"
             :key="module.key"
             class="rounded-lg border border-gray-200 p-4"
         >
@@ -468,6 +528,9 @@ const descriptionForModule = (moduleKey: string) => {
 
         <p v-if="selectedCount === 0 && !hasItSelected" class="text-sm text-amber-700">
             Sélectionnez au moins un rôle pour donner accès à l'application.
+        </p>
+        <p v-else-if="hasItSelected" class="text-xs text-gray-500">
+            Profil SuperAdmin — accès total à l’application.
         </p>
         <p v-else class="text-xs text-gray-500">
             {{ selectedCount }} module{{ selectedCount > 1 ? 's' : '' }} configuré{{ selectedCount > 1 ? 's' : '' }}.
