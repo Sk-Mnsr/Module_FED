@@ -105,6 +105,7 @@ class HandleInertiaRequests extends Middleware
                 'warning' => $request->session()->get('warning'),
                 'encaissement_bordereau' => $request->session()->get('encaissement_bordereau'),
                 'bordereau_cc' => $request->session()->get('bordereau_cc'),
+                'od_integration_success' => $request->session()->get('od_integration_success'),
             ],
             'name' => config('app.name'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],

@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import OdActionIcon from '@/components/OdActionIcon.vue';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     CalendarDays,
+    CheckCircle2,
     Clock,
-    FileSearch,
+    Eye,
     FileSpreadsheet,
     FileText,
     Hash,
     Search,
-    ShieldCheck,
     SlidersHorizontal,
+    Trash2,
     User,
     UserCheck,
     X,
+    XCircle,
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
@@ -30,8 +35,14 @@ type ClasseurRow = {
     justificatifs_count: number;
     resume_url: string;
     can_validate: boolean;
+    can_reject?: boolean;
+    can_delete?: boolean;
     valider_checker_url: string;
+    rejeter_url?: string;
+    supprimer_url?: string;
 };
+
+type ConfirmKind = 'valider' | 'rejeter' | 'supprimer' | null;
 
 const props = defineProps<{
     classeurs?: ClasseurRow[];
@@ -48,7 +59,18 @@ const breadcrumbs = [
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
 const validerEnCours = ref<number | null>(null);
+const actionEnCours = ref<number | null>(null);
 const showFilters = ref(false);
+
+const confirmKind = ref<ConfirmKind>(null);
+const confirmTarget = ref<ClasseurRow | null>(null);
+const rejectMotif = ref('');
+const confirmOpen = computed({
+    get: () => confirmKind.value !== null && confirmTarget.value !== null,
+    set: (open: boolean) => {
+        if (!open) closeConfirm();
+    },
+});
 
 const fieldClass =
     'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
@@ -62,6 +84,66 @@ const searchForm = ref({
 const hasActiveFilters = computed(() => Object.values(searchForm.value).some(Boolean));
 const total = computed(() => props.classeurs?.length ?? 0);
 const aValider = computed(() => props.classeurs?.filter((c) => c.can_validate).length ?? 0);
+
+const confirmBusy = computed(
+    () =>
+        confirmTarget.value !== null &&
+        (validerEnCours.value === confirmTarget.value.id ||
+            actionEnCours.value === confirmTarget.value.id),
+);
+
+const confirmTitle = computed(() => {
+    switch (confirmKind.value) {
+        case 'valider':
+            return 'Valider et archiver';
+        case 'rejeter':
+            return 'Rejeter l’intégration';
+        case 'supprimer':
+            return 'Supprimer';
+        default:
+            return '';
+    }
+});
+
+const confirmDescription = computed(() => {
+    const name = confirmTarget.value?.nom_classeur ?? '';
+    switch (confirmKind.value) {
+        case 'valider':
+            return `Voulez-vous vraiment valider « ${name} » ?`;
+        case 'rejeter':
+            return `Voulez-vous vraiment rejeter « ${name} » ?`;
+        case 'supprimer':
+            return `Voulez-vous vraiment supprimer « ${name} » ?`;
+        default:
+            return '';
+    }
+});
+
+const confirmLabel = computed(() => {
+    switch (confirmKind.value) {
+        case 'valider':
+            return 'Valider';
+        case 'rejeter':
+            return 'Rejeter';
+        case 'supprimer':
+            return 'Supprimer';
+        default:
+            return 'Confirmer';
+    }
+});
+
+const confirmVariant = computed(() => {
+    switch (confirmKind.value) {
+        case 'valider':
+            return 'success' as const;
+        case 'rejeter':
+            return 'warning' as const;
+        case 'supprimer':
+            return 'danger' as const;
+        default:
+            return 'default' as const;
+    }
+});
 
 function applySearch() {
     const params: Record<string, string> = {};
@@ -79,20 +161,81 @@ function resetSearch() {
     router.get('/operations-diverses/attente-validation', {}, { preserveScroll: true });
 }
 
+function closeConfirm() {
+    confirmKind.value = null;
+    confirmTarget.value = null;
+    rejectMotif.value = '';
+}
+
+function openConfirm(kind: ConfirmKind, c: ClasseurRow) {
+    if (validerEnCours.value !== null || actionEnCours.value !== null) return;
+    confirmKind.value = kind;
+    confirmTarget.value = c;
+    rejectMotif.value = '';
+}
+
 function valider(c: ClasseurRow) {
-    if (validerEnCours.value !== null || !c.can_validate) return;
-    if (!window.confirm(`Valider et archiver « ${c.nom_classeur} » ?`)) return;
-    validerEnCours.value = c.id;
-    router.post(
-        c.valider_checker_url,
-        {},
-        {
+    if (!c.can_validate) return;
+    openConfirm('valider', c);
+}
+
+function rejeter(c: ClasseurRow) {
+    if (!c.can_reject || !c.rejeter_url) return;
+    openConfirm('rejeter', c);
+}
+
+function supprimer(c: ClasseurRow) {
+    if (!c.can_delete || !c.supprimer_url) return;
+    openConfirm('supprimer', c);
+}
+
+function executerConfirm() {
+    const c = confirmTarget.value;
+    const kind = confirmKind.value;
+    if (!c || !kind) return;
+
+    if (kind === 'valider') {
+        validerEnCours.value = c.id;
+        router.post(
+            c.valider_checker_url,
+            {},
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    validerEnCours.value = null;
+                    closeConfirm();
+                },
+            },
+        );
+        return;
+    }
+
+    if (kind === 'rejeter' && c.rejeter_url) {
+        actionEnCours.value = c.id;
+        router.post(
+            c.rejeter_url,
+            { motif: rejectMotif.value.trim() },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    actionEnCours.value = null;
+                    closeConfirm();
+                },
+            },
+        );
+        return;
+    }
+
+    if (kind === 'supprimer' && c.supprimer_url) {
+        actionEnCours.value = c.id;
+        router.delete(c.supprimer_url, {
             preserveScroll: true,
             onFinish: () => {
-                validerEnCours.value = null;
+                actionEnCours.value = null;
+                closeConfirm();
             },
-        },
-    );
+        });
+    }
 }
 
 function dateFmt(iso: string | null): string {
@@ -322,42 +465,83 @@ function horodatage(iso: string | null): string {
                                 </div>
                             </div>
 
-                            <div class="flex shrink-0 flex-wrap items-center gap-1.5 lg:justify-end">
-                                <Button
-                                    as-child
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-9 border-slate-300"
-                                >
-                                    <Link :href="c.resume_url" title="Voir le résumé">
-                                        <FileSearch class="size-4" />
-                                        Résumé
-                                    </Link>
-                                </Button>
-                                <Button
-                                    v-if="c.can_validate"
-                                    size="sm"
-                                    class="h-9 bg-emerald-600 text-white hover:bg-emerald-700"
-                                    :disabled="validerEnCours === c.id"
-                                    :title="
-                                        validerEnCours === c.id
-                                            ? 'Validation…'
-                                            : 'Valider et archiver'
+                            <div
+                                class="inline-flex shrink-0 items-center gap-0.5 self-end rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40 lg:self-center"
+                                role="group"
+                                aria-label="Actions"
+                            >
+                                <OdActionIcon
+                                    :icon="Eye"
+                                    label="Résumé"
+                                    :href="c.resume_url"
+                                    variant="neutral"
+                                />
+                                <OdActionIcon
+                                    v-if="c.can_reject"
+                                    :icon="XCircle"
+                                    label="Rejeter"
+                                    variant="warning"
+                                    :disabled="
+                                        actionEnCours === c.id || validerEnCours === c.id
                                     "
+                                    :loading="
+                                        actionEnCours === c.id && confirmKind === 'rejeter'
+                                    "
+                                    @click="rejeter(c)"
+                                />
+                                <OdActionIcon
+                                    v-if="c.can_validate"
+                                    :icon="CheckCircle2"
+                                    label="Valider"
+                                    variant="success"
+                                    :disabled="
+                                        validerEnCours === c.id || actionEnCours === c.id
+                                    "
+                                    :loading="validerEnCours === c.id"
                                     @click="valider(c)"
-                                >
-                                    <ShieldCheck class="size-4" />
-                                    {{
-                                        validerEnCours === c.id
-                                            ? 'Validation…'
-                                            : 'Valider et archiver'
-                                    }}
-                                </Button>
+                                />
+                                <OdActionIcon
+                                    v-if="c.can_delete"
+                                    :icon="Trash2"
+                                    label="Supprimer"
+                                    variant="danger"
+                                    :disabled="
+                                        actionEnCours === c.id || validerEnCours === c.id
+                                    "
+                                    :loading="
+                                        actionEnCours === c.id && confirmKind === 'supprimer'
+                                    "
+                                    @click="supprimer(c)"
+                                />
                             </div>
                         </li>
                     </ul>
                 </div>
             </section>
+
+            <OdConfirmDialog
+                v-model:open="confirmOpen"
+                :title="confirmTitle"
+                :description="confirmDescription"
+                :confirm-label="confirmLabel"
+                :variant="confirmVariant"
+                :loading="confirmBusy"
+                @confirm="executerConfirm"
+            >
+                <div v-if="confirmKind === 'rejeter'" class="space-y-2">
+                    <Label for="reject-motif" class="text-sm font-medium text-foreground">
+                        Motif du rejet (optionnel)
+                    </Label>
+                    <textarea
+                        id="reject-motif"
+                        v-model="rejectMotif"
+                        rows="3"
+                        maxlength="2000"
+                        class="flex w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        placeholder="Ex. écart de montants, pièce manquante…"
+                    />
+                </div>
+            </OdConfirmDialog>
         </div>
     </AppLayout>
 </template>

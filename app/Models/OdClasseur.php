@@ -5,9 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class OdClasseur extends Model
 {
+    use SoftDeletes;
+
     public const STATUT_BROUILLON = 'brouillon';
 
     public const STATUT_ATTENTE_VALIDATION = 'attente_validation';
@@ -34,6 +37,7 @@ class OdClasseur extends Model
         'piece_pdf_path',
         'fichier_integration_path',
         'fichier_integration_original_name',
+        'deleted_by_user_id',
     ];
 
     protected function casts(): array
@@ -44,6 +48,7 @@ class OdClasseur extends Model
             'validated_at' => 'datetime',
             'archive_date' => 'date',
             'archived_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 
@@ -87,6 +92,11 @@ class OdClasseur extends Model
         return $this->belongsTo(User::class, 'validated_by_user_id');
     }
 
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'deleted_by_user_id');
+    }
+
     public function pieces(): HasMany
     {
         return $this->hasMany(OdClasseurPiece::class, 'od_classeur_id')->orderBy('sort_order');
@@ -101,5 +111,38 @@ class OdClasseur extends Model
     {
         return $this->isAttenteValidation()
             && (int) $this->assigned_checker_user_id === (int) $user->id;
+    }
+
+    public function canBeRejectedBy(User $user): bool
+    {
+        return $this->canBeValidatedBy($user);
+    }
+
+    /**
+     * Suppression : brouillon (créateur) ou attente validation (checker désigné / créateur / IT).
+     */
+    public function canBeDeletedBy(User $user): bool
+    {
+        if ($this->isIntegre()) {
+            return false;
+        }
+
+        if ($this->isBrouillon()) {
+            return (int) $this->user_id === (int) $user->id
+                || $user->isSuperAdmin()
+                || $user->hasRole('it')
+                || $user->hasRole('admin');
+        }
+
+        if ($this->isAttenteValidation()) {
+            return (int) $this->assigned_checker_user_id === (int) $user->id
+                || (int) $this->user_id === (int) $user->id
+                || (int) ($this->integrated_by_user_id ?? 0) === (int) $user->id
+                || $user->isSuperAdmin()
+                || $user->hasRole('it')
+                || $user->hasRole('admin');
+        }
+
+        return false;
     }
 }

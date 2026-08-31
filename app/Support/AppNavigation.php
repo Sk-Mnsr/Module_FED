@@ -143,7 +143,7 @@ final class AppNavigation
             $groups[] = ['module' => 'monetique', 'label' => 'Monétique', 'items' => $monetiqueItems];
         }
 
-        $odItems = self::odItems($modules);
+        $odItems = self::odItems($modules, $hasConfigAccess);
         if ($odItems !== []) {
             $groups[] = ['module' => 'od', 'label' => 'Opérations diverses', 'items' => $odItems];
         }
@@ -447,19 +447,25 @@ final class AppNavigation
      * @param  list<string>  $modules
      * @return list<array<string, mixed>>
      */
-    private static function odItems(array $modules): array
+    private static function odItems(array $modules, bool $isSuperAdmin = false): array
     {
         if (! in_array('od', $modules, true)) {
             return [];
         }
 
+        $integrationLinks = [
+            self::link('Automatique', '/operations-diverses/piece-comptable'),
+            self::link('Manuelle', '/operations-diverses/piece-comptable/manuelle'),
+            self::link('Mes brouillons', '/operations-diverses/integrations'),
+            self::link('En attente', '/operations-diverses/attente-validation'),
+        ];
+
+        if ($isSuperAdmin) {
+            $integrationLinks[] = self::link('Corbeille', '/operations-diverses/corbeille');
+        }
+
         return [
-            self::section('Intégration', 'layers', [
-                self::link('Automatique', '/operations-diverses/piece-comptable'),
-                self::link('Manuelle', '/operations-diverses/piece-comptable/manuelle'),
-                self::link('Mes brouillons', '/operations-diverses/integrations'),
-                self::link('En attente', '/operations-diverses/attente-validation'),
-            ]),
+            self::section('Intégration', 'layers', $integrationLinks),
             self::link('Archivage', '/operations-diverses/archivage', 'archive'),
         ];
     }

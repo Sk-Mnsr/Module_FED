@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -28,7 +29,7 @@ import {
     Trash2,
     UserCheck,
 } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
 type Piece = {
     id: number | string;
@@ -102,9 +103,44 @@ const breadcrumbs = [
 ];
 
 const page = usePage();
-const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
+const flash = computed(() => page.props.flash as {
+    success?: string;
+    error?: string;
+    warning?: string;
+    od_integration_success?: { batch?: string | null; checker?: string | null } | null;
+} | undefined);
 const flashSuccess = computed(() => flash.value?.success);
 const flashWarning = computed(() => flash.value?.warning);
+
+const integrationSuccess = computed(() => {
+    const structured = flash.value?.od_integration_success;
+    if (structured) {
+        return {
+            batch: structured.batch || props.classeur.numero_batch,
+            checker: structured.checker || props.classeur.assigned_checker_name,
+        };
+    }
+    // Repli : bannière « Intégration transmise » (ex. revisit Inertia sans clé dédiée)
+    if (flashSuccess.value?.includes('Intégration transmise')) {
+        return {
+            batch: props.classeur.numero_batch,
+            checker: props.classeur.assigned_checker_name,
+        };
+    }
+    return null;
+});
+
+const showIntegrationSuccessModal = ref(false);
+
+watch(
+    integrationSuccess,
+    async (payload) => {
+        if (!payload) return;
+        await nextTick();
+        showIntegrationSuccessModal.value = true;
+    },
+    { immediate: true },
+);
 
 const isBrouillon = computed(() => props.classeur.statut === 'brouillon');
 const isAttenteValidation = computed(() => props.classeur.statut === 'attente_validation');
@@ -112,6 +148,8 @@ const isIntegre = computed(() => props.classeur.statut === 'integre');
 const processing = ref(false);
 const deleting = ref(false);
 const showIntegrerModal = ref(false);
+const showValiderConfirm = ref(false);
+const showDeleteConfirm = ref(false);
 const selectedCheckerId = ref('');
 const apercuExpanded = ref(
     (props.apercu.rows?.length ?? 0) <= 5 && !props.apercu.error,
@@ -170,6 +208,14 @@ function confirmerIntegrer() {
         { assigned_checker_user_id: selectedCheckerId.value },
         {
             preserveScroll: true,
+            onSuccess: () => {
+                showIntegrerModal.value = false;
+                void nextTick(() => {
+                    if (integrationSuccess.value) {
+                        showIntegrationSuccessModal.value = true;
+                    }
+                });
+            },
             onFinish: () => {
                 processing.value = false;
                 showIntegrerModal.value = false;
@@ -180,7 +226,11 @@ function confirmerIntegrer() {
 
 function validerChecker() {
     if (processing.value || !props.classeur.can_validate_checker) return;
-    if (!window.confirm('Valider et archiver cette intégration ?')) return;
+    showValiderConfirm.value = true;
+}
+
+function confirmerValiderChecker() {
+    if (processing.value || !props.classeur.can_validate_checker) return;
     processing.value = true;
     router.post(
         props.classeur.valider_checker_url,
@@ -189,6 +239,7 @@ function validerChecker() {
             preserveScroll: true,
             onFinish: () => {
                 processing.value = false;
+                showValiderConfirm.value = false;
             },
         },
     );
@@ -198,17 +249,16 @@ function supprimer() {
     if (deleting.value || !isBrouillon.value || !props.classeur.supprimer_url) {
         return;
     }
-    if (
-        !window.confirm(
-            `Supprimer le brouillon « ${props.classeur.nom_classeur} » ? Cette action est irréversible.`,
-        )
-    ) {
-        return;
-    }
+    showDeleteConfirm.value = true;
+}
+
+function confirmerSupprimer() {
+    if (deleting.value || !props.classeur.supprimer_url) return;
     deleting.value = true;
     router.delete(props.classeur.supprimer_url, {
         onFinish: () => {
             deleting.value = false;
+            showDeleteConfirm.value = false;
         },
     });
 }
@@ -741,6 +791,70 @@ function supprimer() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <Dialog v-model:open="showIntegrationSuccessModal">
+                <DialogContent class="sm:max-w-md">
+                    <DialogHeader class="items-center text-center sm:text-center">
+                        <div
+                            class="mx-auto mb-2 flex size-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                        >
+                            <CheckCircle2 class="size-8" />
+                        </div>
+                        <DialogTitle>Intégration réussie</DialogTitle>
+                        <DialogDescription class="text-center">
+                            L’intégration a bien été transmise
+                            <template v-if="integrationSuccess?.checker">
+                                et est en attente de validation par
+                                {{ integrationSuccess.checker }}.
+                            </template>
+                            <template v-else>.</template>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div
+                        class="rounded-xl border border-primary/20 bg-primary/5 px-4 py-4 text-center dark:border-primary/30 dark:bg-primary/10"
+                    >
+                        <p
+                            class="text-[11px] font-semibold uppercase tracking-wider text-primary"
+                        >
+                            Numéro de batch
+                        </p>
+                        <p class="mt-1 text-2xl font-bold tracking-wide text-foreground">
+                            {{
+                                integrationSuccess?.batch ||
+                                classeur.numero_batch ||
+                                '—'
+                            }}
+                        </p>
+                    </div>
+                    <DialogFooter class="sm:justify-center">
+                        <Button
+                            class="min-w-28 bg-emerald-600 text-white hover:bg-emerald-700"
+                            @click="showIntegrationSuccessModal = false"
+                        >
+                            OK
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <OdConfirmDialog
+                v-model:open="showValiderConfirm"
+                title="Valider"
+                :description="`Voulez-vous vraiment valider « ${classeur.nom_classeur} » ?`"
+                confirm-label="Valider"
+                :loading="processing"
+                variant="success"
+                @confirm="confirmerValiderChecker"
+            />
+            <OdConfirmDialog
+                v-model:open="showDeleteConfirm"
+                title="Supprimer"
+                :description="`Voulez-vous vraiment supprimer « ${classeur.nom_classeur} » ?`"
+                confirm-label="Supprimer"
+                :loading="deleting"
+                variant="danger"
+                @confirm="confirmerSupprimer"
+            />
         </div>
     </AppLayout>
 </template>

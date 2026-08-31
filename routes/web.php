@@ -261,6 +261,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('operations-diverses/piece-comptable/{classeur}/resume', [OperationDiverseController::class, 'pieceComptableResume'])->name('operations-diverses.piece-comptable.resume');
         Route::post('operations-diverses/piece-comptable/{classeur}/integrer', [OperationDiverseController::class, 'pieceComptableIntegrer'])->name('operations-diverses.piece-comptable.integrer');
         Route::post('operations-diverses/piece-comptable/{classeur}/valider-checker', [OperationDiverseController::class, 'pieceComptableValiderChecker'])->name('operations-diverses.piece-comptable.valider-checker');
+        Route::post('operations-diverses/piece-comptable/{classeur}/rejeter-checker', [OperationDiverseController::class, 'pieceComptableRejeterChecker'])->name('operations-diverses.piece-comptable.rejeter-checker');
+        Route::post('operations-diverses/piece-comptable/{classeur}/restaurer', [OperationDiverseController::class, 'pieceComptableRestore'])->withTrashed()->name('operations-diverses.piece-comptable.restaurer');
         Route::delete('operations-diverses/piece-comptable/{classeur}', [OperationDiverseController::class, 'pieceComptableDestroy'])->name('operations-diverses.piece-comptable.destroy');
         Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
         Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');
@@ -268,6 +270,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
         Route::get('operations-diverses/integrations', [OperationDiverseController::class, 'integrations'])->name('operations-diverses.integrations');
         Route::get('operations-diverses/attente-validation', [OperationDiverseController::class, 'attenteValidation'])->name('operations-diverses.attente-validation');
+        Route::get('operations-diverses/corbeille', [OperationDiverseController::class, 'corbeille'])->name('operations-diverses.corbeille');
         Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
     });
 

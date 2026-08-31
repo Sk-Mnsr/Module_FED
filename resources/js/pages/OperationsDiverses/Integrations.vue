@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import OdActionIcon from '@/components/OdActionIcon.vue';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,13 +17,13 @@ import {
     CalendarDays,
     ChevronDown,
     Clock,
-    FileSearch,
+    Eye,
     FileSpreadsheet,
     FileText,
     Hash,
     Plus,
     Search,
-    ShieldCheck,
+    Send,
     SlidersHorizontal,
     Trash2,
     User,
@@ -71,6 +73,8 @@ const integrerTarget = ref<ClasseurRow | null>(null);
 const selectedCheckerId = ref('');
 const showFilters = ref(false);
 const showNewMenu = ref(false);
+const showDeleteConfirm = ref(false);
+const deleteTarget = ref<ClasseurRow | null>(null);
 
 const fieldClass =
     'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
@@ -106,18 +110,20 @@ function resetSearch() {
 
 function supprimer(c: ClasseurRow) {
     if (supprimerEnCours.value !== null) return;
-    if (
-        !window.confirm(
-            `Supprimer le brouillon « ${c.nom_classeur} » ? Cette action est irréversible.`,
-        )
-    ) {
-        return;
-    }
+    deleteTarget.value = c;
+    showDeleteConfirm.value = true;
+}
+
+function confirmerSupprimer() {
+    const c = deleteTarget.value;
+    if (!c || supprimerEnCours.value !== null) return;
     supprimerEnCours.value = c.id;
     router.delete(c.supprimer_url, {
         preserveScroll: true,
         onFinish: () => {
             supprimerEnCours.value = null;
+            showDeleteConfirm.value = false;
+            deleteTarget.value = null;
         },
     });
 }
@@ -135,7 +141,6 @@ function ouvrirIntegrer(c: ClasseurRow) {
 function confirmerIntegrer() {
     if (!integrerTarget.value || integrerEnCours.value) return;
     if (!selectedCheckerId.value) {
-        window.alert('Veuillez désigner un validateur (checker).');
         return;
     }
     integrerEnCours.value = true;
@@ -436,50 +441,44 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
                                 </div>
                             </div>
 
-                            <div class="flex shrink-0 flex-wrap items-center gap-1.5 lg:justify-end">
-                                <Button
-                                    as-child
-                                    variant="outline"
-                                    size="sm"
-                                    class="h-9 border-slate-300"
-                                >
-                                    <Link :href="c.resume_url" title="Voir le résumé">
-                                        <FileSearch class="size-4" />
-                                        Résumé
-                                    </Link>
-                                </Button>
-                                <Button
+                            <div
+                                class="inline-flex shrink-0 items-center gap-0.5 self-end rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40 lg:self-center"
+                                role="group"
+                                aria-label="Actions"
+                            >
+                                <OdActionIcon
+                                    :icon="Eye"
+                                    label="Résumé"
+                                    :href="c.resume_url"
+                                    variant="neutral"
+                                />
+                                <OdActionIcon
                                     v-if="c.can_integrate"
-                                    size="sm"
-                                    class="h-9 bg-primary text-primary-foreground hover:bg-primary/90"
+                                    :icon="Send"
+                                    :label="
+                                        (eligibleCheckers?.length ?? 0)
+                                            ? 'Intégrer'
+                                            : 'Aucun checker disponible'
+                                    "
+                                    variant="primary"
                                     :disabled="
                                         integrerEnCours ||
                                         supprimerEnCours === c.id ||
                                         !(eligibleCheckers?.length ?? 0)
                                     "
-                                    :title="
-                                        (eligibleCheckers?.length ?? 0)
-                                            ? 'Intégrer et désigner un checker'
-                                            : 'Aucun checker disponible dans votre pôle'
+                                    :loading="
+                                        integrerEnCours && integrerTarget?.id === c.id
                                     "
                                     @click="ouvrirIntegrer(c)"
-                                >
-                                    <ShieldCheck class="size-4" />
-                                    Intégrer
-                                </Button>
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    class="size-9 text-red-600 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40"
+                                />
+                                <OdActionIcon
+                                    :icon="Trash2"
+                                    label="Supprimer"
+                                    variant="danger"
                                     :disabled="supprimerEnCours === c.id || integrerEnCours"
-                                    :title="
-                                        supprimerEnCours === c.id ? 'Suppression…' : 'Supprimer'
-                                    "
+                                    :loading="supprimerEnCours === c.id"
                                     @click="supprimer(c)"
-                                >
-                                    <Trash2 class="size-4" />
-                                    <span class="sr-only">Supprimer</span>
-                                </Button>
+                                />
                             </div>
                         </li>
                     </ul>
@@ -558,6 +557,20 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <OdConfirmDialog
+                v-model:open="showDeleteConfirm"
+                title="Supprimer"
+                :description="
+                    deleteTarget
+                        ? `Voulez-vous vraiment supprimer « ${deleteTarget.nom_classeur} » ?`
+                        : ''
+                "
+                confirm-label="Supprimer"
+                variant="danger"
+                :loading="supprimerEnCours !== null"
+                @confirm="confirmerSupprimer"
+            />
         </div>
     </AppLayout>
 </template>

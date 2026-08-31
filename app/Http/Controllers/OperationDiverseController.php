@@ -15,6 +15,7 @@ use App\Support\OdIntegrationCsvTemplate;
 use App\Support\OdSimpleIntegrationCsv;
 use App\Support\OdManualIntegrationCsv;
 use App\Support\Mails\OdWorkflowMail;
+use App\Support\ModuleAccess;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -479,10 +480,18 @@ class OperationDiverseController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return $redirect->with(
-                'warning',
-                'Intégration transmise, mais la pièce comptable PDF n’a pas pu être générée. Contactez le support.'
-            );
+            $batchLabel = $classeur->fresh()->numero_batch;
+
+            return redirect()
+                ->route('operations-diverses.piece-comptable.resume', $classeur)
+                ->with('od_integration_success', [
+                    'batch' => $batchLabel,
+                    'checker' => $checker->name,
+                ])
+                ->with(
+                    'warning',
+                    'Intégration transmise, mais la pièce comptable PDF n’a pas pu être générée. Contactez le support.'
+                );
         }
 
         $batchLabel = $classeur->fresh()->numero_batch;
@@ -493,6 +502,10 @@ class OperationDiverseController extends Controller
 
         return redirect()
             ->route('operations-diverses.piece-comptable.resume', $classeur)
+            ->with('od_integration_success', [
+                'batch' => $batchLabel,
+                'checker' => $checker->name,
+            ])
             ->with('success', $success);
     }
 
@@ -545,19 +558,139 @@ class OperationDiverseController extends Controller
             );
     }
 
+    public function pieceComptableRejeterChecker(Request $request, OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless($classeur->canBeRejectedBy($user), 403, 'Vous n’êtes pas le validateur désigné pour ce classeur.');
+
+        $redirect = redirect()->route('operations-diverses.attente-validation');
+
+        if (! $classeur->isAttenteValidation()) {
+            return $redirect->with('error', FlashDialog::error(
+                'Ce classeur n’est pas en attente de validation.',
+                title: 'Rejet impossible',
+            ));
+        }
+
+        $validated = $request->validate([
+            'motif' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $motif = trim((string) ($validated['motif'] ?? ''));
+
+        $classeur->loadMissing('user', 'integratedBy');
+        $makerForMail = $classeur->integratedBy ?? $classeur->user;
+
+        $classeur->forceFill([
+            'statut' => OdClasseur::STATUT_BROUILLON,
+            'assigned_checker_user_id' => null,
+            'integrated_at' => null,
+            'integrated_by_user_id' => null,
+            'validated_by_user_id' => null,
+            'validated_at' => null,
+            'archive_date' => null,
+            'archived_at' => null,
+            'integration_status_code' => null,
+        ])->save();
+
+        if ($makerForMail !== null) {
+            OdWorkflowMail::rejectedByChecker(
+                $classeur->fresh(),
+                $user,
+                $makerForMail,
+                $motif !== '' ? $motif : null,
+            );
+        }
+
+        return $redirect->with(
+            'success',
+            'Intégration rejetée. Le maker peut corriger le brouillon et la renvoyer.'
+        );
+    }
+
     public function pieceComptableDestroy(OdClasseur $classeur): RedirectResponse
     {
         $this->authorizeClasseur($classeur);
-        abort_unless($classeur->isBrouillon(), 403, 'Impossible de supprimer une intégration transmise ou archivée.');
+        $user = auth()->user();
 
-        DB::transaction(function () use ($classeur) {
-            $this->deleteClasseurStorage($classeur);
-            $classeur->delete();
-        });
+        abort_unless(
+            $classeur->canBeDeletedBy($user),
+            403,
+            'Impossible de supprimer cette intégration.'
+        );
+
+        $wasAttente = $classeur->isAttenteValidation();
+
+        // Soft delete : fichiers conservés pour restauration SuperAdmin
+        $classeur->forceFill([
+            'deleted_by_user_id' => $user->id,
+        ])->save();
+        $classeur->delete();
+
+        $route = $wasAttente
+            ? 'operations-diverses.attente-validation'
+            : 'operations-diverses.integrations';
 
         return redirect()
-            ->route('operations-diverses.integrations')
-            ->with('success', 'Le brouillon a été supprimé.');
+            ->route($route)
+            ->with('success', $wasAttente
+                ? 'L’intégration a été mise en corbeille. Un SuperAdmin peut la restaurer.'
+                : 'Le brouillon a été mis en corbeille. Un SuperAdmin peut le restaurer.');
+    }
+
+    public function corbeille(Request $request): InertiaResponse
+    {
+        $user = auth()->user();
+        abort_unless(ModuleAccess::isAdminUser($user), 403);
+
+        $classeurs = OdClasseur::onlyTrashed()
+            ->with(['user:id,name', 'deletedBy:id,name', 'assignedChecker:id,name', 'integratedBy:id,name'])
+            ->withCount('pieces')
+            ->orderByDesc('deleted_at')
+            ->limit(200)
+            ->get()
+            ->map(fn (OdClasseur $c) => [
+                'id' => $c->id,
+                'nom_classeur' => $c->nom_classeur,
+                'numero_batch' => $c->numero_batch,
+                'statut' => $c->statut,
+                'date_valeur' => optional($c->date_valeur)->toDateString(),
+                'maker_name' => $c->integratedBy?->name ?? $c->user?->name,
+                'deleted_by_name' => $c->deletedBy?->name,
+                'deleted_at' => optional($c->deleted_at)->toIso8601String(),
+                'justificatifs_count' => ($c->pieces_count ?? 0) + 1,
+                'restaurer_url' => route('operations-diverses.piece-comptable.restaurer', $c),
+            ]);
+
+        return Inertia::render('OperationsDiverses/Corbeille', [
+            'classeurs' => $classeurs,
+        ]);
+    }
+
+    public function pieceComptableRestore(OdClasseur $classeur): RedirectResponse
+    {
+        abort_unless(ModuleAccess::isAdminUser(auth()->user()), 403);
+
+        if (! $classeur->trashed()) {
+            return redirect()
+                ->route('operations-diverses.corbeille')
+                ->with('warning', 'Cette intégration n’est pas dans la corbeille.');
+        }
+
+        $classeur->restore();
+        $classeur->forceFill(['deleted_by_user_id' => null])->save();
+
+        $route = match ($classeur->statut) {
+            OdClasseur::STATUT_ATTENTE_VALIDATION => 'operations-diverses.attente-validation',
+            OdClasseur::STATUT_INTEGRE => 'operations-diverses.archivage',
+            default => 'operations-diverses.integrations',
+        };
+
+        return redirect()
+            ->route($route)
+            ->with('success', 'Intégration « '.$classeur->nom_classeur.' » restaurée.');
     }
 
     public function pieceComptablePdf(Request $request, OdClasseur $classeur): BinaryFileResponse|StreamedResponse
@@ -1083,7 +1216,11 @@ class OperationDiverseController extends Controller
             'justificatifs_count' => $classeur->pieces->count() + 1,
             'resume_url' => route('operations-diverses.piece-comptable.resume', $classeur),
             'can_validate' => $classeur->canBeValidatedBy($viewer),
+            'can_reject' => $classeur->canBeRejectedBy($viewer),
+            'can_delete' => $classeur->canBeDeletedBy($viewer),
             'valider_checker_url' => route('operations-diverses.piece-comptable.valider-checker', $classeur),
+            'rejeter_url' => route('operations-diverses.piece-comptable.rejeter-checker', $classeur),
+            'supprimer_url' => route('operations-diverses.piece-comptable.destroy', $classeur),
         ];
     }
 

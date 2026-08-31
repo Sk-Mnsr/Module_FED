@@ -30,4 +30,28 @@ final class OdWorkflowMail
             'action_text' => 'Ouvrir la file',
         ]);
     }
+
+    public static function rejectedByChecker(
+        OdClasseur $classeur,
+        \App\Models\User $checker,
+        \App\Models\User $maker,
+        ?string $motif = null,
+    ): void {
+        if (! filled($maker->email)) {
+            return;
+        }
+
+        AppMail::rejected($maker, 'OD rejetée par le checker', [
+            'title' => 'Intégration rejetée',
+            'content' => $checker->name.' a rejeté votre opération diverse. Corrigez le brouillon puis renvoyez-la.',
+            'rejection_reason' => $motif ?: 'Aucun motif détaillé.',
+            'details' => array_filter([
+                'Classeur' => $classeur->nom_classeur,
+                'Batch' => $classeur->numero_batch,
+                'Date valeur' => $classeur->date_valeur?->format('d/m/Y'),
+            ]),
+            'action_url' => url('/operations-diverses/integrations'),
+            'action_text' => 'Voir mes brouillons',
+        ]);
+    }
 }
