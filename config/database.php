@@ -112,6 +112,23 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        /*
+        | Oracle Flexcube — lecture seule (GLTM_GLMASTER / STTM_CUST_ACCOUNT).
+        | Connexion via l’extension PHP oci8 (voir App\Services\Integrations\FlexcubeAccountTypeResolver).
+        */
+        'oracle_flexcube' => [
+            'driver' => 'oracle',
+            'host' => env('ORACLE_HOST'),
+            'port' => env('ORACLE_PORT', '1522'),
+            'database' => env('ORACLE_SERVICE_NAME'),
+            'service_name' => env('ORACLE_SERVICE_NAME'),
+            'username' => env('ORACLE_USER'),
+            'password' => env('ORACLE_PASSWORD'),
+            'schema' => env('ORACLE_SCHEMA', 'CFSFCUBS145'),
+            'charset' => env('ORACLE_CHARSET', 'AL32UTF8'),
+            'prefix' => '',
+        ],
+
     ],
 
     /*

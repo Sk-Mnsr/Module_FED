@@ -3,7 +3,9 @@
 namespace App\Support;
 
 use App\Models\OdClasseur;
+use App\Services\Integrations\FlexcubeAccountTypeResolver;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Construit le corps JSON CreateMjrnlbook à partir d’un classeur OD / CSV parsé.
@@ -25,7 +27,10 @@ final class OdFlexcubeJournalPayload
         $cfg = config('services.flexcube_online_journal', []);
         $defaultCcy = (string) ($cfg['ccy'] ?? 'XOF');
         $defaultBranch = (string) ($cfg['branch'] ?? '501');
-        $accorgl = (string) ($cfg['accorgl'] ?? 'A');
+        $defaultAccorgl = strtoupper((string) ($cfg['accorgl'] ?? 'A'));
+        if (! in_array($defaultAccorgl, ['A', 'G'], true)) {
+            $defaultAccorgl = 'A';
+        }
         $defaultTxn = (string) ($cfg['txn_code_default'] ?? 'MIG');
         $lastOperatedBy = (string) ($cfg['last_operated_by'] ?? 'APIUSER1');
 
@@ -46,6 +51,15 @@ final class OdFlexcubeJournalPayload
         // Flexcube attribue le n° de batch : on envoie vide.
         $batchNo = '';
         $makerId = trim((string) ($maker ?? $lastOperatedBy));
+
+        $accounts = [];
+        foreach ($rows as $row) {
+            $account = trim((string) ($row['no_compte'] ?? ''));
+            if ($account !== '') {
+                $accounts[] = $account;
+            }
+        }
+        $accorglByAccount = self::resolveAccorglMap($accounts, $defaultAccorgl);
 
         $details = [];
         $totalDr = 0.0;
@@ -78,13 +92,15 @@ final class OdFlexcubeJournalPayload
                 $totalCr += $amount;
             }
 
+            $lineAccorgl = $accorglByAccount[$account] ?? $defaultAccorgl;
+
             $details[] = [
                 'referenceNo' => '',
                 'serialNo' => $serial,
                 'userRefNo' => '',
                 'drCr' => $sens,
                 'branchCode' => $lineBranch,
-                'accorgl' => $accorgl,
+                'accorgl' => $lineAccorgl,
                 'ccy' => $ccy,
                 'amount' => $amount,
                 'txnCode' => $txnCode,
@@ -163,6 +179,53 @@ final class OdFlexcubeJournalPayload
                 'status' => '',
             ],
         ];
+    }
+
+    /**
+     * @param  list<string>  $accounts
+     * @return array<string, 'A'|'G'>
+     */
+    private static function resolveAccorglMap(array $accounts, string $defaultAccorgl): array
+    {
+        $resolver = app(FlexcubeAccountTypeResolver::class);
+
+        if (! $resolver->isEnabled() || ! $resolver->isConfigured()) {
+            $map = [];
+            foreach ($accounts as $account) {
+                $map[$account] = $defaultAccorgl;
+            }
+
+            return $map;
+        }
+
+        try {
+            $resolved = $resolver->resolveMany($accounts);
+        } catch (\Throwable $e) {
+            Log::warning('OdFlexcubeJournalPayload: résolution accorgl Oracle échouée', [
+                'error' => $e->getMessage(),
+            ]);
+            throw new \InvalidArgumentException(
+                'Impossible de déterminer le type de compte (A/G) via Oracle Flexcube : '.$e->getMessage()
+            );
+        }
+
+        $missing = [];
+        $map = [];
+        foreach (array_unique($accounts) as $account) {
+            if (isset($resolved[$account])) {
+                $map[$account] = $resolved[$account];
+            } else {
+                $missing[] = $account;
+            }
+        }
+
+        if ($missing !== []) {
+            throw new \InvalidArgumentException(
+                'Compte(s) inconnu(s) dans Flexcube (ni GL ni compte client) : '.implode(', ', $missing)
+            );
+        }
+
+        return $map;
     }
 
     private static function nonEmpty(string $value, string $fallback): string

@@ -60,6 +60,24 @@ return [
             env('FLEXCUBE_JOURNAL_VERIFY_SSL', 'false'),
             FILTER_VALIDATE_BOOL
         ),
+        /*
+        | Résolution A/G via Oracle (GLTM_GLMASTER / STTM_CUST_ACCOUNT).
+        | Si désactivé ou non configuré → fallback FLEXCUBE_JOURNAL_ACCORGL.
+        */
+        'accorgl_resolve_oracle' => (bool) filter_var(
+            env('ORACLE_ACCORGL_ENABLED', 'true'),
+            FILTER_VALIDATE_BOOL
+        ),
+    ],
+
+    'oracle_flexcube' => [
+        'host' => env('ORACLE_HOST'),
+        'port' => env('ORACLE_PORT', '1522'),
+        'service_name' => env('ORACLE_SERVICE_NAME'),
+        'username' => env('ORACLE_USER'),
+        'password' => env('ORACLE_PASSWORD'),
+        'schema' => env('ORACLE_SCHEMA', 'CFSFCUBS145'),
+        'charset' => env('ORACLE_CHARSET', 'AL32UTF8'),
     ],
 
     /*

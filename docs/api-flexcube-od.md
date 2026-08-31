@@ -99,7 +99,7 @@ Structure alignée sur l’écran Online Journal Entry Flexcube.
 | `serialNo` | Ordre 1..n | `1` |
 | `drCr` | Sens (`D` / `C`) | `"D"` |
 | `branchCode` | `code_agence` | `"500"` |
-| `accorgl` | Config `FLEXCUBE_JOURNAL_ACCORGL` | `"A"` (compte) |
+| `accorgl` | **Oracle** `GLTM_GLMASTER` → `G` / `STTM_CUST_ACCOUNT` → `A` (sinon fallback `FLEXCUBE_JOURNAL_ACCORGL`) | `"A"` ou `"G"` |
 | `ccy` | Devise | `"XOF"` |
 | `amount` | `montant` | `1000` |
 | `lcyAmount` | `montant` | `1000` |
@@ -280,7 +280,11 @@ Colonnes du fichier d’intégration OD :
 | `FLEXCUBE_JOURNAL_SOURCE` | Défaut `FCAT` |
 | `FLEXCUBE_JOURNAL_BRANCH` | Défaut header BRANCH |
 | `FLEXCUBE_JOURNAL_CCY` | Devise défaut |
-| `FLEXCUBE_JOURNAL_ACCORGL` | `A` compte / `G` GL |
+| `FLEXCUBE_JOURNAL_ACCORGL` | Fallback `A` compte / `G` GL (si Oracle off ou indisponible) |
+| `ORACLE_HOST` / `ORACLE_PORT` / `ORACLE_SERVICE_NAME` | Connexion Oracle Flexcube |
+| `ORACLE_USER` / `ORACLE_PASSWORD` | Identifiants lecture (ex. `report_sn`) |
+| `ORACLE_SCHEMA` | Schéma (défaut `CFSFCUBS145`) |
+| `ORACLE_ACCORGL_ENABLED` | `true` = résoudre A/G par compte avant intégration |
 | `FLEXCUBE_JOURNAL_TXN_CODE` | Code op. par défaut si ligne vide |
 | `FLEXCUBE_JOURNAL_TIMEOUT` | Timeout HTTP (secondes) |
 | `FLEXCUBE_JOURNAL_VERIFY_SSL` | `false` souvent nécessaire en interne |
@@ -293,7 +297,9 @@ Colonnes du fichier d’intégration OD :
 | Fichier | Rôle |
 |---------|------|
 | `app/Services/Integrations/FlexcubeOnlineJournalClient.php` | Client HTTP |
-| `app/Support/OdFlexcubeJournalPayload.php` | Mapping OD → JSON |
+| `app/Support/OdFlexcubeJournalPayload.php` | Mapping OD → JSON (+ accorgl par ligne) |
+| `app/Services/Integrations/FlexcubeAccountTypeResolver.php` | Requête Oracle A/G |
+| `app/Console/Commands/TestFlexcubeAccorglCommand.php` | `php artisan flexcube:test-accorgl` |
 | `app/Http/Controllers/OperationDiverseController.php` | Action `pieceComptableIntegrer` |
 | `app/Support/FlashDialog.php` | Messages d’erreur simplifiés |
 | `config/services.php` | Clé `flexcube_online_journal` |
