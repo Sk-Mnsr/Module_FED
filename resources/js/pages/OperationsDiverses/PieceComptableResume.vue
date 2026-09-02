@@ -24,12 +24,17 @@ import {
     Hash,
     CalendarDays,
     Eye,
+    Paperclip,
     Pencil,
+    Plus,
     ShieldCheck,
     Trash2,
     UserCheck,
+    X,
 } from 'lucide-vue-next';
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 type Piece = {
     id: number | string;
@@ -56,10 +61,15 @@ type Classeur = {
     fichier: string | null;
     can_integrate: boolean;
     can_validate_checker: boolean;
+    can_add_justificatifs?: boolean;
     integrer_url: string;
     valider_checker_url: string;
+    ajouter_justificatifs_url?: string;
     modifier_url: string | null;
     supprimer_url: string | null;
+    rejection_motif?: string | null;
+    rejected_by_name?: string | null;
+    rejected_at?: string | null;
     pieces: Piece[];
 };
 
@@ -131,6 +141,25 @@ const integrationSuccess = computed(() => {
 });
 
 const showIntegrationSuccessModal = ref(false);
+const addingJustificatifs = ref(false);
+const showAddJustificatifs = ref(false);
+const newJustificatifs = ref<{ description: string; file: File | null }[]>([
+    { description: '', file: null },
+]);
+
+function openAddPiecesIfRequested() {
+    if (!props.classeur.can_add_justificatifs) return;
+    const url = typeof window !== 'undefined' ? window.location.href : page.url;
+    if (url.includes('ajouter_pieces=1') || url.includes('#pieces-justificatives')) {
+        showAddJustificatifs.value = true;
+        void nextTick(() => {
+            document.getElementById('pieces-justificatives')?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+        });
+    }
+}
 
 watch(
     integrationSuccess,
@@ -142,6 +171,19 @@ watch(
     { immediate: true },
 );
 
+onMounted(() => {
+    // Maker en attente : formulaire d’ajout visible tout de suite
+    if (props.classeur.can_add_justificatifs) {
+        showAddJustificatifs.value = true;
+    }
+    openAddPiecesIfRequested();
+});
+
+watch(
+    () => page.url,
+    () => openAddPiecesIfRequested(),
+);
+
 const isBrouillon = computed(() => props.classeur.statut === 'brouillon');
 const isAttenteValidation = computed(() => props.classeur.statut === 'attente_validation');
 const isIntegre = computed(() => props.classeur.statut === 'integre');
@@ -151,6 +193,43 @@ const showIntegrerModal = ref(false);
 const showValiderConfirm = ref(false);
 const showDeleteConfirm = ref(false);
 const selectedCheckerId = ref('');
+
+function addJustificatifLigne() {
+    newJustificatifs.value.push({ description: '', file: null });
+}
+
+function removeJustificatifLigne(index: number) {
+    if (newJustificatifs.value.length <= 1) {
+        newJustificatifs.value = [{ description: '', file: null }];
+        return;
+    }
+    newJustificatifs.value.splice(index, 1);
+}
+
+function envoyerJustificatifs() {
+    if (addingJustificatifs.value || !props.classeur.ajouter_justificatifs_url) return;
+    const rows = newJustificatifs.value.filter((j) => j.file && j.description.trim());
+    if (!rows.length) return;
+
+    const formData = new FormData();
+    rows.forEach((row, index) => {
+        formData.append(`justificatifs[${index}][description]`, row.description.trim());
+        formData.append(`justificatifs[${index}][file]`, row.file as File);
+    });
+
+    addingJustificatifs.value = true;
+    router.post(props.classeur.ajouter_justificatifs_url, formData, {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: () => {
+            newJustificatifs.value = [{ description: '', file: null }];
+            showAddJustificatifs.value = false;
+        },
+        onFinish: () => {
+            addingJustificatifs.value = false;
+        },
+    });
+}
 const apercuExpanded = ref(
     (props.apercu.rows?.length ?? 0) <= 5 && !props.apercu.error,
 );
@@ -279,6 +358,21 @@ function confirmerSupprimer() {
                 class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
             >
                 {{ flashWarning }}
+            </div>
+            <div
+                v-if="classeur.rejection_motif"
+                class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+            >
+                <p class="font-semibold">Rejet checker</p>
+                <p class="mt-1">
+                    {{ classeur.rejection_motif }}
+                </p>
+                <p
+                    v-if="classeur.rejected_by_name"
+                    class="mt-1 text-xs text-rose-700/80 dark:text-rose-300/80"
+                >
+                    Par {{ classeur.rejected_by_name }}
+                </p>
             </div>
 
             <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
@@ -571,13 +665,102 @@ function confirmerSupprimer() {
             </section>
 
             <!-- Pièces -->
-            <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
-                <div class="border-b border-border/80 px-5 py-4 sm:px-6">
-                    <h2 class="text-sm font-semibold text-foreground">Pièces justificatives</h2>
-                    <p class="mt-0.5 text-xs text-muted-foreground">
-                        {{ classeur.pieces.length }} document(s) joint(s)
-                    </p>
+            <section
+                id="pieces-justificatives"
+                class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
+            >
+                <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border/80 px-5 py-4 sm:px-6">
+                    <div>
+                        <h2 class="text-sm font-semibold text-foreground">Pièces justificatives</h2>
+                        <p class="mt-0.5 text-xs text-muted-foreground">
+                            {{ classeur.pieces.length }} document(s) joint(s)
+                        </p>
+                    </div>
+                    <Button
+                        v-if="classeur.can_add_justificatifs"
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        class="h-9 border-primary/30 text-primary hover:bg-primary/5"
+                        @click="showAddJustificatifs = !showAddJustificatifs"
+                    >
+                        <Paperclip class="size-4" />
+                        {{ showAddJustificatifs ? 'Fermer' : 'Ajouter une pièce' }}
+                    </Button>
                 </div>
+
+                <div
+                    v-if="classeur.can_add_justificatifs && showAddJustificatifs"
+                    class="space-y-3 border-b border-border/80 bg-slate-50/80 px-5 py-4 dark:bg-muted/20 sm:px-6"
+                >
+                    <p class="text-xs text-muted-foreground">
+                        Ajoutez des justificatifs complémentaires pendant l’attente de validation.
+                    </p>
+                    <div
+                        v-for="(ligne, index) in newJustificatifs"
+                        :key="index"
+                        class="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-card sm:grid-cols-[1fr_1fr_auto]"
+                    >
+                        <div class="space-y-1.5">
+                            <Label :for="`justif-desc-${index}`">Libellé</Label>
+                            <Input
+                                :id="`justif-desc-${index}`"
+                                v-model="ligne.description"
+                                placeholder="Ex. Email, Facture…"
+                                class="h-10"
+                            />
+                        </div>
+                        <div class="space-y-1.5">
+                            <Label :for="`justif-file-${index}`">Fichier</Label>
+                            <Input
+                                :id="`justif-file-${index}`"
+                                type="file"
+                                class="h-10 cursor-pointer pt-1.5"
+                                accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.csv,.txt,.xlsx,.xls,.doc,.docx,.eml"
+                                @change="
+                                    ligne.file =
+                                        ($event.target as HTMLInputElement).files?.[0] ?? null
+                                "
+                            />
+                        </div>
+                        <div class="flex items-end gap-1">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                class="size-10 text-muted-foreground"
+                                :disabled="newJustificatifs.length <= 1"
+                                @click="removeJustificatifLigne(index)"
+                            >
+                                <X class="size-4" />
+                            </Button>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            class="h-9"
+                            @click="addJustificatifLigne"
+                        >
+                            <Plus class="size-4" /> Autre pièce
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            class="h-9 bg-primary text-primary-foreground hover:bg-primary/90"
+                            :disabled="
+                                addingJustificatifs ||
+                                !newJustificatifs.some((j) => j.file && j.description.trim())
+                            "
+                            @click="envoyerJustificatifs"
+                        >
+                            {{ addingJustificatifs ? 'Envoi…' : 'Enregistrer' }}
+                        </Button>
+                    </div>
+                </div>
+
                 <ul class="divide-y divide-border">
                     <li
                         v-for="p in classeur.pieces"

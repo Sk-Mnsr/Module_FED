@@ -32,7 +32,6 @@ const props = defineProps<{
 
 const breadcrumbs = [
     { title: 'Opérations diverses', href: '/operations-diverses/piece-comptable' },
-    { title: 'Intégration', href: '/operations-diverses/integrations' },
     { title: 'Corbeille', href: '/operations-diverses/corbeille' },
 ];
 

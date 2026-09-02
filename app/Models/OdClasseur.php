@@ -34,6 +34,9 @@ class OdClasseur extends Model
         'archive_date',
         'archived_at',
         'integration_status_code',
+        'rejection_motif',
+        'rejected_by_user_id',
+        'rejected_at',
         'piece_pdf_path',
         'fichier_integration_path',
         'fichier_integration_original_name',
@@ -48,6 +51,7 @@ class OdClasseur extends Model
             'validated_at' => 'datetime',
             'archive_date' => 'date',
             'archived_at' => 'datetime',
+            'rejected_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
     }
@@ -97,6 +101,11 @@ class OdClasseur extends Model
         return $this->belongsTo(User::class, 'deleted_by_user_id');
     }
 
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by_user_id');
+    }
+
     public function pieces(): HasMany
     {
         return $this->hasMany(OdClasseurPiece::class, 'od_classeur_id')->orderBy('sort_order');
@@ -119,7 +128,7 @@ class OdClasseur extends Model
     }
 
     /**
-     * Suppression : brouillon (créateur) ou attente validation (checker désigné / créateur / IT).
+     * Suppression : brouillon (créateur / admin) ; en attente : admin uniquement (checker valide ou rejette).
      */
     public function canBeDeletedBy(User $user): bool
     {
@@ -135,14 +144,29 @@ class OdClasseur extends Model
         }
 
         if ($this->isAttenteValidation()) {
-            return (int) $this->assigned_checker_user_id === (int) $user->id
-                || (int) $this->user_id === (int) $user->id
-                || (int) ($this->integrated_by_user_id ?? 0) === (int) $user->id
-                || $user->isSuperAdmin()
+            return $user->isSuperAdmin()
                 || $user->hasRole('it')
                 || $user->hasRole('admin');
         }
 
         return false;
+    }
+
+    /**
+     * Ajout de pièces justificatives après intégration (maker, tant que non archivé).
+     */
+    public function canAddJustificatifsBy(User $user): bool
+    {
+        if (! $this->isAttenteValidation()) {
+            return false;
+        }
+
+        $isMaker = (int) $this->user_id === (int) $user->id
+            || (int) ($this->integrated_by_user_id ?? 0) === (int) $user->id;
+
+        return $isMaker
+            || $user->isSuperAdmin()
+            || $user->hasRole('it')
+            || $user->hasRole('admin');
     }
 }

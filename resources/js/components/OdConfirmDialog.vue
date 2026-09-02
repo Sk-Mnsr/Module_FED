@@ -18,12 +18,14 @@ const props = withDefaults(
         confirmLabel?: string;
         cancelLabel?: string;
         loading?: boolean;
+        disabled?: boolean;
         variant?: 'default' | 'danger' | 'warning' | 'success';
     }>(),
     {
         confirmLabel: 'Confirmer',
         cancelLabel: 'Annuler',
         loading: false,
+        disabled: false,
         variant: 'default',
     },
 );
@@ -59,7 +61,7 @@ function onCancel() {
 }
 
 function onConfirm() {
-    if (props.loading) return;
+    if (props.loading || props.disabled) return;
     emit('confirm');
 }
 </script>
@@ -89,7 +91,7 @@ function onConfirm() {
                 <Button
                     type="button"
                     :class="confirmClass"
-                    :disabled="loading"
+                    :disabled="loading || disabled"
                     @click="onConfirm"
                 >
                     {{ loading ? 'Patientez…' : confirmLabel }}

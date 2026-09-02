@@ -14,6 +14,7 @@ import {
     FileSpreadsheet,
     FileText,
     Hash,
+    Paperclip,
     Search,
     SlidersHorizontal,
     Trash2,
@@ -37,6 +38,9 @@ type ClasseurRow = {
     can_validate: boolean;
     can_reject?: boolean;
     can_delete?: boolean;
+    can_add_justificatifs?: boolean;
+    is_mine_as_checker?: boolean;
+    is_mine_as_maker?: boolean;
     valider_checker_url: string;
     rejeter_url?: string;
     supprimer_url?: string;
@@ -52,7 +56,6 @@ const props = defineProps<{
 
 const breadcrumbs = [
     { title: 'Opérations diverses', href: '/operations-diverses/piece-comptable' },
-    { title: 'Intégration', href: '/operations-diverses/integrations' },
     { title: 'En attente de validation', href: '/operations-diverses/attente-validation' },
 ];
 
@@ -83,7 +86,56 @@ const searchForm = ref({
 
 const hasActiveFilters = computed(() => Object.values(searchForm.value).some(Boolean));
 const total = computed(() => props.classeurs?.length ?? 0);
-const aValider = computed(() => props.classeurs?.filter((c) => c.can_validate).length ?? 0);
+
+const aValiderList = computed(
+    () => props.classeurs?.filter((c) => c.can_validate || c.is_mine_as_checker) ?? [],
+);
+const mesEnvoisList = computed(
+    () =>
+        props.classeurs?.filter(
+            (c) => c.is_mine_as_maker && !c.can_validate && !c.is_mine_as_checker,
+        ) ?? [],
+);
+const autresList = computed(() => {
+    const shown = new Set([
+        ...aValiderList.value.map((c) => c.id),
+        ...mesEnvoisList.value.map((c) => c.id),
+    ]);
+    return props.classeurs?.filter((c) => !shown.has(c.id)) ?? [];
+});
+
+const aValider = computed(() => aValiderList.value.length);
+const mesEnvois = computed(() => mesEnvoisList.value.length);
+
+type VueOnglet = 'a-valider' | 'mes-envois';
+const ongletActif = ref<VueOnglet>(
+    (props.classeurs?.some((c) => c.can_validate || c.is_mine_as_checker) ?? false)
+        ? 'a-valider'
+        : 'mes-envois',
+);
+
+const itemsOnglet = computed(() => {
+    if (ongletActif.value === 'a-valider') {
+        return aValiderList.value;
+    }
+    return mesEnvoisList.value;
+});
+
+const titreOnglet = computed(() =>
+    ongletActif.value === 'a-valider' ? 'À valider (checker)' : 'Mes envois en attente',
+);
+
+const hintOnglet = computed(() =>
+    ongletActif.value === 'a-valider'
+        ? 'Dossiers pour lesquels vous êtes le validateur désigné.'
+        : 'Dossiers que vous avez intégrés ; en attente du checker.',
+);
+
+const emptyOnglet = computed(() =>
+    ongletActif.value === 'a-valider'
+        ? 'Aucun dossier à valider pour vous. Seuls ceux où vous êtes le checker apparaissent ici.'
+        : 'Vous n’avez aucun envoi en attente de validation.',
+);
 
 const confirmBusy = computed(
     () =>
@@ -194,6 +246,10 @@ function executerConfirm() {
     const kind = confirmKind.value;
     if (!c || !kind) return;
 
+    if (kind === 'rejeter' && !rejectMotif.value.trim()) {
+        return;
+    }
+
     if (kind === 'valider') {
         validerEnCours.value = c.id;
         router.post(
@@ -289,28 +345,69 @@ function horodatage(iso: string | null): string {
                                     En attente de validation
                                 </h1>
                                 <p class="mt-1 max-w-xl text-sm text-muted-foreground">
-                                    Intégrations transmises, en attente de validation checker (4
-                                    yeux).
+                                    Vos dossiers à valider (checker) et ceux que vous avez
+                                    intégrés (maker), encore en attente.
                                 </p>
                             </div>
                         </div>
 
-                        <div class="flex flex-wrap items-center gap-2">
-                            <div
-                                class="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200"
-                            >
-                                <span class="font-semibold tabular-nums">{{ total }}</span>
-                                <span>en attente</span>
-                            </div>
-                            <div
-                                v-if="aValider > 0"
-                                class="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/5 px-3 py-1.5 text-sm text-primary"
-                            >
-                                <span class="font-semibold tabular-nums">{{ aValider }}</span>
-                                <span>à traiter par vous</span>
-                            </div>
+                        <div
+                            class="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200"
+                        >
+                            <span class="font-semibold tabular-nums">{{ total }}</span>
+                            <span>en attente</span>
                         </div>
                     </div>
+                </div>
+
+                <!-- Sous-onglets -->
+                <div class="border-b border-border/80 px-5 sm:px-6">
+                    <nav class="-mb-px flex gap-1" aria-label="Sous-onglets En attente">
+                        <button
+                            type="button"
+                            class="relative inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition"
+                            :class="
+                                ongletActif === 'a-valider'
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:border-slate-300 hover:text-foreground'
+                            "
+                            @click="ongletActif = 'a-valider'"
+                        >
+                            À valider
+                            <span
+                                class="rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums"
+                                :class="
+                                    ongletActif === 'a-valider'
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                "
+                            >
+                                {{ aValider }}
+                            </span>
+                        </button>
+                        <button
+                            type="button"
+                            class="relative inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition"
+                            :class="
+                                ongletActif === 'mes-envois'
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted-foreground hover:border-slate-300 hover:text-foreground'
+                            "
+                            @click="ongletActif = 'mes-envois'"
+                        >
+                            Mes envois
+                            <span
+                                class="rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums"
+                                :class="
+                                    ongletActif === 'mes-envois'
+                                        ? 'bg-primary/10 text-primary'
+                                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                                "
+                            >
+                                {{ mesEnvois }}
+                            </span>
+                        </button>
+                    </nav>
                 </div>
 
                 <!-- Recherche -->
@@ -374,18 +471,23 @@ function horodatage(iso: string | null): string {
                     </div>
                 </div>
 
-                <!-- Liste -->
-                <div class="px-5 py-4 sm:px-6">
-                    <div class="mb-4">
-                        <h2 class="text-sm font-semibold text-foreground">File d’attente checker</h2>
+                <!-- Liste de l’onglet actif -->
+                <div class="space-y-4 px-5 py-4 sm:px-6">
+                    <div>
+                        <h2 class="text-sm font-semibold text-foreground">
+                            {{ titreOnglet }}
+                            <span class="ml-1 font-normal text-muted-foreground">
+                                ({{ itemsOnglet.length }})
+                            </span>
+                        </h2>
                         <p class="mt-0.5 text-xs text-muted-foreground">
-                            Seul le validateur désigné par le maker peut valider et archiver.
+                            {{ hintOnglet }}
                         </p>
                     </div>
 
                     <div
-                        v-if="!classeurs?.length"
-                        class="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 px-6 py-16 text-center dark:border-slate-600"
+                        v-if="!itemsOnglet.length"
+                        class="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 px-6 py-14 text-center dark:border-slate-600"
                     >
                         <div
                             class="mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary"
@@ -393,16 +495,13 @@ function horodatage(iso: string | null): string {
                             <FileSpreadsheet class="size-7" />
                         </div>
                         <p class="text-sm font-medium text-foreground">
-                            Aucune intégration en attente
-                        </p>
-                        <p class="mt-1 max-w-sm text-xs text-muted-foreground">
-                            Les intégrations apparaissent ici après transmission par un maker.
+                            {{ emptyOnglet }}
                         </p>
                     </div>
 
                     <ul v-else class="space-y-3">
                         <li
-                            v-for="c in classeurs"
+                            v-for="c in itemsOnglet"
                             :key="c.id"
                             class="group flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-primary/30 hover:shadow-md dark:border-slate-700 dark:bg-card lg:flex-row lg:items-center lg:justify-between lg:px-5"
                         >
@@ -419,7 +518,21 @@ function horodatage(iso: string | null): string {
                                         >
                                             Attente validation
                                         </span>
-                                        <h3 class="truncate text-base font-semibold text-foreground">
+                                        <span
+                                            v-if="ongletActif === 'a-valider'"
+                                            class="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+                                        >
+                                            À valider
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="rounded-full bg-amber-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 dark:bg-amber-950 dark:text-amber-200"
+                                        >
+                                            Mon envoi
+                                        </span>
+                                        <h3
+                                            class="truncate text-base font-semibold text-foreground"
+                                        >
                                             {{ c.nom_classeur }}
                                         </h3>
                                     </div>
@@ -449,11 +562,10 @@ function horodatage(iso: string | null): string {
                                             Maker : {{ c.maker_name }}
                                         </span>
                                         <span
-                                            v-if="canViewAllAgents"
                                             class="inline-flex items-center gap-1.5 text-muted-foreground"
                                         >
                                             <UserCheck class="size-3.5 text-primary" />
-                                            Checker : {{ c.checker_name }}
+                                            Checker : {{ c.checker_name ?? '—' }}
                                         </span>
                                         <span
                                             class="inline-flex items-center gap-1.5 text-muted-foreground"
@@ -475,6 +587,13 @@ function horodatage(iso: string | null): string {
                                     label="Résumé"
                                     :href="c.resume_url"
                                     variant="neutral"
+                                />
+                                <OdActionIcon
+                                    v-if="c.can_add_justificatifs"
+                                    :icon="Paperclip"
+                                    label="Ajouter une pièce"
+                                    :href="`${c.resume_url}?ajouter_pieces=1`"
+                                    variant="primary"
                                 />
                                 <OdActionIcon
                                     v-if="c.can_reject"
@@ -516,6 +635,52 @@ function horodatage(iso: string | null): string {
                             </div>
                         </li>
                     </ul>
+
+                    <!-- Admin : autres dossiers hors maker/checker -->
+                    <div
+                        v-if="ongletActif === 'a-valider' && canViewAllAgents && autresList.length"
+                        class="space-y-3 border-t border-border/80 pt-6"
+                    >
+                        <div>
+                            <h3 class="text-sm font-semibold text-foreground">
+                                Autres dossiers ({{ autresList.length }})
+                            </h3>
+                            <p class="mt-0.5 text-xs text-muted-foreground">
+                                Visibles grâce à votre accès admin.
+                            </p>
+                        </div>
+                        <ul class="space-y-3">
+                            <li
+                                v-for="c in autresList"
+                                :key="'autre-' + c.id"
+                                class="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-card lg:flex-row lg:items-center lg:justify-between lg:px-5"
+                            >
+                                <div class="min-w-0 flex-1">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span
+                                            class="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-700"
+                                        >
+                                            Attente
+                                        </span>
+                                        <h4 class="truncate font-semibold text-foreground">
+                                            {{ c.nom_classeur }}
+                                        </h4>
+                                    </div>
+                                    <p class="mt-2 text-sm text-muted-foreground">
+                                        Maker : {{ c.maker_name }} · Checker :
+                                        {{ c.checker_name ?? '—' }} ·
+                                        {{ c.numero_batch }}
+                                    </p>
+                                </div>
+                                <OdActionIcon
+                                    :icon="Eye"
+                                    label="Résumé"
+                                    :href="c.resume_url"
+                                    variant="neutral"
+                                />
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </section>
 
@@ -526,11 +691,12 @@ function horodatage(iso: string | null): string {
                 :confirm-label="confirmLabel"
                 :variant="confirmVariant"
                 :loading="confirmBusy"
+                :disabled="confirmKind === 'rejeter' && !rejectMotif.trim()"
                 @confirm="executerConfirm"
             >
                 <div v-if="confirmKind === 'rejeter'" class="space-y-2">
                     <Label for="reject-motif" class="text-sm font-medium text-foreground">
-                        Motif du rejet (optionnel)
+                        Motif du rejet <span class="text-rose-600">*</span>
                     </Label>
                     <textarea
                         id="reject-motif"
@@ -540,6 +706,9 @@ function horodatage(iso: string | null): string {
                         class="flex w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
                         placeholder="Ex. écart de montants, pièce manquante…"
                     />
+                    <p class="text-xs text-muted-foreground">
+                        Le maker verra ce motif dans ses brouillons.
+                    </p>
                 </div>
             </OdConfirmDialog>
         </div>

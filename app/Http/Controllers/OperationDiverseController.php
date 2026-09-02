@@ -370,7 +370,7 @@ class OperationDiverseController extends Controller
     public function pieceComptableResume(OdClasseur $classeur): InertiaResponse
     {
         $this->authorizeClasseur($classeur);
-        $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy']);
+        $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy', 'rejectedBy']);
 
         $parsed = $this->parseIntegration($classeur);
         $user = auth()->user();
@@ -463,6 +463,9 @@ class OperationDiverseController extends Controller
             'integrated_by_user_id' => $user->id,
             'assigned_checker_user_id' => $checker->id,
             'integration_status_code' => $response->status(),
+            'rejection_motif' => null,
+            'rejected_by_user_id' => null,
+            'rejected_at' => null,
         ];
 
         $flexBatch = $journalApi->extractBatchNo($response);
@@ -575,10 +578,15 @@ class OperationDiverseController extends Controller
         }
 
         $validated = $request->validate([
-            'motif' => ['nullable', 'string', 'max:2000'],
+            'motif' => ['required', 'string', 'max:2000'],
+        ], [
+            'motif.required' => 'Veuillez indiquer le motif du rejet.',
         ]);
 
-        $motif = trim((string) ($validated['motif'] ?? ''));
+        $motif = trim((string) $validated['motif']);
+        if ($motif === '') {
+            return $redirect->withErrors(['motif' => 'Veuillez indiquer le motif du rejet.']);
+        }
 
         $classeur->loadMissing('user', 'integratedBy');
         $makerForMail = $classeur->integratedBy ?? $classeur->user;
@@ -593,6 +601,9 @@ class OperationDiverseController extends Controller
             'archive_date' => null,
             'archived_at' => null,
             'integration_status_code' => null,
+            'rejection_motif' => $motif,
+            'rejected_by_user_id' => $user->id,
+            'rejected_at' => now(),
         ])->save();
 
         if ($makerForMail !== null) {
@@ -600,7 +611,7 @@ class OperationDiverseController extends Controller
                 $classeur->fresh(),
                 $user,
                 $makerForMail,
-                $motif !== '' ? $motif : null,
+                $motif,
             );
         }
 
@@ -638,6 +649,35 @@ class OperationDiverseController extends Controller
             ->with('success', $wasAttente
                 ? 'L’intégration a été mise en corbeille. Un SuperAdmin peut la restaurer.'
                 : 'Le brouillon a été mis en corbeille. Un SuperAdmin peut le restaurer.');
+    }
+
+    public function pieceComptableAjouterJustificatifs(Request $request, OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless(
+            $classeur->canAddJustificatifsBy($user),
+            403,
+            'Impossible d’ajouter des pièces à cette intégration.'
+        );
+
+        $request->validate([
+            'justificatifs' => ['required', 'array', 'min:1'],
+            'justificatifs.*.description' => ['required', 'string', 'max:1000'],
+            'justificatifs.*.file' => $this->justificatifFileRules(),
+        ], $this->odValidationMessages());
+
+        $uploadError = $this->validateOdStoreUploads($request);
+        if ($uploadError !== null) {
+            return $uploadError;
+        }
+
+        $this->appendJustificatifsFromRequest($request, $classeur);
+
+        return redirect()
+            ->route('operations-diverses.piece-comptable.resume', $classeur)
+            ->with('success', 'Pièce(s) justificative(s) ajoutée(s).');
     }
 
     public function corbeille(Request $request): InertiaResponse
@@ -763,7 +803,7 @@ class OperationDiverseController extends Controller
         unset($filters['user_id']);
 
         $query = OdClasseur::query()
-            ->with(['user', 'pieces'])
+            ->with(['user', 'pieces', 'rejectedBy'])
             ->where('statut', OdClasseur::STATUT_BROUILLON)
             ->where('user_id', $user->id);
 
@@ -818,7 +858,15 @@ class OperationDiverseController extends Controller
             ->where('statut', OdClasseur::STATUT_ATTENTE_VALIDATION);
 
         if (! $canViewAll) {
-            $query->where('assigned_checker_user_id', $user->id);
+            // Checker : dossiers à valider ; Maker : dossiers qu’il a intégrés
+            $query->where(function ($w) use ($user) {
+                $w->where('assigned_checker_user_id', $user->id)
+                    ->orWhere('integrated_by_user_id', $user->id)
+                    ->orWhere(function ($inner) use ($user) {
+                        $inner->whereNull('integrated_by_user_id')
+                            ->where('user_id', $user->id);
+                    });
+            });
         }
 
         if (! empty($filters['q'])) {
@@ -827,6 +875,7 @@ class OperationDiverseController extends Controller
                 $w->where('nom_classeur', 'like', $term)
                     ->orWhere('numero_batch', 'like', $term)
                     ->orWhereHas('user', fn ($u) => $u->where('name', 'like', $term))
+                    ->orWhereHas('integratedBy', fn ($u) => $u->where('name', 'like', $term))
                     ->orWhereHas('assignedChecker', fn ($u) => $u->where('name', 'like', $term));
             });
         }
@@ -933,14 +982,19 @@ class OperationDiverseController extends Controller
             'fichier' => $classeur->fichier_integration_original_name,
             'can_integrate' => $viewer && $classeur->canBeIntegratedBy($viewer),
             'can_validate_checker' => $viewer && $classeur->canBeValidatedBy($viewer),
+            'can_add_justificatifs' => $viewer && $classeur->canAddJustificatifsBy($viewer),
             'integrer_url' => route('operations-diverses.piece-comptable.integrer', $classeur),
             'valider_checker_url' => route('operations-diverses.piece-comptable.valider-checker', $classeur),
+            'ajouter_justificatifs_url' => route('operations-diverses.piece-comptable.ajouter-justificatifs', $classeur),
             'modifier_url' => $classeur->isEditable()
                 ? route('operations-diverses.piece-comptable.modifier', $classeur)
                 : null,
             'supprimer_url' => $classeur->isBrouillon()
                 ? route('operations-diverses.piece-comptable.destroy', $classeur)
                 : null,
+            'rejection_motif' => $classeur->rejection_motif,
+            'rejected_by_name' => $classeur->rejectedBy?->name,
+            'rejected_at' => optional($classeur->rejected_at)->toIso8601String(),
             'pieces' => $this->piecesJustificativesPayload($classeur),
         ];
     }
@@ -1194,6 +1248,9 @@ class OperationDiverseController extends Controller
             'created_at' => optional($classeur->created_at)->toIso8601String(),
             'justificatifs_count' => $classeur->pieces->count() + 1,
             'can_integrate' => $classeur->canBeIntegratedBy($viewer),
+            'rejection_motif' => $classeur->rejection_motif,
+            'rejected_by_name' => $classeur->rejectedBy?->name,
+            'rejected_at' => optional($classeur->rejected_at)->toIso8601String(),
             'resume_url' => route('operations-diverses.piece-comptable.resume', $classeur),
             'integrer_url' => route('operations-diverses.piece-comptable.integrer', $classeur),
             'supprimer_url' => route('operations-diverses.piece-comptable.destroy', $classeur),
@@ -1205,6 +1262,9 @@ class OperationDiverseController extends Controller
      */
     private function attenteValidationListPayload(OdClasseur $classeur, \App\Models\User $viewer): array
     {
+        $isChecker = (int) ($classeur->assigned_checker_user_id ?? 0) === (int) $viewer->id;
+        $isMaker = (int) ($classeur->integrated_by_user_id ?? $classeur->user_id ?? 0) === (int) $viewer->id;
+
         return [
             'id' => $classeur->id,
             'nom_classeur' => $classeur->nom_classeur,
@@ -1218,6 +1278,9 @@ class OperationDiverseController extends Controller
             'can_validate' => $classeur->canBeValidatedBy($viewer),
             'can_reject' => $classeur->canBeRejectedBy($viewer),
             'can_delete' => $classeur->canBeDeletedBy($viewer),
+            'can_add_justificatifs' => $classeur->canAddJustificatifsBy($viewer),
+            'is_mine_as_checker' => $isChecker,
+            'is_mine_as_maker' => $isMaker,
             'valider_checker_url' => route('operations-diverses.piece-comptable.valider-checker', $classeur),
             'rejeter_url' => route('operations-diverses.piece-comptable.rejeter-checker', $classeur),
             'supprimer_url' => route('operations-diverses.piece-comptable.destroy', $classeur),

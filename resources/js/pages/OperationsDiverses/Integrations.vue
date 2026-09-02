@@ -40,6 +40,9 @@ type ClasseurRow = {
     created_at: string | null;
     justificatifs_count: number;
     can_integrate: boolean;
+    rejection_motif?: string | null;
+    rejected_by_name?: string | null;
+    rejected_at?: string | null;
     resume_url: string;
     integrer_url: string;
     supprimer_url: string;
@@ -408,6 +411,19 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
                                     <p class="mt-0.5 text-xs text-muted-foreground">
                                         {{ c.justificatifs_count }} justificatif(s)
                                     </p>
+                                    <div
+                                        v-if="c.rejection_motif"
+                                        class="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                                    >
+                                        <span class="font-semibold">Motif du rejet :</span>
+                                        {{ c.rejection_motif }}
+                                        <span
+                                            v-if="c.rejected_by_name"
+                                            class="mt-0.5 block text-rose-700/80 dark:text-rose-300/80"
+                                        >
+                                            Par {{ c.rejected_by_name }}
+                                        </span>
+                                    </div>
 
                                     <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
                                         <span

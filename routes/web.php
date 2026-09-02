@@ -262,6 +262,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('operations-diverses/piece-comptable/{classeur}/integrer', [OperationDiverseController::class, 'pieceComptableIntegrer'])->name('operations-diverses.piece-comptable.integrer');
         Route::post('operations-diverses/piece-comptable/{classeur}/valider-checker', [OperationDiverseController::class, 'pieceComptableValiderChecker'])->name('operations-diverses.piece-comptable.valider-checker');
         Route::post('operations-diverses/piece-comptable/{classeur}/rejeter-checker', [OperationDiverseController::class, 'pieceComptableRejeterChecker'])->name('operations-diverses.piece-comptable.rejeter-checker');
+        Route::post('operations-diverses/piece-comptable/{classeur}/ajouter-justificatifs', [OperationDiverseController::class, 'pieceComptableAjouterJustificatifs'])->name('operations-diverses.piece-comptable.ajouter-justificatifs');
         Route::post('operations-diverses/piece-comptable/{classeur}/restaurer', [OperationDiverseController::class, 'pieceComptableRestore'])->withTrashed()->name('operations-diverses.piece-comptable.restaurer');
         Route::delete('operations-diverses/piece-comptable/{classeur}', [OperationDiverseController::class, 'pieceComptableDestroy'])->name('operations-diverses.piece-comptable.destroy');
         Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');

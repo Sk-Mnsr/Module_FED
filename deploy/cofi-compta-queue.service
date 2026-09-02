@@ -1,0 +1,39 @@
+# Worker file d'attente Laravel — COFI-COMPTA (mails, jobs)
+#
+# Installation (sur le serveur, en root) :
+#   1. Adapter WorkingDirectory, User et le chemin PHP ci-dessous
+#   2. sudo cp deploy/cofi-compta-queue.service /etc/systemd/system/
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now cofi-compta-queue
+#   5. sudo systemctl status cofi-compta-queue
+#
+# Commandes utiles :
+#   sudo systemctl restart cofi-compta-queue
+#   sudo journalctl -u cofi-compta-queue -f
+
+[Unit]
+Description=COFI-COMPTA queue worker
+After=network.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+# ← chemin réel de l'application sur le serveur
+WorkingDirectory=/var/www/Module_FED
+ExecStart=/usr/bin/php artisan queue:work database --sleep=3 --tries=3 --timeout=120 --max-time=3600
+Restart=always
+RestartSec=5
+Nice=10
+
+# Variables d'environnement (optionnel si .env suffit)
+Environment=APP_ENV=production
+
+# Logs
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cofi-compta-queue
+
+[Install]
+WantedBy=multi-user.target

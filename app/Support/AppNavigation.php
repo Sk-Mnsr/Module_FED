@@ -457,17 +457,20 @@ final class AppNavigation
             self::link('Automatique', '/operations-diverses/piece-comptable'),
             self::link('Manuelle', '/operations-diverses/piece-comptable/manuelle'),
             self::link('Mes brouillons', '/operations-diverses/integrations'),
-            self::link('En attente', '/operations-diverses/attente-validation'),
+        ];
+
+        $items = [
+            self::section('Intégration', 'layers', $integrationLinks),
+            self::link('En attente', '/operations-diverses/attente-validation', 'user-check'),
         ];
 
         if ($isSuperAdmin) {
-            $integrationLinks[] = self::link('Corbeille', '/operations-diverses/corbeille');
+            $items[] = self::link('Corbeille', '/operations-diverses/corbeille', 'trash-2');
         }
 
-        return [
-            self::section('Intégration', 'layers', $integrationLinks),
-            self::link('Archivage', '/operations-diverses/archivage', 'archive'),
-        ];
+        $items[] = self::link('Archivage', '/operations-diverses/archivage', 'archive');
+
+        return $items;
     }
 
     /**

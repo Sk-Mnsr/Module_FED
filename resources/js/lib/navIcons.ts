@@ -22,6 +22,8 @@ import {
     ShoppingCart,
     Table2,
     Tags,
+    Trash2,
+    UserCheck,
     Users,
     Wallet,
 } from 'lucide-vue-next';
@@ -52,6 +54,8 @@ const iconMap: Record<string, LucideIcon> = {
     wallet: Wallet,
     banknote: Banknote,
     archive: Archive,
+    'user-check': UserCheck,
+    'trash-2': Trash2,
 };
 
 export function resolveNavIcon(icon?: string | LucideIcon): LucideIcon | undefined {
