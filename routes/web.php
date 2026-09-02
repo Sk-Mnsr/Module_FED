@@ -264,6 +264,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('operations-diverses/piece-comptable/{classeur}/rejeter-checker', [OperationDiverseController::class, 'pieceComptableRejeterChecker'])->name('operations-diverses.piece-comptable.rejeter-checker');
         Route::post('operations-diverses/piece-comptable/{classeur}/ajouter-justificatifs', [OperationDiverseController::class, 'pieceComptableAjouterJustificatifs'])->name('operations-diverses.piece-comptable.ajouter-justificatifs');
         Route::post('operations-diverses/piece-comptable/{classeur}/restaurer', [OperationDiverseController::class, 'pieceComptableRestore'])->withTrashed()->name('operations-diverses.piece-comptable.restaurer');
+        Route::delete('operations-diverses/piece-comptable/{classeur}/definitif', [OperationDiverseController::class, 'pieceComptableForceDestroy'])->withTrashed()->name('operations-diverses.piece-comptable.force-destroy');
         Route::delete('operations-diverses/piece-comptable/{classeur}', [OperationDiverseController::class, 'pieceComptableDestroy'])->name('operations-diverses.piece-comptable.destroy');
         Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
         Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');

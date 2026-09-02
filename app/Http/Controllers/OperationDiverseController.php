@@ -702,6 +702,7 @@ class OperationDiverseController extends Controller
                 'deleted_at' => optional($c->deleted_at)->toIso8601String(),
                 'justificatifs_count' => ($c->pieces_count ?? 0) + 1,
                 'restaurer_url' => route('operations-diverses.piece-comptable.restaurer', $c),
+                'supprimer_definitif_url' => route('operations-diverses.piece-comptable.force-destroy', $c),
             ]);
 
         return Inertia::render('OperationsDiverses/Corbeille', [
@@ -731,6 +732,27 @@ class OperationDiverseController extends Controller
         return redirect()
             ->route($route)
             ->with('success', 'Intégration « '.$classeur->nom_classeur.' » restaurée.');
+    }
+
+    public function pieceComptableForceDestroy(OdClasseur $classeur): RedirectResponse
+    {
+        abort_unless(ModuleAccess::isAdminUser(auth()->user()), 403);
+
+        if (! $classeur->trashed()) {
+            return redirect()
+                ->route('operations-diverses.corbeille')
+                ->with('warning', 'Cette intégration n’est pas dans la corbeille.');
+        }
+
+        $nom = $classeur->nom_classeur;
+
+        $this->deleteClasseurStorage($classeur);
+        $classeur->pieces()->delete();
+        $classeur->forceDelete();
+
+        return redirect()
+            ->route('operations-diverses.corbeille')
+            ->with('success', 'Intégration « '.$nom.' » supprimée définitivement.');
     }
 
     public function pieceComptablePdf(Request $request, OdClasseur $classeur): BinaryFileResponse|StreamedResponse
@@ -1435,6 +1457,8 @@ class OperationDiverseController extends Controller
 
     private function genererPieceComptable(OdClasseur $classeur): void
     {
+        $classeur->loadMissing(['user', 'integratedBy', 'assignedChecker', 'validatedBy']);
+
         $parsed = $this->parseIntegration($classeur);
 
         $userId = '';
@@ -1446,8 +1470,14 @@ class OperationDiverseController extends Controller
         }
 
         $integratedAt = $classeur->integrated_at instanceof Carbon ? $classeur->integrated_at : now();
-        $makerName = $classeur->integratedBy?->name ?? $classeur->user?->name ?? '';
-        $checkerName = $classeur->validatedBy?->name ?? '';
+        $makerUser = $classeur->integratedBy ?? $classeur->user;
+        $checkerUser = $classeur->validatedBy;
+
+        $makerName = $makerUser?->name ?? '';
+        $checkerName = $checkerUser?->name ?? '';
+
+        $makerSignature = filled($makerUser?->signature) ? $makerUser->signature : null;
+        $checkerSignature = filled($checkerUser?->signature) ? $checkerUser->signature : null;
 
         $pdf = Pdf::loadView('operations-diverses.piece-comptable', [
             'classeur' => $classeur,
@@ -1457,6 +1487,8 @@ class OperationDiverseController extends Controller
             'heure' => $integratedAt->format('H:i:s'),
             'makerName' => $makerName,
             'checkerName' => $checkerName,
+            'makerSignature' => $makerSignature,
+            'checkerSignature' => $checkerSignature,
         ])->setPaper('a4', 'landscape');
 
         $path = 'od/classeurs/'.$classeur->id.'/piece/piece-'.Str::slug((string) $classeur->numero_piece, '_').'.pdf';

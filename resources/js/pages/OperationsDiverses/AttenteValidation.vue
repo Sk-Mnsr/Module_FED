@@ -672,12 +672,32 @@ function horodatage(iso: string | null): string {
                                         {{ c.numero_batch }}
                                     </p>
                                 </div>
-                                <OdActionIcon
-                                    :icon="Eye"
-                                    label="Résumé"
-                                    :href="c.resume_url"
-                                    variant="neutral"
-                                />
+                                <div
+                                    class="inline-flex shrink-0 items-center gap-0.5 self-end rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40 lg:self-center"
+                                    role="group"
+                                    aria-label="Actions admin"
+                                >
+                                    <OdActionIcon
+                                        :icon="Eye"
+                                        label="Résumé"
+                                        :href="c.resume_url"
+                                        variant="neutral"
+                                    />
+                                    <OdActionIcon
+                                        v-if="c.can_delete"
+                                        :icon="Trash2"
+                                        label="Supprimer"
+                                        variant="danger"
+                                        :disabled="
+                                            actionEnCours === c.id || validerEnCours === c.id
+                                        "
+                                        :loading="
+                                            actionEnCours === c.id &&
+                                            confirmKind === 'supprimer'
+                                        "
+                                        @click="supprimer(c)"
+                                    />
+                                </div>
                             </li>
                         </ul>
                     </div>

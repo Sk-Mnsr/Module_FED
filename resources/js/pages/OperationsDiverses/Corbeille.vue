@@ -24,6 +24,7 @@ type ClasseurRow = {
     deleted_at: string | null;
     justificatifs_count: number;
     restaurer_url: string;
+    supprimer_definitif_url: string;
 };
 
 const props = defineProps<{
@@ -37,9 +38,10 @@ const breadcrumbs = [
 
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
-const restoreEnCours = ref<number | null>(null);
+const actionEnCours = ref<number | null>(null);
 const showRestoreConfirm = ref(false);
-const restoreTarget = ref<ClasseurRow | null>(null);
+const showForceDeleteConfirm = ref(false);
+const actionTarget = ref<ClasseurRow | null>(null);
 const total = computed(() => props.classeurs?.length ?? 0);
 
 const statutLabel: Record<string, string> = {
@@ -49,27 +51,47 @@ const statutLabel: Record<string, string> = {
 };
 
 function restaurer(c: ClasseurRow) {
-    if (restoreEnCours.value !== null) return;
-    restoreTarget.value = c;
+    if (actionEnCours.value !== null) return;
+    actionTarget.value = c;
     showRestoreConfirm.value = true;
 }
 
 function confirmerRestaurer() {
-    const c = restoreTarget.value;
-    if (!c || restoreEnCours.value !== null) return;
-    restoreEnCours.value = c.id;
+    const c = actionTarget.value;
+    if (!c || actionEnCours.value !== null) return;
+    actionEnCours.value = c.id;
     router.post(
         c.restaurer_url,
         {},
         {
             preserveScroll: true,
             onFinish: () => {
-                restoreEnCours.value = null;
+                actionEnCours.value = null;
                 showRestoreConfirm.value = false;
-                restoreTarget.value = null;
+                actionTarget.value = null;
             },
         },
     );
+}
+
+function supprimerDefinitif(c: ClasseurRow) {
+    if (actionEnCours.value !== null) return;
+    actionTarget.value = c;
+    showForceDeleteConfirm.value = true;
+}
+
+function confirmerSupprimerDefinitif() {
+    const c = actionTarget.value;
+    if (!c || actionEnCours.value !== null) return;
+    actionEnCours.value = c.id;
+    router.delete(c.supprimer_definitif_url, {
+        preserveScroll: true,
+        onFinish: () => {
+            actionEnCours.value = null;
+            showForceDeleteConfirm.value = false;
+            actionTarget.value = null;
+        },
+    });
 }
 
 function dateFmt(iso: string | null): string {
@@ -105,7 +127,7 @@ function horodatage(iso: string | null): string {
                                 Corbeille
                             </h1>
                             <p class="text-sm text-muted-foreground">
-                                Intégrations OD supprimées — restauration SuperAdmin uniquement.
+                                Restaurer ou supprimer définitivement (SuperAdmin).
                             </p>
                         </div>
                     </div>
@@ -203,9 +225,21 @@ function horodatage(iso: string | null): string {
                                 :icon="RotateCcw"
                                 label="Restaurer"
                                 variant="success"
-                                :disabled="restoreEnCours === c.id"
-                                :loading="restoreEnCours === c.id"
+                                :disabled="actionEnCours === c.id"
+                                :loading="
+                                    actionEnCours === c.id && showRestoreConfirm
+                                "
                                 @click="restaurer(c)"
+                            />
+                            <OdActionIcon
+                                :icon="Trash2"
+                                label="Supprimer définitivement"
+                                variant="danger"
+                                :disabled="actionEnCours === c.id"
+                                :loading="
+                                    actionEnCours === c.id && showForceDeleteConfirm
+                                "
+                                @click="supprimerDefinitif(c)"
                             />
                         </div>
                     </li>
@@ -216,14 +250,27 @@ function horodatage(iso: string | null): string {
                 v-model:open="showRestoreConfirm"
                 title="Restaurer"
                 :description="
-                    restoreTarget
-                        ? `Voulez-vous vraiment restaurer « ${restoreTarget.nom_classeur} » ?`
+                    actionTarget
+                        ? `Voulez-vous vraiment restaurer « ${actionTarget.nom_classeur} » ?`
                         : ''
                 "
                 confirm-label="Restaurer"
                 variant="success"
-                :loading="restoreEnCours !== null"
+                :loading="actionEnCours !== null && showRestoreConfirm"
                 @confirm="confirmerRestaurer"
+            />
+            <OdConfirmDialog
+                v-model:open="showForceDeleteConfirm"
+                title="Supprimer définitivement"
+                :description="
+                    actionTarget
+                        ? `Voulez-vous vraiment supprimer définitivement « ${actionTarget.nom_classeur} » ?\nCette action est irréversible (fichiers inclus).`
+                        : ''
+                "
+                confirm-label="Supprimer définitivement"
+                variant="danger"
+                :loading="actionEnCours !== null && showForceDeleteConfirm"
+                @confirm="confirmerSupprimerDefinitif"
             />
         </div>
     </AppLayout>

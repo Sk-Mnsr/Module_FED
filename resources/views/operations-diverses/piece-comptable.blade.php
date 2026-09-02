@@ -39,7 +39,9 @@
         table.lines td { font-size: 8px; }
         .num { text-align: right; }
         .footer { width: 100%; margin-top: 34px; }
-        .footer td { font-weight: bold; }
+        .footer td { font-weight: bold; vertical-align: top; }
+        .sig-img { max-height: 46px; max-width: 170px; margin-top: 6px; }
+        .sig-wrap-right { text-align: right; margin-top: 6px; }
     </style>
 </head>
 <body>
@@ -121,8 +123,22 @@
 
     <table class="footer">
         <tr>
-            <td style="width:50%;">Maker : {{ $makerName ?? '' }}</td>
-            <td style="width:50%; text-align:right;">Checker : {{ $checkerName ?? '' }}</td>
+            <td style="width:50%;">
+                Maker : {{ $makerName ?? '' }}
+                @if(! empty($makerSignature))
+                    <div>
+                        <img class="sig-img" src="{{ $makerSignature }}" alt="Signature maker">
+                    </div>
+                @endif
+            </td>
+            <td style="width:50%; text-align:right;">
+                Checker : {{ $checkerName ?? '' }}
+                @if(! empty($checkerSignature))
+                    <div class="sig-wrap-right">
+                        <img class="sig-img" src="{{ $checkerSignature }}" alt="Signature checker">
+                    </div>
+                @endif
+            </td>
         </tr>
     </table>
 </body>
