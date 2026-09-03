@@ -1090,16 +1090,25 @@ class OperationDiverseController extends Controller
      */
     private function apercuPayload(array $parsed): array
     {
-        $rows = array_map(static function (array $row): array {
+        $toUtf8 = static function (string $v): string {
+            if (mb_check_encoding($v, 'UTF-8')) {
+                return $v;
+            }
+            $c = mb_convert_encoding($v, 'UTF-8', 'Windows-1252');
+
+            return ($c !== false && $c !== '') ? $c : mb_convert_encoding($v, 'UTF-8', 'ISO-8859-1');
+        };
+
+        $rows = array_map(static function (array $row) use ($toUtf8): array {
             return [
-                'numero' => $row['numero'] ?? '',
-                'code_agence' => $row['code_agence'] ?? '',
-                'no_compte' => $row['no_compte'] ?? '',
-                'sens' => $row['_sens'] ?? ($row['sens'] ?? ''),
+                'numero' => $toUtf8((string) ($row['numero'] ?? '')),
+                'code_agence' => $toUtf8((string) ($row['code_agence'] ?? '')),
+                'no_compte' => $toUtf8((string) ($row['no_compte'] ?? '')),
+                'sens' => $toUtf8((string) ($row['_sens'] ?? ($row['sens'] ?? ''))),
                 'montant' => $row['_montant'] ?? 0,
-                'code_operation' => $row['code_operation'] ?? '',
-                'libelle_ecriture' => $row['libelle_ecriture'] ?? '',
-                'date_de_valeur' => $row['date_de_valeur'] ?? '',
+                'code_operation' => $toUtf8((string) ($row['code_operation'] ?? '')),
+                'libelle_ecriture' => $toUtf8((string) ($row['libelle_ecriture'] ?? '')),
+                'date_de_valeur' => $toUtf8((string) ($row['date_de_valeur'] ?? '')),
             ];
         }, $parsed['rows']);
 
@@ -1476,10 +1485,26 @@ class OperationDiverseController extends Controller
         $makerName = $makerUser?->name ?? '';
         $checkerName = $checkerUser?->name ?? '';
 
-        $makerSignature = filled($makerUser?->signature) ? $makerUser->signature : null;
-        $checkerSignature = filled($checkerUser?->signature) ? $checkerUser->signature : null;
+        $extractSignatureForDomPdf = static function (?string $signature): ?string {
+            if (! filled($signature)) {
+                return null;
+            }
 
-        $pdf = Pdf::loadView('operations-diverses.piece-comptable', [
+            // DomPDF gère mieux les images bitmap via data URI.
+            // On évite de tenter le rendu de types inconnus (ex: SVG).
+            if (! is_string($signature)) {
+                return null;
+            }
+
+            return preg_match('/^data:image\/(png|jpe?g);base64,/', $signature) === 1
+                ? $signature
+                : null;
+        };
+
+        $makerSignature = $extractSignatureForDomPdf($makerUser?->signature);
+        $checkerSignature = $extractSignatureForDomPdf($checkerUser?->signature);
+
+        $viewData = [
             'classeur' => $classeur,
             'parsed' => $parsed,
             'userId' => $userId,
@@ -1489,10 +1514,30 @@ class OperationDiverseController extends Controller
             'checkerName' => $checkerName,
             'makerSignature' => $makerSignature,
             'checkerSignature' => $checkerSignature,
-        ])->setPaper('a4', 'landscape');
+        ];
+
+        try {
+            $pdf = Pdf::loadView('operations-diverses.piece-comptable', $viewData)
+                ->setPaper('a4', 'landscape');
+
+            $pdfOutput = $pdf->output();
+        } catch (\Throwable $e) {
+            // Si l'image signature (data URI) pose problème à DomPDF en production,
+            // on retente sans signatures pour éviter un 500 bloquant.
+            report($e);
+
+            $viewData['makerSignature'] = null;
+            $viewData['checkerSignature'] = null;
+
+            $pdf = Pdf::loadView('operations-diverses.piece-comptable', $viewData)
+                ->setPaper('a4', 'landscape');
+
+            $pdfOutput = $pdf->output();
+        }
 
         $path = 'od/classeurs/'.$classeur->id.'/piece/piece-'.Str::slug((string) $classeur->numero_piece, '_').'.pdf';
-        Storage::disk('local')->put($path, $pdf->output());
+        Storage::disk('local')->makeDirectory((string) dirname($path));
+        Storage::disk('local')->put($path, $pdfOutput);
 
         $classeur->forceFill(['piece_pdf_path' => $path])->save();
     }

@@ -45,6 +45,14 @@ final class OdIntegrationCsv
         // Retire un éventuel BOM UTF-8.
         $contents = preg_replace('/^\xEF\xBB\xBF/', '', $contents) ?? $contents;
 
+        // Convertit en UTF-8 si le fichier est en Latin-1 / Windows-1252 (fichiers Excel français).
+        if (! mb_check_encoding($contents, 'UTF-8')) {
+            $converted = mb_convert_encoding($contents, 'UTF-8', 'Windows-1252');
+            if ($converted !== false && $converted !== '') {
+                $contents = $converted;
+            }
+        }
+
         // Détection automatique du séparateur (le fichier peut utiliser « , » ou « ; »).
         $delimiter = self::detectDelimiter($contents, (string) ($c['csv_delimiter'] ?? ';'));
 

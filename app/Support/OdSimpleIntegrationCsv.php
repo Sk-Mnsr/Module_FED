@@ -253,6 +253,14 @@ final class OdSimpleIntegrationCsv
     {
         $contents = preg_replace('/^\xEF\xBB\xBF/', '', $contents) ?? $contents;
 
+        // Conversion Latin-1 / Windows-1252 → UTF-8 si nécessaire (fichiers Excel français).
+        if (! mb_check_encoding($contents, 'UTF-8')) {
+            $converted = mb_convert_encoding($contents, 'UTF-8', 'Windows-1252');
+            if ($converted !== false && $converted !== '') {
+                $contents = $converted;
+            }
+        }
+
         $handle = fopen('php://temp', 'r+');
         if ($handle === false) {
             return [];
