@@ -3,6 +3,15 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
 import { GitCompare, History, Users } from 'lucide-vue-next';
 
+withDefaults(
+    defineProps<{
+        canManagePartenaires?: boolean;
+    }>(),
+    {
+        canManagePartenaires: false,
+    },
+);
+
 const breadcrumbs = [
     { title: 'Reconciliation Flexcube', href: '/reconciliation-flexcube' },
 ];
@@ -60,6 +69,7 @@ const breadcrumbs = [
                 </Link>
 
                 <Link
+                    v-if="canManagePartenaires"
                     href="/reconciliation-flexcube/partenaires"
                     class="group rounded-xl border border-border bg-card p-5 shadow-sm transition hover:border-cyan-300 hover:shadow-md"
                 >
@@ -70,7 +80,7 @@ const breadcrumbs = [
                         <div>
                             <h2 class="font-semibold text-foreground">Partenaires</h2>
                             <p class="mt-0.5 text-sm text-muted-foreground">
-                                Identifiant, nom et icône des partenaires.
+                                Identifiant, nom, icône et statut des partenaires.
                             </p>
                         </div>
                     </div>

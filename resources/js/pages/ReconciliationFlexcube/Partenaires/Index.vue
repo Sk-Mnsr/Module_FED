@@ -16,6 +16,7 @@ type PartenaireRow = {
     nom: string;
     icone: string | null;
     icone_url: string | null;
+    actif: boolean;
 };
 
 const props = defineProps<{
@@ -36,6 +37,7 @@ const columns = [
     { key: 'icone', title: 'Icône' },
     { key: 'identifiant', title: 'Identifiant', sortable: true },
     { key: 'nom', title: 'Nom', sortable: true },
+    { key: 'statut', title: 'Statut' },
     { key: 'actions', title: 'Actions' },
 ];
 
@@ -55,12 +57,14 @@ const form = ref<{
     nom: string;
     icone: File | null;
     icone_url: string | null;
+    actif: boolean;
 }>({
     id: null,
     identifiant: '',
     nom: '',
     icone: null,
     icone_url: null,
+    actif: true,
 });
 
 function resetForm() {
@@ -70,6 +74,7 @@ function resetForm() {
         nom: '',
         icone: null,
         icone_url: null,
+        actif: true,
     };
     iconPreview.value = null;
     errors.value = {};
@@ -90,6 +95,7 @@ function openEditModal(row: PartenaireRow) {
         nom: row.nom,
         icone: null,
         icone_url: row.icone_url,
+        actif: row.actif,
     };
     iconPreview.value = row.icone_url;
     errors.value = {};
@@ -115,6 +121,14 @@ function deletePartenaire(id: number) {
     router.delete(`/reconciliation-flexcube/partenaires/${id}`, { preserveScroll: true });
 }
 
+function toggleActif(row: PartenaireRow) {
+    const next = row.actif ? 'désactiver' : 'activer';
+    if (!confirm(`${next.charAt(0).toUpperCase() + next.slice(1)} le partenaire « ${row.nom} » ?`)) {
+        return;
+    }
+    router.patch(`/reconciliation-flexcube/partenaires/${row.id}/actif`, {}, { preserveScroll: true });
+}
+
 function onPageChange(pageNumber: number) {
     router.get('/reconciliation-flexcube/partenaires', { page: pageNumber }, {
         preserveState: true,
@@ -129,6 +143,7 @@ function submitForm() {
     const payload: Record<string, unknown> = {
         identifiant: form.value.identifiant.trim(),
         nom: form.value.nom.trim(),
+        actif: form.value.actif ? 1 : 0,
     };
     if (form.value.icone) {
         payload.icone = form.value.icone;
@@ -180,12 +195,11 @@ function submitForm() {
                     <div>
                         <h1 class="text-xl font-semibold text-foreground">Partenaires</h1>
                         <p class="mt-1 text-sm text-muted-foreground">
-                            Référentiel des partenaires Flexcube. L’identifiant doit correspondre à une clé
-                            gateway (<span class="font-mono">WAVE</span>,
+                            Référentiel des partenaires Flexcube (réservé aux administrateurs).
+                            Un partenaire désactivé n’apparaît plus dans Réconciliation.
+                            L’identifiant doit correspondre à une clé gateway
+                            (<span class="font-mono">WAVE</span>,
                             <span class="font-mono">ORANGE_AGENCE</span>,
-                            <span class="font-mono">WIZZ</span>,
-                            <span class="font-mono">WAVE_AGENCE</span>,
-                            <span class="font-mono">RIA_AGENCE</span>,
                             <span class="font-mono">ORANGE_USSD</span>…).
                         </p>
                     </div>
@@ -212,6 +226,7 @@ function submitForm() {
                             :src="item.icone_url"
                             :alt="item.nom"
                             class="size-9 rounded-md border border-border object-contain bg-white p-0.5"
+                            :class="item.actif ? '' : 'opacity-40'"
                         />
                         <div
                             v-else
@@ -222,7 +237,24 @@ function submitForm() {
                     </div>
                 </template>
                 <template #item.identifiant="{ item }">
-                    <span class="font-mono text-sm">{{ item.identifiant }}</span>
+                    <span class="font-mono text-sm" :class="item.actif ? '' : 'text-muted-foreground'">
+                        {{ item.identifiant }}
+                    </span>
+                </template>
+                <template #item.statut="{ item }">
+                    <button
+                        type="button"
+                        class="rounded px-1.5 py-0.5 text-xs font-medium transition"
+                        :class="
+                            item.actif
+                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        "
+                        :title="item.actif ? 'Cliquer pour désactiver' : 'Cliquer pour activer'"
+                        @click="toggleActif(item)"
+                    >
+                        {{ item.actif ? 'Activé' : 'Désactivé' }}
+                    </button>
                 </template>
                 <template #item.actions="{ item }">
                     <div class="flex items-center gap-1">
@@ -264,7 +296,6 @@ function submitForm() {
                             required
                             autocomplete="off"
                             placeholder="Ex. WAVE, ORANGE_AGENCE"
-           
                         />
                         <InputError :message="errors.identifiant" />
                     </div>
@@ -279,6 +310,18 @@ function submitForm() {
                             placeholder="Nom du partenaire"
                         />
                         <InputError :message="errors.nom" />
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <input
+                            id="actif"
+                            v-model="form.actif"
+                            type="checkbox"
+                            class="size-4 rounded border-input"
+                        />
+                        <Label for="actif" class="font-normal">
+                            Activé (visible dans Réconciliation)
+                        </Label>
                     </div>
 
                     <div class="space-y-2">

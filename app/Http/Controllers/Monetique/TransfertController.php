@@ -85,20 +85,48 @@ class TransfertController extends Controller
             ]);
 
         $referenceCourante = trim($request->query('reference_facture', ''));
+        $lotParam = $request->query('numero_lot');
+        $lotCourant = is_string($lotParam) ? $lotParam : null;
 
+        $lots = [];
         $cartesLot = [];
         if ($referenceCourante !== '') {
-            $lotQuery = CoficarteCard::query()
+            $baseQuery = CoficarteCard::query()
                 ->where('status', CoficarteCard::STATUS_EN_STOCK)
                 ->where('reference_facture', $referenceCourante);
-            static::applyTransfertCartesEligiblesScope($lotQuery, $user);
+            static::applyTransfertCartesEligiblesScope($baseQuery, $user);
+
+            $lots = $baseQuery->clone()
+                ->select('numero_lot')
+                ->selectRaw('count(*) as cards_count')
+                ->groupBy('numero_lot')
+                ->orderByRaw('case when numero_lot is null or numero_lot = \'\' then 1 else 0 end')
+                ->orderBy('numero_lot')
+                ->get()
+                ->map(fn ($r) => [
+                    'value' => filled($r->numero_lot) ? (string) $r->numero_lot : '__sans__',
+                    'label' => filled($r->numero_lot) ? (string) $r->numero_lot : 'Sans numéro de lot',
+                    'cards_count' => (int) $r->cards_count,
+                ])
+                ->values()
+                ->all();
+
+            $lotQuery = $baseQuery->clone();
+            if ($lotCourant === '__sans__') {
+                $lotQuery->where(function (Builder $q) {
+                    $q->whereNull('numero_lot')->orWhere('numero_lot', '');
+                });
+            } elseif (filled($lotCourant)) {
+                $lotQuery->where('numero_lot', $lotCourant);
+            }
 
             $cartesLot = $lotQuery
                 ->orderBy('numero_carte')
-                ->get(['id', 'numero_carte', 'reference_facture', 'prix_vente', 'date_expiration'])
+                ->get(['id', 'numero_carte', 'numero_lot', 'reference_facture', 'prix_vente', 'date_expiration'])
                 ->map(fn (CoficarteCard $c) => [
                     'id' => $c->id,
                     'numero_carte' => $c->numero_carte,
+                    'numero_lot' => $c->numero_lot,
                     'reference_facture' => $c->reference_facture,
                     'prix_vente' => $c->prix_vente,
                     'expiration' => $c->date_expiration?->format('d/m/Y'),
@@ -109,8 +137,10 @@ class TransfertController extends Controller
 
         return Inertia::render('monetique/Transferts/Nouveau', [
             'references' => $references,
+            'lots' => $lots,
             'cartesLot' => $cartesLot,
             'referenceCourante' => $referenceCourante !== '' ? $referenceCourante : null,
+            'lotCourant' => $lotCourant,
             'chefsReceveurs' => $chefsReceveurs,
             'supplyRequest' => $supplyRequestPayload,
         ]);

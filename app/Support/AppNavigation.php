@@ -148,7 +148,15 @@ final class AppNavigation
             $groups[] = ['module' => 'od', 'label' => 'Opérations diverses', 'items' => $odItems];
         }
 
-        $reconciliationItems = self::reconciliationItems($modules);
+        $podItems = self::podItems($modules);
+        if ($podItems !== []) {
+            $groups[] = ['module' => 'pod', 'label' => 'Produits OD (POD)', 'items' => $podItems];
+        }
+
+        $reconciliationItems = self::reconciliationItems(
+            $modules,
+            ModuleAccess::canAdministerSystem($user),
+        );
         if ($reconciliationItems !== []) {
             $groups[] = [
                 'module' => 'reconciliation',
@@ -346,6 +354,7 @@ final class AppNavigation
             ...($canResponsableMonetique ? [
                 self::link('Ajouter', '/monetique/cartes/ajouter'),
                 self::link('Modifier prix', '/monetique/cartes/modifier-prix'),
+                self::link('Modifier lots', '/monetique/cartes/modifier-lots'),
             ] : []),
             self::link('En stock', '/monetique/cartes/en-stock'),
             self::link('Vendues', '/monetique/cartes/vendus'),
@@ -477,17 +486,39 @@ final class AppNavigation
      * @param  list<string>  $modules
      * @return list<array<string, mixed>>
      */
-    private static function reconciliationItems(array $modules): array
+    private static function podItems(array $modules): array
+    {
+        if (! in_array('pod', $modules, true)) {
+            return [];
+        }
+
+        return [
+            self::link('Nouvelle opération', '/pod/operations/create', 'plus-circle'),
+            self::link('Opérations', '/pod/operations', 'list'),
+            self::link('Produits', '/pod/produits', 'package'),
+        ];
+    }
+
+    /**
+     * @param  list<string>  $modules
+     * @return list<array<string, mixed>>
+     */
+    private static function reconciliationItems(array $modules, bool $canManagePartenaires = false): array
     {
         if (! in_array('reconciliation', $modules, true)) {
             return [];
         }
 
-        return [
+        $items = [
             self::link('Reconciliation', '/reconciliation-flexcube/reconciliation', 'git-compare'),
             self::link('Historique', '/reconciliation-flexcube/historique', 'history'),
-            self::link('Partenaires', '/reconciliation-flexcube/partenaires', 'users'),
         ];
+
+        if ($canManagePartenaires) {
+            $items[] = self::link('Partenaires', '/reconciliation-flexcube/partenaires', 'users');
+        }
+
+        return $items;
     }
 
     /**

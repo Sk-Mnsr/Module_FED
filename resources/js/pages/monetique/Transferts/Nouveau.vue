@@ -37,9 +37,16 @@ type RefFactureRow = {
     cards_count: number;
 };
 
+type LotRow = {
+    value: string;
+    label: string;
+    cards_count: number;
+};
+
 type CarteLotRow = {
     id: number;
     numero_carte: string;
+    numero_lot?: string | null;
     reference_facture: string;
     prix_vente: number;
     expiration?: string | null;
@@ -50,6 +57,7 @@ type SelectedTransfertCarte = {
     id: number;
     numero_carte: string;
     reference_facture: string;
+    numero_lot?: string | null;
     /** Prix au moment de l’ajout à la sélection (affichage « prix actuel »). */
     prix_actuel: number;
     /** Prix envoyé au serveur (modifiable par le responsable monétique). */
@@ -62,6 +70,7 @@ const toSelectedRow = (c: CarteLotRow): SelectedTransfertCarte => ({
     id: c.id,
     numero_carte: c.numero_carte,
     reference_facture: c.reference_facture,
+    numero_lot: c.numero_lot ?? null,
     prix_actuel: c.prix_vente,
     prix_vente: c.prix_vente,
     expiration: c.expiration,
@@ -71,14 +80,18 @@ const toSelectedRow = (c: CarteLotRow): SelectedTransfertCarte => ({
 const props = withDefaults(
     defineProps<{
         references?: RefFactureRow[];
+        lots?: LotRow[];
         cartesLot?: CarteLotRow[];
         referenceCourante: string | null;
+        lotCourant?: string | null;
         chefsReceveurs?: ChefReceveur[];
         supplyRequest?: SupplyRequestPayload;
     }>(),
     {
         references: () => [],
+        lots: () => [],
         cartesLot: () => [],
+        lotCourant: null,
         chefsReceveurs: () => [],
         supplyRequest: null,
     },
@@ -87,6 +100,7 @@ const props = withDefaults(
 const page = usePage();
 const canResponsableMonetique = computed(() => page.props.auth.canResponsableMonetique === true);
 const referenceSelection = ref(props.referenceCourante ?? '');
+const lotSelection = ref(props.lotCourant ?? '');
 /** Cartes retenues pour le transfert (plusieurs factures possibles). */
 const selection = ref<Map<number, SelectedTransfertCarte>>(new Map());
 
@@ -94,6 +108,13 @@ watch(
     () => props.referenceCourante,
     (v) => {
         referenceSelection.value = v ?? '';
+    },
+);
+
+watch(
+    () => props.lotCourant,
+    (v) => {
+        lotSelection.value = v ?? '';
     },
 );
 
@@ -147,11 +168,17 @@ const updateSelectionPrix = (id: number, raw: string | number) => {
 
 const formatCfa = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
 
-const reloadFactureQuery = () => {
+const reloadFactureQuery = (resetLot = false) => {
     const q = referenceSelection.value.trim();
     const params: Record<string, string | number> = {};
     if (q) {
         params.reference_facture = q;
+    }
+    if (!resetLot && lotSelection.value) {
+        params.numero_lot = lotSelection.value;
+    }
+    if (resetLot) {
+        lotSelection.value = '';
     }
     if (props.supplyRequest) {
         params.supply_request_id = props.supplyRequest.id;
@@ -159,8 +186,16 @@ const reloadFactureQuery = () => {
     router.get('/monetique/transferts/nouveau', params, {
         preserveState: true,
         replace: true,
-        only: ['references', 'cartesLot', 'referenceCourante', 'chefsReceveurs', 'supplyRequest'],
+        only: ['references', 'lots', 'cartesLot', 'referenceCourante', 'lotCourant', 'chefsReceveurs', 'supplyRequest'],
     });
+};
+
+const onFactureChange = () => {
+    reloadFactureQuery(true);
+};
+
+const onLotChange = () => {
+    reloadFactureQuery(false);
 };
 
 const toggleLotCard = (c: CarteLotRow, checked: boolean) => {
@@ -326,9 +361,9 @@ const submit = () => {
                     <div class="flex items-start gap-2">
                         <FileText class="h-5 w-5 text-violet-600 mt-0.5 shrink-0" />
                         <div>
-                            <p class="text-sm font-semibold text-gray-800">Étape 1 — Par facture</p>
+                            <p class="text-sm font-semibold text-gray-800">Étape 1 — Par facture et lot</p>
                             <p class="text-xs text-gray-500 mt-0.5">
-                                Un lot correspond aux cartes disponibles au siège pour cette référence (hors transfert en attente).
+                                Choisissez une facture, puis un lot pour afficher les cartes disponibles au siège (hors transfert en attente).
                             </p>
                         </div>
                     </div>
@@ -337,19 +372,36 @@ const submit = () => {
                         Aucune carte éligible avec une référence de facture.
                     </div>
 
-                    <div v-else class="space-y-2 max-w-xl">
-                        <Label for="reference_facture" class="text-xs font-medium text-gray-600">Référence facture</Label>
-                        <select
-                            id="reference_facture"
-                            v-model="referenceSelection"
-                            class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                            @change="reloadFactureQuery"
-                        >
-                            <option value="">— Choisir une facture pour afficher les cartes —</option>
-                            <option v-for="r in references" :key="r.reference_facture" :value="r.reference_facture">
-                                {{ r.reference_facture }} ({{ r.cards_count }} carte(s) éligible(s))
-                            </option>
-                        </select>
+                    <div v-else class="grid grid-cols-1 gap-4 max-w-3xl sm:grid-cols-2">
+                        <div class="space-y-2">
+                            <Label for="reference_facture" class="text-xs font-medium text-gray-600">Référence facture</Label>
+                            <select
+                                id="reference_facture"
+                                v-model="referenceSelection"
+                                class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                                @change="onFactureChange"
+                            >
+                                <option value="">— Choisir une facture —</option>
+                                <option v-for="r in references" :key="r.reference_facture" :value="r.reference_facture">
+                                    {{ r.reference_facture }} ({{ r.cards_count }} carte(s) éligible(s))
+                                </option>
+                            </select>
+                        </div>
+                        <div class="space-y-2">
+                            <Label for="numero_lot" class="text-xs font-medium text-gray-600">Numéro de lot</Label>
+                            <select
+                                id="numero_lot"
+                                v-model="lotSelection"
+                                class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:bg-gray-50 disabled:text-gray-400"
+                                :disabled="!referenceCourante || lots.length === 0"
+                                @change="onLotChange"
+                            >
+                                <option value="">— Tous les lots —</option>
+                                <option v-for="l in lots" :key="l.value" :value="l.value">
+                                    {{ l.label }} ({{ l.cards_count }})
+                                </option>
+                            </select>
+                        </div>
                     </div>
 
                     <div v-if="referenceCourante && cartesLot.length" class="space-y-2">
@@ -360,7 +412,11 @@ const submit = () => {
                                     type="checkbox"
                                     class="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
                                 />
-                                Tout prendre pour cette facture ({{ cartesLot.length }})
+                                {{
+                                    lotCourant
+                                        ? `Tout prendre pour ce lot (${cartesLot.length})`
+                                        : `Tout prendre pour cette facture (${cartesLot.length})`
+                                }}
                             </label>
                         </div>
                         <div class="overflow-x-auto rounded-lg border border-gray-200 max-h-[320px] overflow-y-auto">
@@ -369,6 +425,7 @@ const submit = () => {
                                     <tr>
                                         <th class="w-10 px-3 py-2"></th>
                                         <th class="px-3 py-2">Numéro</th>
+                                        <th class="px-3 py-2">Lot</th>
                                         <th class="px-3 py-2 text-right">Prix</th>
                                         <th class="px-3 py-2 min-w-[190px]">Expiration</th>
                                     </tr>
@@ -386,6 +443,9 @@ const submit = () => {
                                         <td class="px-3 py-2 font-mono tabular-nums text-gray-900">
                                             {{ formatCardNumberDisplay(c.numero_carte) }}
                                         </td>
+                                        <td class="px-3 py-2 text-xs text-gray-600">
+                                            {{ c.numero_lot || '—' }}
+                                        </td>
                                         <td class="px-3 py-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
                                             {{ formatCfa(c.prix_vente) }}
                                         </td>
@@ -400,7 +460,7 @@ const submit = () => {
                             </table>
                         </div>
                         <p class="text-xs text-gray-500">
-                            Changez de facture ci-dessus pour ajouter d’autres cartes à la sélection ci-contre.
+                            Changez de facture ou de lot ci-dessus pour ajouter d’autres cartes à la sélection.
                         </p>
                     </div>
 

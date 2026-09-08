@@ -257,14 +257,53 @@ function dayFolderLabel(dept: string, year: string, month: string, day: string):
     return first?.folder_labels?.day ?? fallback;
 }
 
-function toggleExpand(id: string) {
-    const next = new Set(expanded.value);
-    if (next.has(id)) {
-        next.delete(id);
-    } else {
-        next.add(id);
+function findNodeById(root: TreeNode, id: string): TreeNode | null {
+    if (root.id === id) return root;
+    for (const child of root.children) {
+        const found = findNodeById(child, id);
+        if (found) return found;
     }
-    expanded.value = next;
+    return null;
+}
+
+function findPathIds(root: TreeNode, id: string, path: string[] = []): string[] | null {
+    const next = [...path, root.id];
+    if (root.id === id) return next;
+    for (const child of root.children) {
+        const found = findPathIds(child, id, next);
+        if (found) return found;
+    }
+    return null;
+}
+
+function collectDescendantIds(node: TreeNode, into: Set<string> = new Set()): Set<string> {
+    for (const child of node.children) {
+        into.add(child.id);
+        collectDescendantIds(child, into);
+    }
+    return into;
+}
+
+/** À l’ouverture d’un dossier : ne garde ouvert que le chemin jusqu’à ce dossier. */
+function expandWithAccordion(id: string) {
+    const path = findPathIds(treeRoot.value, id);
+    expanded.value = new Set(path ?? ['root', id]);
+}
+
+function toggleExpand(id: string) {
+    if (expanded.value.has(id)) {
+        const next = new Set(expanded.value);
+        next.delete(id);
+        const node = findNodeById(treeRoot.value, id);
+        if (node) {
+            for (const desc of collectDescendantIds(node)) {
+                next.delete(desc);
+            }
+        }
+        expanded.value = next;
+        return;
+    }
+    expandWithAccordion(id);
 }
 
 function expandAll() {
@@ -297,12 +336,8 @@ function onNodeClick(node: FlatNode) {
         selectNode(node);
         return;
     }
-    if (node.children.length) {
-        if (!expanded.value.has(node.id)) {
-            const next = new Set(expanded.value);
-            next.add(node.id);
-            expanded.value = next;
-        }
+    if (node.children.length && !expanded.value.has(node.id)) {
+        expandWithAccordion(node.id);
     }
     selectNode(node);
 }

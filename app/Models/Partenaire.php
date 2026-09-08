@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -11,15 +12,28 @@ class Partenaire extends Model
         'identifiant',
         'nom',
         'icone',
+        'actif',
     ];
 
     protected $appends = [
         'icone_url',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'actif' => 'boolean',
+        ];
+    }
+
     public function reconciliationRuns(): HasMany
     {
         return $this->hasMany(ReconciliationRun::class);
+    }
+
+    public function scopeActifs(Builder $query): Builder
+    {
+        return $query->where('actif', true);
     }
 
     public function getIconeUrlAttribute(): ?string

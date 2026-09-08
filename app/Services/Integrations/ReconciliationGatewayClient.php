@@ -116,7 +116,7 @@ class ReconciliationGatewayClient
     }
 
     /**
-     * @param  list<UploadedFile>  $files
+     * @param  list<UploadedFile>|list<array{absolute_path: string, original_name: string}>  $files
      * @return array<string, mixed>
      */
     public function charger(string $partenaireKey, array $files, string $dateDebut, string $dateFin): array
@@ -136,11 +136,17 @@ class ReconciliationGatewayClient
         $request = $this->http()->asMultipart();
 
         foreach ($files as $file) {
-            $request = $request->attach(
-                'files',
-                file_get_contents($file->getRealPath()) ?: '',
-                $file->getClientOriginalName()
-            );
+            if ($file instanceof UploadedFile) {
+                $contents = file_get_contents($file->getRealPath()) ?: '';
+                $name = $file->getClientOriginalName();
+            } elseif (is_array($file) && filled($file['absolute_path'] ?? null)) {
+                $contents = file_get_contents((string) $file['absolute_path']) ?: '';
+                $name = (string) ($file['original_name'] ?? basename((string) $file['absolute_path']));
+            } else {
+                continue;
+            }
+
+            $request = $request->attach('files', $contents, $name);
         }
 
         try {

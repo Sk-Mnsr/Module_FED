@@ -24,6 +24,7 @@ class CoficarteCard extends Model
         'agence_id',
         'assigned_to_user_id',
         'numero_carte',
+        'numero_lot',
         'reference_facture',
         'facture_path',
         'reference_bon_livraison',

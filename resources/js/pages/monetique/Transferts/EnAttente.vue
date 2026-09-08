@@ -5,6 +5,14 @@ import DataTable from '@/components/DataTable.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import { Download, Plus, RotateCcw, Eye, Clock, Ban, CircleCheck } from 'lucide-vue-next';
@@ -32,6 +40,8 @@ type Paginated<T> = {
     total: number;
 };
 
+type ConfirmAction = 'valider' | 'annuler';
+
 const props = withDefaults(
     defineProps<{
         transfers?: Paginated<TransferRow>;
@@ -49,6 +59,11 @@ const props = withDefaults(
 const initiateur = ref('');
 const receptionniste = ref('');
 const search = ref('');
+
+const confirmOpen = ref(false);
+const confirmAction = ref<ConfirmAction | null>(null);
+const confirmRow = ref<TransferRow | null>(null);
+const processing = ref(false);
 
 const rows = computed(() => props.transfers?.data ?? []);
 
@@ -84,35 +99,77 @@ const columns = [
     { key: 'actions', title: 'Actions' },
 ];
 
+const confirmTitle = computed(() =>
+    confirmAction.value === 'annuler' ? 'Annuler le transfert' : 'Valider la réception',
+);
+
+const confirmDescription = computed(() => {
+    if (confirmAction.value === 'annuler') {
+        return 'Les cartes ne seront pas déplacées tant que le transfert n’avait pas été validé.';
+    }
+    return 'Les cartes de la plage seront affectées à votre agence.';
+});
+
 const goToNew = () => router.visit('/monetique/transferts/nouveau');
 const reload = () => router.reload({ only: ['transfers'] });
 
+function openConfirm(action: ConfirmAction, row: TransferRow) {
+    confirmAction.value = action;
+    confirmRow.value = row;
+    confirmOpen.value = true;
+}
+
+function closeConfirm() {
+    if (processing.value) return;
+    confirmOpen.value = false;
+    confirmAction.value = null;
+    confirmRow.value = null;
+}
+
+function onConfirmOpenChange(open: boolean) {
+    if (!open) {
+        closeConfirm();
+        return;
+    }
+    confirmOpen.value = true;
+}
+
 const annulerTransfer = (row: TransferRow) => {
-    if (!row.id || !row.can_annuler) {
-        return;
-    }
-    if (!confirm('Annuler ce transfert ? Les cartes ne seront pas déplacées tant que le transfert n’avait pas été validé.')) {
-        return;
-    }
-    router.post(`/monetique/transferts/${row.id}/annuler`, {}, { preserveScroll: true });
+    if (!row.id || !row.can_annuler) return;
+    openConfirm('annuler', row);
 };
 
 const voirDetail = (row: TransferRow) => {
-    if (!row.id) {
-        return;
-    }
+    if (!row.id) return;
     router.visit(`/monetique/transferts/${row.id}?from=en-attente`);
 };
 
 const validerReception = (row: TransferRow) => {
-    if (!row.id || !row.can_valider_reception) {
-        return;
-    }
-    if (!confirm('Valider la réception ? Les cartes de la plage seront affectées à votre agence.')) {
-        return;
-    }
-    router.post(`/monetique/transferts/${row.id}/valider-reception`, {}, { preserveScroll: true });
+    if (!row.id || !row.can_valider_reception) return;
+    openConfirm('valider', row);
 };
+
+function submitConfirm() {
+    const row = confirmRow.value;
+    const action = confirmAction.value;
+    if (!row?.id || !action) return;
+
+    processing.value = true;
+    const url =
+        action === 'annuler'
+            ? `/monetique/transferts/${row.id}/annuler`
+            : `/monetique/transferts/${row.id}/valider-reception`;
+
+    router.post(url, {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            processing.value = false;
+            confirmOpen.value = false;
+            confirmAction.value = null;
+            confirmRow.value = null;
+        },
+    });
+}
 </script>
 
 <template>
@@ -221,5 +278,81 @@ const validerReception = (row: TransferRow) => {
                 </template>
             </DataTable>
         </div>
+
+        <Dialog :open="confirmOpen" @update:open="onConfirmOpenChange">
+            <DialogContent
+                class="sm:max-w-md"
+                :class="
+                    confirmAction === 'annuler'
+                        ? 'border-rose-200/80 bg-rose-50/40'
+                        : 'border-emerald-200/80 bg-emerald-50/40'
+                "
+            >
+                <DialogHeader>
+                    <DialogTitle
+                        :class="confirmAction === 'annuler' ? 'text-rose-950' : 'text-emerald-950'"
+                    >
+                        <span class="inline-flex items-center gap-2">
+                            <Ban v-if="confirmAction === 'annuler'" class="size-5" />
+                            <CircleCheck v-else class="size-5" />
+                            {{ confirmTitle }}
+                        </span>
+                    </DialogTitle>
+                    <DialogDescription
+                        :class="confirmAction === 'annuler' ? 'text-rose-900/80' : 'text-emerald-900/80'"
+                    >
+                        {{ confirmDescription }}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div
+                    v-if="confirmRow"
+                    class="rounded-lg border bg-white/80 px-3 py-2.5 text-sm text-slate-700"
+                    :class="confirmAction === 'annuler' ? 'border-rose-200' : 'border-emerald-200'"
+                >
+                    <p>
+                        <span class="text-slate-500">De</span>
+                        {{ confirmRow.initiateur }}
+                    </p>
+                    <p class="mt-1">
+                        <span class="text-slate-500">Vers</span>
+                        {{ confirmRow.receptionniste }}
+                    </p>
+                    <p v-if="confirmRow.date_transfert" class="mt-1 text-xs text-slate-500">
+                        {{ confirmRow.date_transfert }}
+                    </p>
+                </div>
+
+                <DialogFooter class="gap-2 sm:gap-2">
+                    <Button
+                        type="button"
+                        variant="outline"
+                        class="bg-white"
+                        :disabled="processing"
+                        @click="closeConfirm"
+                    >
+                        Annuler
+                    </Button>
+                    <Button
+                        type="button"
+                        :disabled="processing"
+                        :class="
+                            confirmAction === 'annuler'
+                                ? 'bg-rose-600 text-white hover:bg-rose-700'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        "
+                        @click="submitConfirm"
+                    >
+                        {{
+                            processing
+                                ? 'Traitement…'
+                                : confirmAction === 'annuler'
+                                  ? 'Confirmer l’annulation'
+                                  : 'Valider la réception'
+                        }}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

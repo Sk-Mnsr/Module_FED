@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import DataTable from '@/components/DataTable.vue';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Head, Link, router } from '@inertiajs/vue3';
-import { Download, History, ImageIcon, RotateCcw } from 'lucide-vue-next';
-import { computed, ref } from 'vue';
+import { Head, Link, router, usePage } from '@inertiajs/vue3';
+import { Download, History, ImageIcon, Loader2, RotateCcw } from 'lucide-vue-next';
+import { computed, onUnmounted, ref } from 'vue';
 
 type RunRow = {
     id: number;
@@ -25,6 +26,9 @@ type RunRow = {
     status: string;
     user_name: string | null;
     created_at: string | null;
+    can_relancer: boolean;
+    relancer_url: string;
+    ouvrir_url: string;
 };
 
 type Paginated = {
@@ -79,6 +83,9 @@ const columns = [
 
 const rows = computed(() => props.runs?.data ?? []);
 
+const page = usePage();
+const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
+
 const listQuery = () => ({
     q: qLocal.value.trim() || undefined,
     partenaire_id: partenaireLocal.value || undefined,
@@ -117,6 +124,150 @@ function formatPeriode(row: RunRow): string {
     return `${d(row.date_debut)} → ${d(row.date_fin)}`;
 }
 
+type RelancePhase = 'confirm' | 'running' | 'done' | 'error';
+
+type RelanceResult = {
+    message: string;
+    taux_reussite?: number | null;
+    reconcilies?: number | null;
+    total?: number | null;
+    ouvrir_url?: string | null;
+};
+
+const relaunchOpen = ref(false);
+const relaunchPhase = ref<RelancePhase>('confirm');
+const relaunchRow = ref<RunRow | null>(null);
+const relaunchLabel = ref('');
+const relaunchProgress = ref(0);
+const relaunchResult = ref<RelanceResult | null>(null);
+let relaunchProgressTimer: ReturnType<typeof setInterval> | null = null;
+
+function readCookie(name: string): string | null {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+function csrfHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+    };
+    const xsrf = readCookie('XSRF-TOKEN');
+    if (xsrf) {
+        headers['X-XSRF-TOKEN'] = xsrf;
+        return headers;
+    }
+    const meta = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (meta) {
+        headers['X-CSRF-TOKEN'] = meta;
+    }
+    return headers;
+}
+
+function clearRelaunchProgressTimer() {
+    if (relaunchProgressTimer) {
+        clearInterval(relaunchProgressTimer);
+        relaunchProgressTimer = null;
+    }
+}
+
+function startRelaunchProgress(label: string) {
+    clearRelaunchProgressTimer();
+    relaunchPhase.value = 'running';
+    relaunchLabel.value = label;
+    relaunchProgress.value = 12;
+    relaunchProgressTimer = setInterval(() => {
+        if (relaunchProgress.value < 90) {
+            relaunchProgress.value = Math.min(
+                90,
+                relaunchProgress.value + Math.max(0.4, (90 - relaunchProgress.value) * 0.035),
+            );
+        }
+    }, 180);
+}
+
+function finishRelaunchProgress() {
+    clearRelaunchProgressTimer();
+    relaunchProgress.value = 100;
+}
+
+function closeRelaunchModal() {
+    if (relaunchPhase.value === 'running') return;
+    clearRelaunchProgressTimer();
+    relaunchOpen.value = false;
+    relaunchRow.value = null;
+    relaunchResult.value = null;
+    relaunchPhase.value = 'confirm';
+    relaunchLabel.value = '';
+    relaunchProgress.value = 0;
+}
+
+function relancer(row: RunRow) {
+    if (!row.can_relancer) {
+        router.visit(row.ouvrir_url);
+        return;
+    }
+    relaunchRow.value = row;
+    relaunchPhase.value = 'confirm';
+    relaunchResult.value = null;
+    relaunchLabel.value = '';
+    relaunchProgress.value = 0;
+    relaunchOpen.value = true;
+}
+
+async function confirmRelancer() {
+    const row = relaunchRow.value;
+    if (!row) return;
+
+    startRelaunchProgress(`Chargement des fichiers — ${row.partenaire_nom}`);
+
+    // Étape visuelle : charger puis lancer (le backend enchaîne les deux).
+    window.setTimeout(() => {
+        if (relaunchPhase.value === 'running') {
+            relaunchLabel.value = `Lancement de la réconciliation — ${row.partenaire_nom}`;
+        }
+    }, 1200);
+
+    try {
+        const res = await fetch(row.relancer_url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: csrfHeaders(),
+        });
+        const data = (await res.json().catch(() => ({}))) as RelanceResult & {
+            ok?: boolean;
+            ouvrir_url?: string;
+        };
+
+        finishRelaunchProgress();
+
+        if (!res.ok || data.ok === false) {
+            relaunchPhase.value = 'error';
+            relaunchResult.value = {
+                message: data.message || `Échec du relancement (HTTP ${res.status}).`,
+                ouvrir_url: data.ouvrir_url ?? row.ouvrir_url,
+            };
+            return;
+        }
+
+        relaunchPhase.value = 'done';
+        relaunchResult.value = {
+            message: data.message || 'Réconciliation relancée (non ajoutée à l’historique).',
+            taux_reussite: data.taux_reussite,
+            reconcilies: data.reconcilies,
+            total: data.total,
+            ouvrir_url: data.ouvrir_url ?? `/reconciliation-flexcube/reconciliation/${row.partenaire_id}`,
+        };
+    } catch (e) {
+        finishRelaunchProgress();
+        relaunchPhase.value = 'error';
+        relaunchResult.value = {
+            message: e instanceof Error ? e.message : 'Erreur réseau lors du relancement.',
+            ouvrir_url: row.ouvrir_url,
+        };
+    }
+}
+
 function formatTaux(row: RunRow): string {
     if (row.taux_reussite == null) return '—';
     const parts = [`${row.taux_reussite}%`];
@@ -125,6 +276,10 @@ function formatTaux(row: RunRow): string {
     }
     return parts.join(' ');
 }
+
+onUnmounted(() => {
+    clearRelaunchProgressTimer();
+});
 </script>
 
 <template>
@@ -132,6 +287,25 @@ function formatTaux(row: RunRow): string {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
+            <div
+                v-if="flash?.success"
+                class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+            >
+                {{ flash.success }}
+            </div>
+            <div
+                v-if="flash?.error"
+                class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+            >
+                {{ flash.error }}
+            </div>
+            <div
+                v-if="flash?.warning"
+                class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+            >
+                {{ flash.warning }}
+            </div>
+
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div class="flex items-start gap-3">
                     <div class="rounded-lg bg-cyan-50 p-2 text-cyan-700">
@@ -261,16 +435,142 @@ function formatTaux(row: RunRow): string {
                         >
                             <Download class="size-4" />
                         </a>
-                        <Link
-                            :href="`/reconciliation-flexcube/reconciliation/${item.partenaire_id}`"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            title="Relancer sur ce partenaire"
+                        <button
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
+                            :title="
+                                item.can_relancer
+                                    ? 'Relancer automatiquement (fichier + dates)'
+                                    : 'Ouvrir avec les dates préremplies (fichier source non conservé)'
+                            "
+                            :disabled="relaunchPhase === 'running' && relaunchRow?.id === item.id"
+                            @click="relancer(item)"
                         >
-                            <RotateCcw class="size-4" />
-                        </Link>
+                            <RotateCcw
+                                class="size-4"
+                                :class="
+                                    relaunchPhase === 'running' && relaunchRow?.id === item.id
+                                        ? 'animate-spin'
+                                        : ''
+                                "
+                            />
+                        </button>
                     </div>
                 </template>
             </DataTable>
+
+            <Dialog :open="relaunchOpen" @update:open="(v) => { if (!v) closeRelaunchModal(); }">
+                <DialogContent
+                    class="sm:max-w-md"
+                    :hide-close="relaunchPhase === 'running'"
+                    @interact-outside="(e: Event) => { if (relaunchPhase === 'running') e.preventDefault(); }"
+                    @escape-key-down="(e: Event) => { if (relaunchPhase === 'running') e.preventDefault(); }"
+                >
+                    <DialogHeader>
+                        <DialogTitle>
+                            <template v-if="relaunchPhase === 'confirm'">Relancer la réconciliation</template>
+                            <template v-else-if="relaunchPhase === 'running'">Avancement</template>
+                            <template v-else-if="relaunchPhase === 'done'">Relancement terminé</template>
+                            <template v-else>Échec du relancement</template>
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div v-if="relaunchPhase === 'confirm' && relaunchRow" class="space-y-2 text-sm text-muted-foreground">
+                        <p>
+                            Relancer « <span class="font-medium text-foreground">{{ relaunchRow.partenaire_nom }}</span> »
+                            avec le même fichier et la même période
+                            ({{ formatPeriode(relaunchRow) }}) ?
+                        </p>
+                        <p class="text-xs">
+                            Aucune nouvelle ligne ne sera ajoutée à l’historique.
+                        </p>
+                    </div>
+
+                    <div v-else-if="relaunchPhase === 'running'" class="space-y-3" role="status" aria-live="polite">
+                        <div class="flex items-center gap-3">
+                            <div class="flex size-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-cyan-800">
+                                <Loader2 class="size-4 animate-spin" />
+                            </div>
+                            <div class="min-w-0 flex-1 space-y-2">
+                                <div class="flex items-center justify-between gap-2">
+                                    <p class="text-sm font-medium text-cyan-950">{{ relaunchLabel }}</p>
+                                    <span class="tabular-nums text-xs font-semibold text-cyan-800">
+                                        {{ Math.round(relaunchProgress) }} %
+                                    </span>
+                                </div>
+                                <div class="h-2 overflow-hidden rounded-full bg-cyan-100/90 ring-1 ring-cyan-200/60">
+                                    <div
+                                        class="h-full rounded-full bg-gradient-to-r from-cyan-500 to-sky-600 transition-[width] duration-200 ease-out"
+                                        :style="{ width: `${relaunchProgress}%` }"
+                                    />
+                                </div>
+                                <p class="text-[11px] text-cyan-800/70">
+                                    Traitement en cours — merci de patienter…
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div
+                        v-else-if="relaunchResult"
+                        class="space-y-2 rounded-lg border px-3 py-2.5 text-sm"
+                        :class="
+                            relaunchPhase === 'done'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-950'
+                                : 'border-rose-200 bg-rose-50 text-rose-950'
+                        "
+                    >
+                        <p>{{ relaunchResult.message }}</p>
+                        <p
+                            v-if="relaunchPhase === 'done' && relaunchResult.taux_reussite != null"
+                            class="text-xs opacity-90"
+                        >
+                            Taux :
+                            {{ relaunchResult.taux_reussite }}%
+                            <template v-if="relaunchResult.reconcilies != null && relaunchResult.total != null">
+                                ({{ relaunchResult.reconcilies }}/{{ relaunchResult.total }})
+                            </template>
+                        </p>
+                    </div>
+
+                    <DialogFooter class="gap-2 sm:gap-2">
+                        <Button
+                            v-if="relaunchPhase === 'confirm'"
+                            type="button"
+                            variant="outline"
+                            @click="closeRelaunchModal"
+                        >
+                            Annuler
+                        </Button>
+                        <Button
+                            v-if="relaunchPhase === 'confirm'"
+                            type="button"
+                            class="bg-cyan-700 text-white hover:bg-cyan-800"
+                            @click="confirmRelancer"
+                        >
+                            Relancer
+                        </Button>
+                        <Button
+                            v-if="relaunchPhase === 'done' || relaunchPhase === 'error'"
+                            type="button"
+                            variant="outline"
+                            @click="closeRelaunchModal"
+                        >
+                            Fermer
+                        </Button>
+                        <Link
+                            v-if="
+                                (relaunchPhase === 'done' || relaunchPhase === 'error') &&
+                                relaunchResult?.ouvrir_url
+                            "
+                            :href="relaunchResult.ouvrir_url"
+                            class="inline-flex h-9 items-center justify-center rounded-md bg-cyan-700 px-4 text-sm font-medium text-white hover:bg-cyan-800"
+                        >
+                            Ouvrir la page partenaire
+                        </Link>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     </AppLayout>
 </template>

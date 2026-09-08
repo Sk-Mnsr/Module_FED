@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Partenaire;
 use App\Models\ReconciliationRun;
 use App\Services\Integrations\ReconciliationGatewayClient;
+use App\Support\ReconciliationSourceFiles;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class ReconciliationController extends Controller
     public function index(): InertiaResponse
     {
         $partenaires = Partenaire::query()
+            ->actifs()
             ->orderBy('nom')
             ->get()
             ->map(fn (Partenaire $p) => [
@@ -41,8 +43,10 @@ class ReconciliationController extends Controller
         ]);
     }
 
-    public function show(Partenaire $partenaire): InertiaResponse
+    public function show(Request $request, Partenaire $partenaire): InertiaResponse
     {
+        abort_unless($partenaire->actif, 404);
+
         $gatewayMode = null;
         $gatewayOnline = false;
         $gatewayError = null;
@@ -59,6 +63,33 @@ class ReconciliationController extends Controller
             $gatewayError = 'RECONCILIATION_GATEWAY_URL non configurée.';
         }
 
+        $prefill = null;
+        $dateDebut = $request->query('date_debut');
+        $dateFin = $request->query('date_fin');
+        $mode = $request->query('mode');
+        $fromRun = $request->query('from_run');
+        $relaunched = $request->boolean('relaunched');
+
+        if (filled($dateDebut) || filled($dateFin) || filled($mode) || filled($fromRun) || $relaunched) {
+            $prefill = [
+                'date_debut' => is_string($dateDebut) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateDebut)
+                    ? $dateDebut
+                    : null,
+                'date_fin' => is_string($dateFin) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFin)
+                    ? $dateFin
+                    : null,
+                'mode' => is_string($mode) && in_array($mode, ['two_pointers', 'agence'], true)
+                    ? $mode
+                    : null,
+                'from_run_id' => is_numeric($fromRun) ? (int) $fromRun : null,
+                'relaunched' => $relaunched,
+            ];
+
+            if ($prefill['mode'] !== null) {
+                $gatewayMode = $prefill['mode'];
+            }
+        }
+
         return Inertia::render('ReconciliationFlexcube/Reconciliation/Show', [
             'partenaire' => [
                 'id' => $partenaire->id,
@@ -72,11 +103,14 @@ class ReconciliationController extends Controller
                 'error' => $gatewayError,
                 'url' => $this->gateway->isConfigured() ? $this->gateway->baseUrl() : null,
             ],
+            'prefill' => $prefill,
         ]);
     }
 
     public function charger(Request $request, Partenaire $partenaire): JsonResponse
     {
+        $this->ensurePartenaireActif($partenaire);
+
         $validated = $request->validate([
             'date_debut' => ['required', 'date'],
             'date_fin' => ['required', 'date', 'after_or_equal:date_debut'],
@@ -91,12 +125,25 @@ class ReconciliationController extends Controller
         ]);
 
         try {
+            $uploaded = array_values(array_filter(
+                $request->file('files', []),
+                static fn ($f) => $f instanceof \Illuminate\Http\UploadedFile
+            ));
+
             $result = $this->gateway->charger(
                 $partenaire->identifiant,
-                $request->file('files', []),
+                $uploaded,
                 $this->toGatewayDate($validated['date_debut']),
                 $this->toGatewayDate($validated['date_fin']),
             );
+
+            if ($request->user()) {
+                ReconciliationSourceFiles::storePending(
+                    (int) $request->user()->id,
+                    (int) $partenaire->id,
+                    $uploaded,
+                );
+            }
 
             return response()->json([
                 'ok' => true,
@@ -110,6 +157,8 @@ class ReconciliationController extends Controller
 
     public function run(Request $request, Partenaire $partenaire): StreamedResponse|JsonResponse|Response
     {
+        $this->ensurePartenaireActif($partenaire);
+
         $validated = $request->validate([
             'mode' => ['nullable', 'string', 'in:two_pointers,agence'],
             'date_debut' => ['nullable', 'date'],
@@ -167,6 +216,14 @@ class ReconciliationController extends Controller
                 'status' => 'success',
             ]);
 
+            if ($request->user()) {
+                $pending = ReconciliationSourceFiles::takePending(
+                    (int) $request->user()->id,
+                    (int) $partenaire->id,
+                );
+                ReconciliationSourceFiles::attachToRun($run, $pending);
+            }
+
             return response($body, 200, [
                 'Content-Type' => $contentType,
                 'Content-Disposition' => 'attachment; filename="'.$filename.'"',
@@ -196,6 +253,8 @@ class ReconciliationController extends Controller
 
     public function reset(Partenaire $partenaire): JsonResponse
     {
+        $this->ensurePartenaireActif($partenaire);
+
         try {
             $result = $this->gateway->reset($partenaire->identifiant);
 
@@ -350,6 +409,11 @@ class ReconciliationController extends Controller
         } catch (Throwable $e) {
             return $this->gatewayErrorResponse($e);
         }
+    }
+
+    protected function ensurePartenaireActif(Partenaire $partenaire): void
+    {
+        abort_unless($partenaire->actif, 404);
     }
 
     protected function toGatewayDate(string $isoDate): string

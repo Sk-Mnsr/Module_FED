@@ -4,7 +4,7 @@ import PlotlyChart from '@/components/reconciliation/PlotlyChart.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import {
     Tooltip,
     TooltipContent,
@@ -33,7 +33,7 @@ import {
     WifiOff,
     Loader2,
 } from 'lucide-vue-next';
-import { computed, onUnmounted, ref, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, ref, type Component } from 'vue';
 
 type Partenaire = {
     id: number;
@@ -76,7 +76,19 @@ type TabKey = 'resume' | 'graphiques' | 'excel' | 'flex' | 'reconciliation';
 const props = defineProps<{
     partenaire: Partenaire;
     gateway: GatewayInfo;
+    prefill?: {
+        date_debut: string | null;
+        date_fin: string | null;
+        mode: string | null;
+        from_run_id: number | null;
+        relaunched?: boolean;
+    } | null;
 }>();
+
+const page = usePage();
+const flash = computed(
+    () => page.props.flash as { success?: string; error?: string; warning?: string } | undefined,
+);
 
 const breadcrumbs = [
     { title: 'Reconciliation Flexcube', href: '/reconciliation-flexcube' },
@@ -84,8 +96,8 @@ const breadcrumbs = [
     { title: props.partenaire.nom, href: `/reconciliation-flexcube/reconciliation/${props.partenaire.id}` },
 ];
 
-const dateDebut = ref('');
-const dateFin = ref('');
+const dateDebut = ref(props.prefill?.date_debut ?? '');
+const dateFin = ref(props.prefill?.date_fin ?? '');
 const files = ref<UploadedFile[]>([]);
 const fileInputKey = ref(0);
 const busy = ref(false);
@@ -95,9 +107,22 @@ let busyProgressTimer: ReturnType<typeof setInterval> | null = null;
 const filesLoaded = ref(false);
 /** true uniquement après un POST /run réussi — évite d’afficher d’anciens graphes/tables. */
 const reconciliationDone = ref(false);
-const gatewayMode = ref<string | null>(props.gateway.mode);
-/** Pas de bandeau rouge au chargement : le badge « Service indisponible » suffit. */
-const message = ref<{ type: 'info' | 'success' | 'error'; text: string } | null>(null);
+const gatewayMode = ref<string | null>(props.prefill?.mode ?? props.gateway.mode);
+
+const initialFlashMessage = (): { type: 'info' | 'success' | 'error'; text: string } | null => {
+    if (flash.value?.success) return { type: 'success', text: flash.value.success };
+    if (flash.value?.error) return { type: 'error', text: flash.value.error };
+    if (flash.value?.warning) return { type: 'info', text: flash.value.warning };
+    if (props.prefill && !props.prefill.relaunched) {
+        return {
+            type: 'info',
+            text: `Paramètres repris de l’historique${props.prefill.from_run_id ? ` (run #${props.prefill.from_run_id})` : ''} : dates et mode préremplis. Rechargez le fichier partenaire puis cliquez sur Charger / Lancer pour créer un nouveau run.`,
+        };
+    }
+    return null;
+};
+
+const message = ref<{ type: 'info' | 'success' | 'error'; text: string } | null>(initialFlashMessage());
 const summary = ref<SummaryRow[] | SummaryRow | null>(null);
 const taux = ref<TauxPayload | null>(null);
 const carte = ref<SummaryRow | null>(null);
@@ -590,6 +615,20 @@ async function loadResults() {
         grapheEvolution.value = null;
     }
 }
+
+onMounted(async () => {
+    if (!props.prefill?.relaunched) {
+        return;
+    }
+    filesLoaded.value = true;
+    reconciliationDone.value = true;
+    try {
+        await loadResults();
+        activeTab.value = 'resume';
+    } catch {
+        // Le bandeau flash suffit si le chargement des résultats échoue.
+    }
+});
 
 async function loadGraphs() {
     graphsBusy.value = true;

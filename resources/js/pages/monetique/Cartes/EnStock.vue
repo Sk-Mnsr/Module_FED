@@ -17,6 +17,7 @@ import {
     Landmark,
     LayoutDashboard,
     Plus,
+    Layers,
     Pencil,
     RotateCcw,
     Eye,
@@ -34,6 +35,7 @@ export type StockStatutKey = 'au_siege' | 'en_agence' | 'en_vente' | 'en_attente
 type StockCardRow = {
     id?: number;
     numero_carte: string;
+    numero_lot?: string | null;
     prix_vente: number;
     reference_facture: string;
     possesseur: string;
@@ -49,6 +51,17 @@ type Paginated<T> = {
     current_page: number;
     per_page: number;
     total: number;
+};
+
+type RefFactureRow = {
+    reference_facture: string;
+    cards_count: number;
+};
+
+type LotRow = {
+    value: string;
+    label: string;
+    cards_count: number;
 };
 
 export type StockPanoramaTotals = {
@@ -81,6 +94,14 @@ const props = withDefaults(
     defineProps<{
         cards?: Paginated<StockCardRow>;
         stockPanorama?: StockPanorama | null;
+        references?: RefFactureRow[];
+        lots?: LotRow[];
+        filters?: {
+            q: string;
+            reference_facture: string;
+            numero_lot: string;
+            statut: string;
+        };
     }>(),
     {
         cards: () => ({
@@ -90,10 +111,17 @@ const props = withDefaults(
             total: 0,
         }),
         stockPanorama: null,
+        references: () => [],
+        lots: () => [],
+        filters: () => ({
+            q: '',
+            reference_facture: '',
+            numero_lot: '',
+            statut: '',
+        }),
     },
 );
 
-/** Métadonnées serveur (paginator Laravel → Inertia, snake_case). */
 const cardPagination = computed(() => {
     const c = props.cards;
     return {
@@ -104,29 +132,59 @@ const cardPagination = computed(() => {
     };
 });
 
-const possesseur = ref('');
-const statutFiltre = ref<'' | StockStatutKey>('');
-const search = ref('');
+const qLocal = ref(props.filters.q ?? '');
+const referenceLocal = ref(props.filters.reference_facture ?? '');
+const lotLocal = ref(props.filters.numero_lot ?? '');
+const statutLocal = ref(props.filters.statut ?? '');
 
 const rows = computed(() => cardPagination.value.data);
 
 const listQuery = () => ({
+    q: qLocal.value.trim() || undefined,
+    reference_facture: referenceLocal.value || undefined,
+    numero_lot: lotLocal.value || undefined,
+    statut: statutLocal.value || undefined,
     per_page: cardPagination.value.per_page,
 });
+
+const applyFilters = () => {
+    router.get('/monetique/cartes/en-stock', { ...listQuery(), page: 1 }, {
+        preserveState: true,
+        preserveScroll: true,
+        only: ['cards', 'references', 'lots', 'filters'],
+    });
+};
+
+const resetFilters = () => {
+    qLocal.value = '';
+    referenceLocal.value = '';
+    lotLocal.value = '';
+    statutLocal.value = '';
+    router.get('/monetique/cartes/en-stock', { per_page: cardPagination.value.per_page, page: 1 }, {
+        preserveState: true,
+        preserveScroll: true,
+        only: ['cards', 'references', 'lots', 'filters'],
+    });
+};
+
+const onReferenceChange = () => {
+    lotLocal.value = '';
+    applyFilters();
+};
 
 const onPageChange = (page: number) => {
     router.get('/monetique/cartes/en-stock', { ...listQuery(), page }, {
         preserveState: true,
         preserveScroll: true,
-        only: ['cards'],
+        only: ['cards', 'references', 'lots', 'filters'],
     });
 };
 
 const onItemsPerPageChange = (perPage: number) => {
-    router.get('/monetique/cartes/en-stock', { per_page: perPage, page: 1 }, {
+    router.get('/monetique/cartes/en-stock', { ...listQuery(), per_page: perPage, page: 1 }, {
         preserveState: true,
         preserveScroll: true,
-        only: ['cards'],
+        only: ['cards', 'references', 'lots', 'filters'],
     });
 };
 
@@ -143,7 +201,6 @@ const statutLabel = (k: StockStatutKey) => {
     }
 };
 
-/** Libellé statut avec entité (agence) quand elle existe. */
 function statutLabelAvecAgence(r: StockCardRow): string {
     const base = statutLabel(r.statut_key);
     if (r.statut_key === 'au_siege' || !r.agence_nom?.trim()) {
@@ -153,30 +210,9 @@ function statutLabelAvecAgence(r: StockCardRow): string {
     return `${base} · ${r.agence_nom}${code}`;
 }
 
-const filteredRows = computed(() => {
-    const q = search.value.trim().toLowerCase();
-    return rows.value.filter((r) => {
-        const byPossesseur = possesseur.value ? r.possesseur === possesseur.value : true;
-        const byStatut = statutFiltre.value ? r.statut_key === statutFiltre.value : true;
-        const label = statutLabelAvecAgence(r).toLowerCase();
-        const bySearch = !q
-            ? true
-            : [
-                  r.numero_carte,
-                  r.reference_facture,
-                  r.possesseur,
-                  r.agence_nom ?? '',
-                  r.agence_code ?? '',
-                  label,
-                  String(r.prix_vente),
-                  r.expiration,
-              ].some((x) => x.toLowerCase().includes(q));
-        return byPossesseur && byStatut && bySearch;
-    });
-});
-
 const columns = [
     { key: 'numero_carte', title: 'Numéro de carte' },
+    { key: 'numero_lot', title: 'Lot' },
     { key: 'prix_vente', title: 'Prix de vente' },
     { key: 'reference_facture', title: 'Référence de la facture' },
     { key: 'possesseur', title: 'Possesseur' },
@@ -185,20 +221,12 @@ const columns = [
     { key: 'actions', title: 'Actions' },
 ];
 
-const possesseurs = computed(() => {
-    const unique = Array.from(new Set(rows.value.map((r) => r.possesseur))).filter(Boolean);
-    return unique.sort((a, b) => a.localeCompare(b));
-});
-
 const page = usePage();
-
+const flash = computed(() => page.props.flash as { success?: string; error?: string } | undefined);
 const canResponsableMonetique = computed(() => page.props.auth.canResponsableMonetique === true);
-
 const stockPanorama = computed(() => props.stockPanorama ?? null);
-
 const formatCfa = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
-
-const reload = () => router.reload({ only: ['cards', 'stockPanorama'] });
+const reload = () => router.reload({ only: ['cards', 'stockPanorama', 'references', 'lots', 'filters'] });
 
 const statutBadgeClass = (k: StockStatutKey) => {
     switch (k) {
@@ -237,6 +265,10 @@ const statutBadgeClass = (k: StockStatutKey) => {
                         <Button class="bg-primary hover:bg-primary/90" @click="router.visit('/monetique/cartes/modifier-prix')">
                             <Pencil class="h-4 w-4 mr-2" />
                             Modifier Prix
+                        </Button>
+                        <Button class="bg-violet-700 hover:bg-violet-800" @click="router.visit('/monetique/cartes/modifier-lots')">
+                            <Layers class="h-4 w-4 mr-2" />
+                            Modifier lots
                         </Button>
                     </template>
                     <Button variant="outline" class="bg-white" title="Recharger les données depuis le serveur" @click="reload">
@@ -331,29 +363,54 @@ const statutBadgeClass = (k: StockStatutKey) => {
                 </div>
             </section>
 
+            <div
+                v-if="flash?.success"
+                class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+            >
+                {{ flash.success }}
+            </div>
+
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
                 <div>
                     <p class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Filtres</p>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                     <div class="space-y-2">
-                        <Label for="possesseur" class="text-xs font-medium text-gray-600">Chef d'agence</Label>
+                        <Label for="reference_facture" class="text-xs font-medium text-gray-600">Référence facture</Label>
                         <select
-                            id="possesseur"
-                            v-model="possesseur"
+                            id="reference_facture"
+                            v-model="referenceLocal"
                             class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
+                            @change="onReferenceChange"
+                        >
+                            <option value="">-- Toutes --</option>
+                            <option v-for="r in references" :key="r.reference_facture" :value="r.reference_facture">
+                                {{ r.reference_facture }} ({{ r.cards_count }})
+                            </option>
+                        </select>
+                    </div>
+                    <div class="space-y-2">
+                        <Label for="numero_lot" class="text-xs font-medium text-gray-600">Numéro de lot</Label>
+                        <select
+                            id="numero_lot"
+                            v-model="lotLocal"
+                            class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
+                            @change="applyFilters"
                         >
                             <option value="">-- Tous --</option>
-                            <option v-for="p in possesseurs" :key="p" :value="p">{{ p }}</option>
+                            <option v-for="l in lots" :key="l.value" :value="l.value">
+                                {{ l.label }} ({{ l.cards_count }})
+                            </option>
                         </select>
                     </div>
                     <div class="space-y-2">
                         <Label for="statut" class="text-xs font-medium text-gray-600">Statut</Label>
                         <select
                             id="statut"
-                            v-model="statutFiltre"
+                            v-model="statutLocal"
                             class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
+                            @change="applyFilters"
                         >
                             <option value="">-- Tous --</option>
                             <option value="au_siege">Au siège</option>
@@ -366,17 +423,26 @@ const statutBadgeClass = (k: StockStatutKey) => {
                         <Label for="search" class="text-xs font-medium text-gray-600">Recherche</Label>
                         <Input
                             id="search"
-                            v-model="search"
-                            placeholder="Recherche une carte"
+                            v-model="qLocal"
+                            placeholder="N° carte, lot, facture…"
                             class="border-gray-300"
+                            @keydown.enter="applyFilters"
                         />
                     </div>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <Button type="button" class="bg-primary hover:bg-primary/90" @click="applyFilters">
+                        Filtrer
+                    </Button>
+                    <Button type="button" variant="outline" class="bg-white" @click="resetFilters">
+                        Réinitialiser
+                    </Button>
                 </div>
             </div>
 
             <DataTable
                 :headers="columns"
-                :items="filteredRows"
+                :items="rows"
                 :show-select="false"
                 :current-page="cardPagination.current_page"
                 :items-per-page="cardPagination.per_page"
@@ -393,6 +459,10 @@ const statutBadgeClass = (k: StockStatutKey) => {
                             {{ formatCardNumberDisplay(item.numero_carte) }}
                         </span>
                     </div>
+                </template>
+
+                <template #item.numero_lot="{ item }">
+                    <span class="text-sm text-gray-700">{{ item.numero_lot || '—' }}</span>
                 </template>
 
                 <template #item.prix_vente="{ item }">
@@ -430,5 +500,6 @@ const statutBadgeClass = (k: StockStatutKey) => {
                 </template>
             </DataTable>
         </div>
+
     </AppLayout>
 </template>

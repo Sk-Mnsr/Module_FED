@@ -23,6 +23,7 @@ const form = useForm({
     quantite: '' as number | '',
     premiere_carte: '',
     numero_carte: '',
+    numero_lot: '',
     reference_facture: '',
     reference_bon_livraison: '',
     facture: null as File | null,
@@ -81,6 +82,9 @@ const submit = () => {
         if (!normalizeCardNumber(form.premiere_carte)) {
             form.setError('premiere_carte', 'Le numéro de la première carte est obligatoire.');
         }
+        if (!form.numero_lot.trim()) {
+            form.setError('numero_lot', 'Le numéro de lot est obligatoire.');
+        }
     } else {
         if (!normalizeCardNumber(form.numero_carte)) {
             form.setError('numero_carte', 'Le numéro de la carte est obligatoire.');
@@ -92,9 +96,6 @@ const submit = () => {
     }
     if (!form.facture) {
         form.setError('facture', 'Veuillez joindre la facture.');
-    }
-    if (!form.bon_livraison) {
-        form.setError('bon_livraison', 'Veuillez joindre le bon de livraison.');
     }
     if (form.prix_vente === '' || Number(form.prix_vente) < 0) {
         form.setError('prix_vente', 'Le prix de vente est obligatoire.');
@@ -202,8 +203,28 @@ const submit = () => {
                             </button>
                         </div>
 
-                        <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2 xl:grid-cols-4">
-                            <template v-if="mode === 'lot'">
+                        <!-- Cartes -->
+                        <div class="space-y-4">
+                            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Cartes
+                            </p>
+                            <div
+                                v-if="mode === 'lot'"
+                                class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-3"
+                            >
+                                <div class="space-y-2">
+                                    <Label for="numero_lot" class="text-sm font-medium text-foreground">
+                                        Numéro de lot
+                                    </Label>
+                                    <Input
+                                        id="numero_lot"
+                                        v-model="form.numero_lot"
+                                        type="text"
+                                        placeholder="Ex : LOT-2026-001"
+                                        :class="inputClass"
+                                    />
+                                    <InputError :message="form.errors.numero_lot" />
+                                </div>
                                 <div class="space-y-2">
                                     <Label for="quantite" class="text-sm font-medium text-foreground">
                                         Quantité
@@ -232,124 +253,160 @@ const submit = () => {
                                     />
                                     <InputError :message="form.errors.premiere_carte" />
                                 </div>
-                            </template>
-
-                            <div v-else class="space-y-2 sm:col-span-2 xl:col-span-2">
-                                <Label for="numero_carte" class="text-sm font-medium text-foreground">
-                                    Numéro de la carte
-                                </Label>
-                                <Input
-                                    id="numero_carte"
-                                    v-model="form.numero_carte"
-                                    type="text"
-                                    placeholder="Ex : 16 00 00 10 03"
-                                    class="font-mono tracking-wide"
-                                    :class="inputClass"
-                                />
-                                <InputError :message="form.errors.numero_carte" />
                             </div>
-
-                            <div class="space-y-2">
-                                <Label for="reference_facture" class="text-sm font-medium text-foreground">
-                                    Référence de la facture
-                                </Label>
-                                <Input
-                                    id="reference_facture"
-                                    v-model="form.reference_facture"
-                                    type="text"
-                                    placeholder="Ex : DSDDGGD425"
-                                    :class="inputClass"
-                                />
-                                <InputError :message="form.errors.reference_facture" />
-                            </div>
-
-                            <div class="space-y-2">
-                                <Label for="facture" class="text-sm font-medium text-foreground">
-                                    Joindre la facture
-                                </Label>
-                                <label :class="fileTriggerClass">
-                                    <Upload class="size-4 shrink-0 text-primary" />
-                                    <span class="min-w-0 flex-1 truncate">
-                                        {{ form.facture?.name ?? 'Choisir un fichier…' }}
-                                    </span>
-                                    <input
-                                        id="facture"
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        class="sr-only"
-                                        @change="onFactureChange"
+                            <div v-else class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label for="numero_carte" class="text-sm font-medium text-foreground">
+                                        Numéro de la carte
+                                    </Label>
+                                    <Input
+                                        id="numero_carte"
+                                        v-model="form.numero_carte"
+                                        type="text"
+                                        placeholder="Ex : 16 00 00 10 03"
+                                        class="font-mono tracking-wide"
+                                        :class="inputClass"
                                     />
-                                </label>
-                                <InputError :message="form.errors.facture" />
-                            </div>
-
-                            <div class="space-y-2">
-                                <Label for="reference_bon_livraison" class="text-sm font-medium text-foreground">
-                                    Référence du bon de livraison
-                                    <span class="font-normal text-muted-foreground">(optionnel)</span>
-                                </Label>
-                                <Input
-                                    id="reference_bon_livraison"
-                                    v-model="form.reference_bon_livraison"
-                                    type="text"
-                                    placeholder="Ex : BL-2026-00123"
-                                    :class="inputClass"
-                                />
-                                <InputError :message="form.errors.reference_bon_livraison" />
-                            </div>
-
-                            <div class="space-y-2">
-                                <Label for="bon_livraison" class="text-sm font-medium text-foreground">
-                                    Joindre le bon de livraison
-                                </Label>
-                                <label :class="fileTriggerClass">
-                                    <Upload class="size-4 shrink-0 text-primary" />
-                                    <span class="min-w-0 flex-1 truncate">
-                                        {{ form.bon_livraison?.name ?? 'Choisir un fichier…' }}
-                                    </span>
-                                    <input
-                                        id="bon_livraison"
-                                        type="file"
-                                        accept=".pdf,image/*"
-                                        class="sr-only"
-                                        @change="onBonLivraisonChange"
+                                    <InputError :message="form.errors.numero_carte" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="numero_lot_unique" class="text-sm font-medium text-foreground">
+                                        Numéro de lot
+                                        <span class="font-normal text-muted-foreground">(optionnel)</span>
+                                    </Label>
+                                    <Input
+                                        id="numero_lot_unique"
+                                        v-model="form.numero_lot"
+                                        type="text"
+                                        placeholder="Ex : LOT-2026-001"
+                                        :class="inputClass"
                                     />
-                                </label>
-                                <InputError :message="form.errors.bon_livraison" />
+                                    <InputError :message="form.errors.numero_lot" />
+                                </div>
                             </div>
+                        </div>
 
-                            <div class="space-y-2">
-                                <Label for="prix_achat" class="text-sm font-medium text-foreground">
-                                    Prix d’achat (F CFA)
-                                </Label>
-                                <Input
-                                    id="prix_achat"
-                                    v-model.number="form.prix_achat"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    placeholder="Ex : 3000"
-                                    class="tabular-nums"
-                                    :class="inputClass"
-                                />
-                                <InputError :message="form.errors.prix_achat" />
+                        <!-- Facture -->
+                        <div class="space-y-4 border-t border-border/80 pt-8">
+                            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Facture
+                            </p>
+                            <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label for="reference_facture" class="text-sm font-medium text-foreground">
+                                        Référence de la facture
+                                    </Label>
+                                    <Input
+                                        id="reference_facture"
+                                        v-model="form.reference_facture"
+                                        type="text"
+                                        placeholder="Ex : DSDDGGD425"
+                                        :class="inputClass"
+                                    />
+                                    <InputError :message="form.errors.reference_facture" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="facture" class="text-sm font-medium text-foreground">
+                                        Joindre la facture
+                                    </Label>
+                                    <label :class="fileTriggerClass">
+                                        <Upload class="size-4 shrink-0 text-primary" />
+                                        <span class="min-w-0 flex-1 truncate">
+                                            {{ form.facture?.name ?? 'Choisir un fichier…' }}
+                                        </span>
+                                        <input
+                                            id="facture"
+                                            type="file"
+                                            accept=".pdf,image/*"
+                                            class="sr-only"
+                                            @change="onFactureChange"
+                                        />
+                                    </label>
+                                    <InputError :message="form.errors.facture" />
+                                </div>
                             </div>
+                        </div>
 
-                            <div class="space-y-2">
-                                <Label for="prix_vente" class="text-sm font-medium text-foreground">
-                                    Prix de vente (F CFA)
-                                </Label>
-                                <Input
-                                    id="prix_vente"
-                                    v-model.number="form.prix_vente"
-                                    type="number"
-                                    min="0"
-                                    step="1"
-                                    placeholder="Ex : 5000"
-                                    class="tabular-nums"
-                                    :class="inputClass"
-                                />
-                                <InputError :message="form.errors.prix_vente" />
+                        <!-- Bon de livraison -->
+                        <div class="space-y-4 border-t border-border/80 pt-8">
+                            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Bon de livraison
+                                <span class="font-normal normal-case tracking-normal">(optionnel)</span>
+                            </p>
+                            <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label for="reference_bon_livraison" class="text-sm font-medium text-foreground">
+                                        Référence du bon de livraison
+                                    </Label>
+                                    <Input
+                                        id="reference_bon_livraison"
+                                        v-model="form.reference_bon_livraison"
+                                        type="text"
+                                        placeholder="Ex : BL-2026-00123"
+                                        :class="inputClass"
+                                    />
+                                    <InputError :message="form.errors.reference_bon_livraison" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="bon_livraison" class="text-sm font-medium text-foreground">
+                                        Joindre le bon de livraison
+                                    </Label>
+                                    <label :class="fileTriggerClass">
+                                        <Upload class="size-4 shrink-0 text-primary" />
+                                        <span class="min-w-0 flex-1 truncate">
+                                            {{ form.bon_livraison?.name ?? 'Choisir un fichier…' }}
+                                        </span>
+                                        <input
+                                            id="bon_livraison"
+                                            type="file"
+                                            accept=".pdf,image/*"
+                                            class="sr-only"
+                                            @change="onBonLivraisonChange"
+                                        />
+                                    </label>
+                                    <InputError :message="form.errors.bon_livraison" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Prix -->
+                        <div class="space-y-4 border-t border-border/80 pt-8">
+                            <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                Prix
+                            </p>
+                            <div class="grid grid-cols-1 gap-x-6 gap-y-6 sm:grid-cols-2">
+                                <div class="space-y-2">
+                                    <Label for="prix_achat" class="text-sm font-medium text-foreground">
+                                        Prix d’achat (F CFA)
+                                    </Label>
+                                    <Input
+                                        id="prix_achat"
+                                        v-model.number="form.prix_achat"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        placeholder="Ex : 3000"
+                                        class="tabular-nums"
+                                        :class="inputClass"
+                                    />
+                                    <InputError :message="form.errors.prix_achat" />
+                                </div>
+                                <div class="space-y-2">
+                                    <Label for="prix_vente" class="text-sm font-medium text-foreground">
+                                        Prix de vente (F CFA)
+                                    </Label>
+                                    <Input
+                                        id="prix_vente"
+                                        v-model.number="form.prix_vente"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        placeholder="Ex : 5000"
+                                        class="tabular-nums"
+                                        :class="inputClass"
+                                    />
+                                    <InputError :message="form.errors.prix_vente" />
+                                </div>
                             </div>
                         </div>
 
@@ -357,8 +414,8 @@ const submit = () => {
                             <p class="mb-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                                 Dates
                             </p>
-                            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-                                <div class="space-y-2 sm:col-span-1 lg:col-span-2">
+                            <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                                <div class="space-y-2">
                                     <Label for="date_livraison" class="text-sm font-medium text-foreground">
                                         Date de livraison
                                     </Label>
@@ -370,7 +427,7 @@ const submit = () => {
                                     />
                                     <InputError :message="form.errors.date_livraison" />
                                 </div>
-                                <div class="space-y-2 sm:col-span-1 lg:col-span-2">
+                                <div class="space-y-2">
                                     <Label for="date_expiration" class="text-sm font-medium text-foreground">
                                         Date d’expiration
                                     </Label>

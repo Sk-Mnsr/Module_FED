@@ -119,6 +119,14 @@ class RoleSeeder extends Seeder
                 'actif' => true,
             ],
             [
+                'nom' => 'POD',
+                'slug' => 'pod',
+                'module' => 'pod',
+                'access_profile' => 'other',
+                'description' => 'Paramétrage des produits d’opérations diverses (frais, TAF, schémas comptables)',
+                'actif' => true,
+            ],
+            [
                 'nom' => 'Budget',
                 'slug' => 'budget',
                 'module' => 'budget',
@@ -202,6 +210,13 @@ class RoleSeeder extends Seeder
 
         foreach (Role::all() as $role) {
             if ($role->moduleKeys() !== []) {
+                // Assure l’accès POD aux rôles OPS / Finance déjà synchronisés
+                if (in_array($role->slug, ['ops', 'finance', 'controle_de_gestion', 'daf'], true)
+                    && ! in_array('pod', $role->moduleKeys(), true)) {
+                    $role->syncModuleKeys(array_values(array_unique([...$role->moduleKeys(), 'pod'])));
+                    ModuleAccess::clearModuleRolesCache();
+                }
+
                 continue;
             }
 

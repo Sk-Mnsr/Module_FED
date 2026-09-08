@@ -9,6 +9,7 @@ use App\Models\CoficarteCardMovement;
 use App\Support\CoficarteAgenceAccess;
 use App\Support\CoficarteCardNumberGenerator;
 use App\Support\CoficarteMovementLogger;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -32,19 +33,21 @@ class CarteController extends Controller
 
         $rules = [
             'mode' => 'required|in:lot,unique',
+            'numero_lot' => 'nullable|string|max:128',
             'reference_facture' => 'required|string|max:128',
             'prix_vente' => 'required|integer|min:0',
             'prix_achat' => 'required|integer|min:0',
             'date_livraison' => 'required|date',
             'date_expiration' => 'required|date|after_or_equal:date_livraison',
             'facture' => 'required|file|mimes:pdf,jpeg,jpg,png|max:10240',
-            'bon_livraison' => 'required|file|mimes:pdf,jpeg,jpg,png|max:10240',
+            'bon_livraison' => 'nullable|file|mimes:pdf,jpeg,jpg,png|max:10240',
             'reference_bon_livraison' => 'nullable|string|max:128',
         ];
 
         if ($mode === 'lot') {
             $rules['quantite'] = 'required|integer|min:1|max:10000';
             $rules['premiere_carte'] = 'required|string|max:64';
+            $rules['numero_lot'] = 'required|string|max:128';
         } else {
             $rules['numero_carte'] = 'required|string|max:64';
         }
@@ -65,7 +68,9 @@ class CarteController extends Controller
         }
 
         $path = $request->file('facture')->store('coficarte/factures', 'public');
-        $bonLivraisonPath = $request->file('bon_livraison')->store('coficarte/bons-livraison', 'public');
+        $bonLivraisonPath = $request->hasFile('bon_livraison')
+            ? $request->file('bon_livraison')->store('coficarte/bons-livraison', 'public')
+            : null;
 
         if ($validated['mode'] === 'unique') {
             $numeros = [CoficarteCardNumberGenerator::normalize($validated['numero_carte'])];
@@ -94,12 +99,16 @@ class CarteController extends Controller
             $refBl = isset($validated['reference_bon_livraison']) && trim((string) $validated['reference_bon_livraison']) !== ''
                 ? $validated['reference_bon_livraison']
                 : null;
+            $numeroLot = isset($validated['numero_lot']) && trim((string) $validated['numero_lot']) !== ''
+                ? trim((string) $validated['numero_lot'])
+                : null;
 
             foreach ($numeros as $numero) {
                 $card = CoficarteCard::create([
                     'created_by' => auth()->id(),
                     'agence_id' => $agenceId,
                     'numero_carte' => $numero,
+                    'numero_lot' => $numeroLot,
                     'reference_facture' => $validated['reference_facture'],
                     'facture_path' => $path,
                     'reference_bon_livraison' => $refBl,
@@ -113,6 +122,7 @@ class CarteController extends Controller
                 ]);
                 CoficarteMovementLogger::log($card, 'carte_creee', [
                     'reference_facture' => $validated['reference_facture'],
+                    'numero_lot' => $numeroLot,
                 ], auth()->id());
             }
         });
@@ -124,17 +134,100 @@ class CarteController extends Controller
 
     public function enStock(Request $request)
     {
-        $perPage = min(50, max(5, (int) $request->input('per_page', 15)));
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'reference_facture' => ['nullable', 'string', 'max:128'],
+            'numero_lot' => ['nullable', 'string', 'max:128'],
+            'statut' => ['nullable', 'string', 'in:au_siege,en_agence,en_vente,en_attente_encaissement'],
+            'per_page' => ['nullable', 'integer', 'min:5', 'max:50'],
+            'page' => ['nullable', 'integer', 'min:1'],
+        ]);
 
-        $cards = CoficarteCard::query()
+        $perPage = min(50, max(5, (int) ($validated['per_page'] ?? 15)));
+        $q = trim((string) ($validated['q'] ?? ''));
+        $reference = trim((string) ($validated['reference_facture'] ?? ''));
+        $lotParam = isset($validated['numero_lot']) ? (string) $validated['numero_lot'] : null;
+        $statut = $validated['statut'] ?? null;
+
+        $base = CoficarteCard::query()
             ->whereIn('status', [CoficarteCard::STATUS_EN_STOCK, CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT]);
-        CoficarteAgenceAccess::applyCardScope($cards, auth()->user());
-        $cards = $cards
+        CoficarteAgenceAccess::applyCardScope($base, auth()->user());
+
+        $references = $base->clone()
+            ->whereNotNull('reference_facture')
+            ->where('reference_facture', '!=', '')
+            ->select('reference_facture')
+            ->selectRaw('count(*) as cards_count')
+            ->groupBy('reference_facture')
+            ->orderBy('reference_facture')
+            ->get()
+            ->map(fn ($r) => [
+                'reference_facture' => $r->reference_facture,
+                'cards_count' => (int) $r->cards_count,
+            ]);
+
+        $lotsQuery = $base->clone();
+        if ($reference !== '') {
+            $lotsQuery->where('reference_facture', $reference);
+        }
+        $lots = $lotsQuery
+            ->select('numero_lot')
+            ->selectRaw('count(*) as cards_count')
+            ->groupBy('numero_lot')
+            ->orderByRaw('case when numero_lot is null or numero_lot = \'\' then 1 else 0 end')
+            ->orderBy('numero_lot')
+            ->get()
+            ->map(fn ($r) => [
+                'value' => filled($r->numero_lot) ? (string) $r->numero_lot : '__sans__',
+                'label' => filled($r->numero_lot) ? (string) $r->numero_lot : 'Sans numéro de lot',
+                'cards_count' => (int) $r->cards_count,
+            ])
+            ->values();
+
+        $cards = $base->clone()
             ->with([
                 'creator:id,name',
                 'agence:id,nom,code,chef_agence_user_id',
                 'agence.chefAgence:id,name',
-            ])
+            ]);
+
+        if ($reference !== '') {
+            $cards->where('reference_facture', $reference);
+        }
+
+        if ($lotParam === '__sans__') {
+            $cards->where(function (Builder $query) {
+                $query->whereNull('numero_lot')->orWhere('numero_lot', '');
+            });
+        } elseif (filled($lotParam)) {
+            $cards->where('numero_lot', $lotParam);
+        }
+
+        if ($q !== '') {
+            $like = '%'.$q.'%';
+            $cards->where(function (Builder $query) use ($like) {
+                $query->where('numero_carte', 'ilike', $like)
+                    ->orWhere('reference_facture', 'ilike', $like)
+                    ->orWhere('numero_lot', 'ilike', $like);
+            });
+        }
+
+        if ($statut === 'en_attente_encaissement') {
+            $cards->where('status', CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT);
+        } elseif ($statut === 'au_siege') {
+            $cards->where('status', CoficarteCard::STATUS_EN_STOCK)
+                ->whereNull('agence_id');
+        } elseif ($statut === 'en_vente') {
+            $cards->where('status', CoficarteCard::STATUS_EN_STOCK)
+                ->whereNotNull('agence_id')
+                ->whereNotNull('assigned_to_user_id');
+        } elseif ($statut === 'en_agence') {
+            $cards->where('status', CoficarteCard::STATUS_EN_STOCK)
+                ->whereNotNull('agence_id')
+                ->whereNull('assigned_to_user_id');
+        }
+
+        $cards = $cards
             ->orderBy('numero_carte')
             ->paginate($perPage)
             ->withQueryString()
@@ -151,6 +244,7 @@ class CarteController extends Controller
                 return [
                     'id' => $card->id,
                     'numero_carte' => $card->numero_carte,
+                    'numero_lot' => $card->numero_lot,
                     'prix_vente' => $card->prix_vente,
                     'reference_facture' => $card->reference_facture,
                     'possesseur' => $chefNom ?? '—',
@@ -171,7 +265,58 @@ class CarteController extends Controller
         return Inertia::render('monetique/Cartes/EnStock', [
             'cards' => $cards,
             'stockPanorama' => $stockPanorama,
+            'references' => $references,
+            'lots' => $lots,
+            'filters' => [
+                'q' => $q,
+                'reference_facture' => $reference !== '' ? $reference : '',
+                'numero_lot' => $lotParam ?? '',
+                'statut' => $statut ?? '',
+            ],
         ]);
+    }
+
+    public function updateLot(Request $request, CoficarteCard $coficarteCard)
+    {
+        $user = auth()->user();
+        if (! $user || ! CoficarteAgenceAccess::canResponsableMonetique($user)) {
+            abort(403);
+        }
+
+        $ok = CoficarteCard::query()->whereKey($coficarteCard->id);
+        CoficarteAgenceAccess::applyCardScope($ok, $user);
+        if (! $ok->exists()) {
+            abort(403);
+        }
+
+        if (! in_array($coficarteCard->status, [
+            CoficarteCard::STATUS_EN_STOCK,
+            CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT,
+        ], true)) {
+            throw ValidationException::withMessages([
+                'numero_lot' => 'Seules les cartes en stock peuvent voir leur lot modifié.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'numero_lot' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        $numeroLot = isset($validated['numero_lot']) && trim((string) $validated['numero_lot']) !== ''
+            ? trim((string) $validated['numero_lot'])
+            : null;
+
+        $ancien = $coficarteCard->numero_lot;
+        $coficarteCard->update(['numero_lot' => $numeroLot]);
+
+        CoficarteMovementLogger::log($coficarteCard, 'lot_modifie', [
+            'ancien_lot' => $ancien,
+            'nouveau_lot' => $numeroLot,
+        ], $user->id);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Lot mis à jour pour la carte '.$coficarteCard->numero_carte.'.');
     }
 
     /**
@@ -303,20 +448,48 @@ class CarteController extends Controller
             ]);
 
         $referenceCourante = trim($request->query('reference_facture', ''));
+        $lotParam = $request->query('numero_lot');
+        $lotCourant = is_string($lotParam) ? $lotParam : null;
 
+        $lots = [];
         $cartesLot = [];
         if ($referenceCourante !== '') {
-            $lotQuery = CoficarteCard::query()
+            $baseQuery = CoficarteCard::query()
                 ->where('status', CoficarteCard::STATUS_EN_STOCK)
                 ->where('reference_facture', $referenceCourante);
-            CoficarteAgenceAccess::applyCardScope($lotQuery, auth()->user());
+            CoficarteAgenceAccess::applyCardScope($baseQuery, auth()->user());
+
+            $lots = $baseQuery->clone()
+                ->select('numero_lot')
+                ->selectRaw('count(*) as cards_count')
+                ->groupBy('numero_lot')
+                ->orderByRaw('case when numero_lot is null or numero_lot = \'\' then 1 else 0 end')
+                ->orderBy('numero_lot')
+                ->get()
+                ->map(fn ($r) => [
+                    'value' => filled($r->numero_lot) ? (string) $r->numero_lot : '__sans__',
+                    'label' => filled($r->numero_lot) ? (string) $r->numero_lot : 'Sans numéro de lot',
+                    'cards_count' => (int) $r->cards_count,
+                ])
+                ->values()
+                ->all();
+
+            $lotQuery = $baseQuery->clone();
+            if ($lotCourant === '__sans__') {
+                $lotQuery->where(function (Builder $q) {
+                    $q->whereNull('numero_lot')->orWhere('numero_lot', '');
+                });
+            } elseif (filled($lotCourant)) {
+                $lotQuery->where('numero_lot', $lotCourant);
+            }
 
             $cartesLot = $lotQuery
                 ->orderBy('numero_carte')
-                ->get(['id', 'numero_carte', 'prix_vente', 'date_expiration'])
+                ->get(['id', 'numero_carte', 'numero_lot', 'prix_vente', 'date_expiration'])
                 ->map(fn (CoficarteCard $c) => [
                     'id' => $c->id,
                     'numero_carte' => $c->numero_carte,
+                    'numero_lot' => $c->numero_lot,
                     'prix_vente' => $c->prix_vente,
                     'expiration' => $c->date_expiration?->format('d/m/Y'),
                     'date_expiration' => $c->date_expiration?->toDateString(),
@@ -326,8 +499,10 @@ class CarteController extends Controller
 
         return Inertia::render('monetique/Cartes/ModifierPrix', [
             'references' => $references,
+            'lots' => $lots,
             'cartesLot' => $cartesLot,
             'referenceCourante' => $referenceCourante !== '' ? $referenceCourante : null,
+            'lotCourant' => $lotCourant,
         ]);
     }
 
@@ -399,5 +574,142 @@ class CarteController extends Controller
         return redirect()
             ->route('monetique.cartes.en-stock')
             ->with('success', $updated.' carte(s) mise(s) à jour.');
+    }
+
+    public function modifierLots(Request $request)
+    {
+        if (! CoficarteAgenceAccess::canResponsableMonetique(auth()->user())) {
+            abort(403);
+        }
+
+        $referencesQuery = CoficarteCard::query()
+            ->whereIn('status', [CoficarteCard::STATUS_EN_STOCK, CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT])
+            ->whereNotNull('reference_facture')
+            ->where('reference_facture', '!=', '');
+        CoficarteAgenceAccess::applyCardScope($referencesQuery, auth()->user());
+
+        $references = $referencesQuery
+            ->select('reference_facture')
+            ->selectRaw('count(*) as cards_count')
+            ->groupBy('reference_facture')
+            ->orderBy('reference_facture')
+            ->get()
+            ->map(fn ($r) => [
+                'reference_facture' => $r->reference_facture,
+                'cards_count' => (int) $r->cards_count,
+            ]);
+
+        $referenceCourante = trim($request->query('reference_facture', ''));
+        $lotParam = $request->query('numero_lot');
+        $lotCourant = is_string($lotParam) ? $lotParam : null;
+
+        $lots = [];
+        $cartesLot = [];
+        if ($referenceCourante !== '') {
+            $baseQuery = CoficarteCard::query()
+                ->whereIn('status', [CoficarteCard::STATUS_EN_STOCK, CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT])
+                ->where('reference_facture', $referenceCourante);
+            CoficarteAgenceAccess::applyCardScope($baseQuery, auth()->user());
+
+            $lots = $baseQuery->clone()
+                ->select('numero_lot')
+                ->selectRaw('count(*) as cards_count')
+                ->groupBy('numero_lot')
+                ->orderByRaw('case when numero_lot is null or numero_lot = \'\' then 1 else 0 end')
+                ->orderBy('numero_lot')
+                ->get()
+                ->map(fn ($r) => [
+                    'value' => filled($r->numero_lot) ? (string) $r->numero_lot : '__sans__',
+                    'label' => filled($r->numero_lot) ? (string) $r->numero_lot : 'Sans numéro de lot',
+                    'cards_count' => (int) $r->cards_count,
+                ])
+                ->values()
+                ->all();
+
+            $lotQuery = $baseQuery->clone();
+            if ($lotCourant === '__sans__') {
+                $lotQuery->where(function (Builder $q) {
+                    $q->whereNull('numero_lot')->orWhere('numero_lot', '');
+                });
+            } elseif (filled($lotCourant)) {
+                $lotQuery->where('numero_lot', $lotCourant);
+            }
+
+            $cartesLot = $lotQuery
+                ->orderBy('numero_carte')
+                ->get(['id', 'numero_carte', 'numero_lot', 'prix_vente', 'date_expiration'])
+                ->map(fn (CoficarteCard $c) => [
+                    'id' => $c->id,
+                    'numero_carte' => $c->numero_carte,
+                    'numero_lot' => $c->numero_lot,
+                    'prix_vente' => $c->prix_vente,
+                    'expiration' => $c->date_expiration?->format('d/m/Y'),
+                    'date_expiration' => $c->date_expiration?->toDateString(),
+                ])
+                ->all();
+        }
+
+        return Inertia::render('monetique/Cartes/ModifierLots', [
+            'references' => $references,
+            'lots' => $lots,
+            'cartesLot' => $cartesLot,
+            'referenceCourante' => $referenceCourante !== '' ? $referenceCourante : null,
+            'lotCourant' => $lotCourant,
+        ]);
+    }
+
+    public function updateBulkLot(Request $request)
+    {
+        $user = auth()->user();
+        if (! $user || ! CoficarteAgenceAccess::canResponsableMonetique($user)) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'reference_facture' => 'required|string|max:128',
+            'numero_lot' => 'nullable|string|max:128',
+            'card_ids' => 'required|array|min:1',
+            'card_ids.*' => 'integer|distinct',
+        ]);
+
+        $numeroLot = isset($validated['numero_lot']) && trim((string) $validated['numero_lot']) !== ''
+            ? trim((string) $validated['numero_lot'])
+            : null;
+
+        $ids = collect($validated['card_ids'])->unique()->values();
+
+        $q = CoficarteCard::query()
+            ->whereIn('id', $ids)
+            ->where('reference_facture', $validated['reference_facture'])
+            ->whereIn('status', [CoficarteCard::STATUS_EN_STOCK, CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT]);
+        CoficarteAgenceAccess::applyCardScope($q, $user);
+
+        $cards = $q->get();
+
+        if ($cards->count() !== $ids->count()) {
+            throw ValidationException::withMessages([
+                'card_ids' => 'Certaines cartes ne font pas partie de cette facture, ne sont plus en stock, ou ne sont pas dans votre périmètre.',
+            ]);
+        }
+
+        DB::transaction(function () use ($cards, $numeroLot, $user) {
+            foreach ($cards as $card) {
+                $ancien = $card->numero_lot;
+                if ($ancien === $numeroLot) {
+                    continue;
+                }
+                $card->update(['numero_lot' => $numeroLot]);
+                CoficarteMovementLogger::log($card, 'lot_modifie', [
+                    'ancien_lot' => $ancien,
+                    'nouveau_lot' => $numeroLot,
+                ], $user->id);
+            }
+        });
+
+        return redirect()
+            ->route('monetique.cartes.modifier-lots', [
+                'reference_facture' => $validated['reference_facture'],
+            ])
+            ->with('success', $cards->count().' carte(s) mises à jour (lot).');
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\ReconciliationSourceFiles;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -21,6 +22,7 @@ class ReconciliationRun extends Model
         'summary_json',
         'excel_path',
         'excel_filename',
+        'source_files',
         'user_id',
         'status',
         'error_message',
@@ -34,6 +36,7 @@ class ReconciliationRun extends Model
             'taux_reussite' => 'float',
             'taux_json' => 'array',
             'summary_json' => 'array',
+            'source_files' => 'array',
         ];
     }
 
@@ -54,5 +57,10 @@ class ReconciliationRun extends Model
         }
 
         return '/storage/'.ltrim((string) $this->excel_path, '/');
+    }
+
+    public function canRelaunch(): bool
+    {
+        return ReconciliationSourceFiles::canRelaunch($this);
     }
 }

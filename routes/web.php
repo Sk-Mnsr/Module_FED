@@ -65,6 +65,8 @@ use App\Http\Controllers\Monetique\VenteController;
 use App\Http\Controllers\N1FedController;
 use App\Http\Controllers\OffreController;
 use App\Http\Controllers\OperationDiverseController;
+use App\Http\Controllers\PodProduitController;
+use App\Http\Controllers\PodOperationController;
 use App\Http\Controllers\PublicSoumissionController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StockController;
@@ -207,6 +209,8 @@ Route::middleware(['auth'])->group(function () {
             ->name('reconciliation-flexcube.historique.index');
         Route::get('reconciliation-flexcube/historique/{run}/download', [HistoriqueController::class, 'download'])
             ->name('reconciliation-flexcube.historique.download');
+        Route::post('reconciliation-flexcube/historique/{run}/relancer', [HistoriqueController::class, 'relancer'])
+            ->name('reconciliation-flexcube.historique.relancer');
 
         Route::get('reconciliation-flexcube/reconciliation', [ReconciliationController::class, 'index'])
             ->name('reconciliation-flexcube.reconciliation.index');
@@ -238,14 +242,19 @@ Route::middleware(['auth'])->group(function () {
             ->where('resource', 'excel|excel-w2b|excel-b2w|flex|flex-w2b|flex-b2w|reconciliation|reconciliation-resume|reconciliation-taux|reconciliation-summary|reconciliation-carte-resume|reconciliation-agence|reconciliation-agence-resume|reconciliation-agence-taux')
             ->name('reconciliation-flexcube.reconciliation.db');
 
-        Route::get('reconciliation-flexcube/partenaires', [PartenaireController::class, 'index'])
-            ->name('reconciliation-flexcube.partenaires.index');
-        Route::post('reconciliation-flexcube/partenaires', [PartenaireController::class, 'store'])
-            ->name('reconciliation-flexcube.partenaires.store');
-        Route::put('reconciliation-flexcube/partenaires/{partenaire}', [PartenaireController::class, 'update'])
-            ->name('reconciliation-flexcube.partenaires.update');
-        Route::delete('reconciliation-flexcube/partenaires/{partenaire}', [PartenaireController::class, 'destroy'])
-            ->name('reconciliation-flexcube.partenaires.destroy');
+        // Référentiel partenaires : superadmin (IT) ou administrateur uniquement
+        Route::middleware('role:administrateur')->group(function () {
+            Route::get('reconciliation-flexcube/partenaires', [PartenaireController::class, 'index'])
+                ->name('reconciliation-flexcube.partenaires.index');
+            Route::post('reconciliation-flexcube/partenaires', [PartenaireController::class, 'store'])
+                ->name('reconciliation-flexcube.partenaires.store');
+            Route::put('reconciliation-flexcube/partenaires/{partenaire}', [PartenaireController::class, 'update'])
+                ->name('reconciliation-flexcube.partenaires.update');
+            Route::patch('reconciliation-flexcube/partenaires/{partenaire}/actif', [PartenaireController::class, 'toggleActif'])
+                ->name('reconciliation-flexcube.partenaires.toggle-actif');
+            Route::delete('reconciliation-flexcube/partenaires/{partenaire}', [PartenaireController::class, 'destroy'])
+                ->name('reconciliation-flexcube.partenaires.destroy');
+        });
     });
 
     // Opérations diverses
@@ -274,6 +283,29 @@ Route::middleware(['auth'])->group(function () {
         Route::get('operations-diverses/attente-validation', [OperationDiverseController::class, 'attenteValidation'])->name('operations-diverses.attente-validation');
         Route::get('operations-diverses/corbeille', [OperationDiverseController::class, 'corbeille'])->name('operations-diverses.corbeille');
         Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
+    });
+
+    // Produits d'opérations diverses (POD)
+    Route::middleware('module:pod')->prefix('pod')->name('pod.')->group(function () {
+        Route::get('/', fn () => redirect()->route('pod.produits.index'))->name('index');
+        Route::get('produits', [PodProduitController::class, 'index'])->name('produits.index');
+        Route::get('produits/create', [PodProduitController::class, 'create'])->name('produits.create');
+        Route::post('produits', [PodProduitController::class, 'store'])->name('produits.store');
+        Route::get('produits/{produit}', [PodProduitController::class, 'show'])->name('produits.show');
+        Route::get('produits/{produit}/edit', [PodProduitController::class, 'edit'])->name('produits.edit');
+        Route::put('produits/{produit}', [PodProduitController::class, 'update'])->name('produits.update');
+        Route::delete('produits/{produit}', [PodProduitController::class, 'destroy'])->name('produits.destroy');
+        Route::post('produits/{produit}/statut', [PodProduitController::class, 'updateStatut'])->name('produits.statut');
+        Route::post('parametres/taux-taf', [PodProduitController::class, 'updateTauxTafDefaut'])->name('parametres.taux-taf');
+        Route::get('import', [PodProduitController::class, 'importForm'])->name('import');
+        Route::post('import', [PodProduitController::class, 'import'])->name('import.store');
+
+        Route::get('operations', [PodOperationController::class, 'index'])->name('operations.index');
+        Route::get('operations/create', [PodOperationController::class, 'create'])->name('operations.create');
+        Route::post('operations/preview', [PodOperationController::class, 'preview'])->name('operations.preview');
+        Route::post('operations', [PodOperationController::class, 'store'])->name('operations.store');
+        Route::get('operations/{operation}', [PodOperationController::class, 'show'])->name('operations.show');
+        Route::delete('operations/{operation}', [PodOperationController::class, 'destroy'])->name('operations.destroy');
     });
 
     // Routes pour les FED (demandeur)
@@ -341,7 +373,10 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/', [CarteController::class, 'store'])->name('monetique.cartes.store');
             Route::get('modifier-prix', [CarteController::class, 'modifierPrix'])->name('monetique.cartes.modifier-prix');
             Route::put('prix', [CarteController::class, 'updateBulkPrix'])->name('monetique.cartes.prix');
+            Route::get('modifier-lots', [CarteController::class, 'modifierLots'])->name('monetique.cartes.modifier-lots');
+            Route::put('lots', [CarteController::class, 'updateBulkLot'])->name('monetique.cartes.lots');
             Route::get('en-stock', [CarteController::class, 'enStock'])->name('monetique.cartes.en-stock');
+            Route::put('{coficarte_card}/lot', [CarteController::class, 'updateLot'])->name('monetique.cartes.lot');
             Route::get('vendus', [CarteController::class, 'vendus'])->name('monetique.cartes.vendus');
             Route::get('{coficarte_card}/mouvements', [CarteController::class, 'mouvements'])->name('monetique.cartes.mouvements');
         });
