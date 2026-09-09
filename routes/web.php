@@ -377,6 +377,8 @@ Route::middleware(['auth'])->group(function () {
             Route::put('lots', [CarteController::class, 'updateBulkLot'])->name('monetique.cartes.lots');
             Route::get('en-stock', [CarteController::class, 'enStock'])->name('monetique.cartes.en-stock');
             Route::put('{coficarte_card}/lot', [CarteController::class, 'updateLot'])->name('monetique.cartes.lot');
+            Route::put('{coficarte_card}', [CarteController::class, 'update'])->name('monetique.cartes.update');
+            Route::delete('{coficarte_card}', [CarteController::class, 'destroy'])->name('monetique.cartes.destroy');
             Route::get('vendus', [CarteController::class, 'vendus'])->name('monetique.cartes.vendus');
             Route::get('{coficarte_card}/mouvements', [CarteController::class, 'mouvements'])->name('monetique.cartes.mouvements');
         });

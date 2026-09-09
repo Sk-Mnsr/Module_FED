@@ -6,12 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Models\Agence;
 use App\Models\CoficarteCard;
 use App\Models\CoficarteCardMovement;
+use App\Models\CoficarteTransfer;
 use App\Support\CoficarteAgenceAccess;
 use App\Support\CoficarteCardNumberGenerator;
 use App\Support\CoficarteMovementLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
@@ -246,7 +248,10 @@ class CarteController extends Controller
                     'numero_carte' => $card->numero_carte,
                     'numero_lot' => $card->numero_lot,
                     'prix_vente' => $card->prix_vente,
+                    'prix_achat' => $card->prix_achat,
                     'reference_facture' => $card->reference_facture,
+                    'reference_bon_livraison' => $card->reference_bon_livraison,
+                    'date_livraison' => $card->date_livraison?->toDateString(),
                     'possesseur' => $chefNom ?? '—',
                     'agence_nom' => $card->agence?->nom,
                     'agence_code' => $card->agence?->code,
@@ -317,6 +322,164 @@ class CarteController extends Controller
         return redirect()
             ->back()
             ->with('success', 'Lot mis à jour pour la carte '.$coficarteCard->numero_carte.'.');
+    }
+
+    public function update(Request $request, CoficarteCard $coficarteCard)
+    {
+        $user = auth()->user();
+        if (! $user || ! $user->isSuperAdmin()) {
+            abort(403, 'Seuls les super administrateurs peuvent modifier une carte.');
+        }
+
+        if ($coficarteCard->status === CoficarteCard::STATUS_VENDU || $coficarteCard->sale()->exists()) {
+            throw ValidationException::withMessages([
+                'card' => 'Impossible de modifier une carte déjà vendue.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'numero_carte' => ['required', 'string', 'max:64'],
+            'numero_lot' => ['nullable', 'string', 'max:128'],
+            'reference_facture' => ['required', 'string', 'max:128'],
+            'reference_bon_livraison' => ['nullable', 'string', 'max:128'],
+            'prix_vente' => ['required', 'integer', 'min:0'],
+            'prix_achat' => ['required', 'integer', 'min:0'],
+            'date_livraison' => ['required', 'date'],
+            'date_expiration' => ['required', 'date', 'after_or_equal:date_livraison'],
+        ], [
+            'numero_carte.required' => 'Le numéro de carte est obligatoire.',
+            'reference_facture.required' => 'La référence de facture est obligatoire.',
+            'prix_vente.required' => 'Le prix de vente est obligatoire.',
+            'prix_achat.required' => 'Le prix d’achat est obligatoire.',
+            'date_livraison.required' => 'La date de livraison est obligatoire.',
+            'date_expiration.required' => 'La date d’expiration est obligatoire.',
+            'date_expiration.after_or_equal' => 'La date d’expiration doit être postérieure ou égale à la date de livraison.',
+        ]);
+
+        try {
+            $numero = CoficarteCardNumberGenerator::normalize($validated['numero_carte']);
+        } catch (\InvalidArgumentException $e) {
+            throw ValidationException::withMessages([
+                'numero_carte' => [$e->getMessage()],
+            ]);
+        }
+
+        $exists = CoficarteCard::query()
+            ->where('numero_carte', $numero)
+            ->where('id', '!=', $coficarteCard->id)
+            ->exists();
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'numero_carte' => ['Ce numéro de carte est déjà utilisé.'],
+            ]);
+        }
+
+        $numeroLot = isset($validated['numero_lot']) && trim((string) $validated['numero_lot']) !== ''
+            ? trim((string) $validated['numero_lot'])
+            : null;
+        $refBl = isset($validated['reference_bon_livraison']) && trim((string) $validated['reference_bon_livraison']) !== ''
+            ? trim((string) $validated['reference_bon_livraison'])
+            : null;
+
+        $avant = $coficarteCard->only([
+            'numero_carte',
+            'numero_lot',
+            'reference_facture',
+            'reference_bon_livraison',
+            'prix_vente',
+            'prix_achat',
+            'date_livraison',
+            'date_expiration',
+        ]);
+
+        $coficarteCard->update([
+            'numero_carte' => $numero,
+            'numero_lot' => $numeroLot,
+            'reference_facture' => $validated['reference_facture'],
+            'reference_bon_livraison' => $refBl,
+            'prix_vente' => (int) $validated['prix_vente'],
+            'prix_achat' => (int) $validated['prix_achat'],
+            'date_livraison' => $validated['date_livraison'],
+            'date_expiration' => $validated['date_expiration'],
+        ]);
+
+        CoficarteMovementLogger::log($coficarteCard, 'carte_modifiee', [
+            'avant' => $avant,
+            'apres' => $coficarteCard->only([
+                'numero_carte',
+                'numero_lot',
+                'reference_facture',
+                'reference_bon_livraison',
+                'prix_vente',
+                'prix_achat',
+                'date_livraison',
+                'date_expiration',
+            ]),
+        ], $user->id);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Carte '.$coficarteCard->numero_carte.' mise à jour.');
+    }
+
+    public function destroy(CoficarteCard $coficarteCard)
+    {
+        $user = auth()->user();
+        if (! $user || ! $user->isSuperAdmin()) {
+            abort(403, 'Seuls les super administrateurs peuvent supprimer une carte.');
+        }
+
+        if ($coficarteCard->status === CoficarteCard::STATUS_VENDU || $coficarteCard->sale()->exists()) {
+            throw ValidationException::withMessages([
+                'card' => 'Impossible de supprimer une carte déjà vendue.',
+            ]);
+        }
+
+        if ($coficarteCard->status === CoficarteCard::STATUS_EN_TRANSFERT) {
+            throw ValidationException::withMessages([
+                'card' => 'Impossible de supprimer une carte en cours de transfert.',
+            ]);
+        }
+
+        $inPendingTransfer = CoficarteTransfer::query()
+            ->where('status', CoficarteTransfer::STATUS_EN_ATTENTE)
+            ->where(function (Builder $q) use ($coficarteCard) {
+                $q->whereJsonContains('card_ids', $coficarteCard->id)
+                    ->orWhereJsonContains('card_ids', (string) $coficarteCard->id);
+            })
+            ->exists();
+
+        if ($inPendingTransfer) {
+            throw ValidationException::withMessages([
+                'card' => 'Cette carte est liée à un transfert en attente : annulez d’abord le transfert.',
+            ]);
+        }
+
+        $numero = $coficarteCard->numero_carte;
+        $facturePath = $coficarteCard->facture_path;
+        $bonPath = $coficarteCard->bon_livraison_path;
+
+        DB::transaction(function () use ($coficarteCard) {
+            $coficarteCard->delete();
+        });
+
+        if (filled($facturePath) && Storage::disk('public')->exists($facturePath)) {
+            // Ne pas supprimer la facture si d’autres cartes du même lot la partagent.
+            $factureStillUsed = CoficarteCard::query()->where('facture_path', $facturePath)->exists();
+            if (! $factureStillUsed) {
+                Storage::disk('public')->delete($facturePath);
+            }
+        }
+        if (filled($bonPath) && Storage::disk('public')->exists($bonPath)) {
+            $bonStillUsed = CoficarteCard::query()->where('bon_livraison_path', $bonPath)->exists();
+            if (! $bonStillUsed) {
+                Storage::disk('public')->delete($bonPath);
+            }
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', 'Carte '.$numero.' supprimée.');
     }
 
     /**

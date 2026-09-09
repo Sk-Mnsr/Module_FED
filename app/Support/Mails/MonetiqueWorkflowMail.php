@@ -16,7 +16,7 @@ final class MonetiqueWorkflowMail
     public static function supplyRequestCreated(CoficarteSupplyRequest $request): void
     {
         $request->loadMissing('agence:id,nom,code', 'chef:id,name,email');
-        $recipients = AppMail::usersWithAnyRole(['monetique', 'monetique_ops']);
+        $recipients = AppMail::usersWithAnyRole(['monetique']);
         if ($recipients->isEmpty()) {
             return;
         }
@@ -182,7 +182,7 @@ final class MonetiqueWorkflowMail
                 'Stock central',
                 $count,
                 (int) $threshold->min_cards,
-                AppMail::usersWithAnyRole(['monetique', 'monetique_ops']),
+                AppMail::usersWithAnyRole(['monetique']),
             );
 
             return;
@@ -212,7 +212,7 @@ final class MonetiqueWorkflowMail
                 $q->where(function ($inner) use ($agenceId) {
                     $inner->where('agence_id', $agenceId)
                         ->whereHas('roles', fn ($r) => $r->whereIn('slug', ['ca', 'caissier']));
-                })->orWhereHas('roles', fn ($r) => $r->whereIn('slug', ['monetique', 'monetique_ops']));
+                })->orWhereHas('roles', fn ($r) => $r->where('slug', 'monetique'));
             })
             ->get(['id', 'name', 'email']);
 

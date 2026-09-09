@@ -55,7 +55,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         $coficarteAlerts = [];
-        if ($user && ($user->isSuperAdmin() || $user->hasAnyRole(['monetique', 'monetique_ops', 'it', 'ca']))) {
+        if ($user && ($user->isSuperAdmin() || $user->hasAnyRole(['monetique', 'it', 'ca']))) {
             if (CoficarteAgenceAccess::canViewAll($user)) {
                 $thresholdCentral = CoficarteStockThreshold::query()
                     ->where('cible', CoficarteStockThreshold::CIBLE_CENTRAL)

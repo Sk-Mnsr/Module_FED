@@ -54,7 +54,6 @@ Valider en recette :
 |-----------------|------|-------------------|
 | SuperAdmin / IT | `it` | Bypass |
 | Responsable monétique | `monetique` | Stock central, enrôlement, prix, transferts |
-| Ops monétique | `monetique_ops` | Vue / opérations |
 | Chef d’agence | `ca` | Réception, stock agence, appro CC, demandes |
 | Chargé de clientèle | `cc` | Vente, recharge |
 | Caissier | `caissier` | Encaissement |

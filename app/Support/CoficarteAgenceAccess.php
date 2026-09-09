@@ -18,7 +18,7 @@ final class CoficarteAgenceAccess
             return true;
         }
 
-        return $user->hasAnyRole(['it', 'monetique', 'monetique_ops']);
+        return $user->hasAnyRole(['it', 'monetique']);
     }
 
     /**
@@ -50,7 +50,7 @@ final class CoficarteAgenceAccess
             return true;
         }
 
-        if ($user->hasAnyRole(['monetique', 'monetique_ops'])) {
+        if ($user->hasRole('monetique')) {
             return true;
         }
 

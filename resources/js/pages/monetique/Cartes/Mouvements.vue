@@ -27,6 +27,8 @@ const breadcrumbs: BreadcrumbItem[] = [
 /** Libellés métier : les `event_type` en base sont des codes techniques pour le logger. */
 const EVENT_LABELS: Record<string, string> = {
     carte_creee: 'Carte créée',
+    carte_modifiee: 'Carte modifiée',
+    lot_modifie: 'Lot modifié',
     prix_vente_maj: 'Prix de vente modifié',
     transfert_en_attente: 'Transfert vers agence (en attente de réception)',
     transfert_recu_agence: 'Transfert réceptionné en agence',
@@ -41,6 +43,8 @@ const EVENT_LABELS: Record<string, string> = {
 
 const EVENT_HINTS: Record<string, string> = {
     carte_creee: 'Enregistrement en stock.',
+    carte_modifiee: 'Correction des informations de la carte (super admin).',
+    lot_modifie: 'Mise à jour du numéro de lot.',
     transfert_en_attente: 'Expédition depuis la monétique centrale.',
     transfert_recu_agence: 'Arrivée confirmée au niveau agence.',
     assignation_cc: 'La carte est passée en poche d’un CC.',

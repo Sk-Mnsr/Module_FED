@@ -151,14 +151,6 @@ class RoleSeeder extends Seeder
                 'actif' => true,
             ],
             [
-                'nom' => 'Monétique',
-                'slug' => 'monetique_ops',
-                'module' => 'monetique',
-                'access_profile' => 'monetique',
-                'description' => 'Accès au module Monétique (Coficarte, Cartes, Transferts, Ventes)',
-                'actif' => true,
-            ],
-            [
                 'nom' => 'Responsable Monétique',
                 'slug' => 'monetique',
                 'module' => 'monetique',

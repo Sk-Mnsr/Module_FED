@@ -6,6 +6,14 @@ import ExpirationBar from '@/components/ExpirationBar.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { formatCardNumberDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, usePage } from '@inertiajs/vue3';
@@ -22,6 +30,7 @@ import {
     RotateCcw,
     Eye,
     ShoppingBag,
+    Trash2,
 } from 'lucide-vue-next';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -37,7 +46,10 @@ type StockCardRow = {
     numero_carte: string;
     numero_lot?: string | null;
     prix_vente: number;
+    prix_achat?: number | null;
     reference_facture: string;
+    reference_bon_livraison?: string | null;
+    date_livraison?: string | null;
     possesseur: string;
     agence_nom?: string | null;
     agence_code?: string | null;
@@ -224,9 +236,113 @@ const columns = [
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string } | undefined);
 const canResponsableMonetique = computed(() => page.props.auth.canResponsableMonetique === true);
+const isSuperAdmin = computed(() => page.props.auth.isSuperAdmin === true);
 const stockPanorama = computed(() => props.stockPanorama ?? null);
 const formatCfa = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
 const reload = () => router.reload({ only: ['cards', 'stockPanorama', 'references', 'lots', 'filters'] });
+
+const deleteOpen = ref(false);
+const deleteCard = ref<StockCardRow | null>(null);
+const deleteProcessing = ref(false);
+const deleteError = ref('');
+
+function openDeleteDialog(row: StockCardRow) {
+    deleteCard.value = row;
+    deleteError.value = '';
+    deleteOpen.value = true;
+}
+
+function closeDeleteDialog() {
+    if (deleteProcessing.value) return;
+    deleteOpen.value = false;
+    deleteCard.value = null;
+    deleteError.value = '';
+}
+
+function confirmDelete() {
+    if (!deleteCard.value?.id) return;
+    deleteProcessing.value = true;
+    deleteError.value = '';
+    router.delete(`/monetique/cartes/${deleteCard.value.id}`, {
+        preserveScroll: true,
+        onError: (errs) => {
+            deleteError.value = (errs as Record<string, string>).card
+                ?? (errs as Record<string, string>).message
+                ?? 'Suppression impossible.';
+        },
+        onSuccess: () => {
+            deleteOpen.value = false;
+            deleteCard.value = null;
+        },
+        onFinish: () => {
+            deleteProcessing.value = false;
+        },
+    });
+}
+
+const editOpen = ref(false);
+const editCardId = ref<number | null>(null);
+const editProcessing = ref(false);
+const editError = ref('');
+const editFieldErrors = ref<Record<string, string>>({});
+const editForm = ref({
+    numero_carte: '',
+    numero_lot: '',
+    reference_facture: '',
+    reference_bon_livraison: '',
+    prix_vente: '' as number | '',
+    prix_achat: '' as number | '',
+    date_livraison: '',
+    date_expiration: '',
+});
+
+function openEditDialog(row: StockCardRow) {
+    if (!row.id) return;
+    editCardId.value = row.id;
+    editError.value = '';
+    editFieldErrors.value = {};
+    editForm.value = {
+        numero_carte: row.numero_carte ?? '',
+        numero_lot: row.numero_lot ?? '',
+        reference_facture: row.reference_facture ?? '',
+        reference_bon_livraison: row.reference_bon_livraison ?? '',
+        prix_vente: row.prix_vente ?? '',
+        prix_achat: row.prix_achat ?? '',
+        date_livraison: row.date_livraison ?? '',
+        date_expiration: row.date_expiration ?? '',
+    };
+    editOpen.value = true;
+}
+
+function closeEditDialog() {
+    if (editProcessing.value) return;
+    editOpen.value = false;
+    editCardId.value = null;
+    editError.value = '';
+    editFieldErrors.value = {};
+}
+
+function confirmEdit() {
+    if (!editCardId.value) return;
+    editProcessing.value = true;
+    editError.value = '';
+    editFieldErrors.value = {};
+    router.put(`/monetique/cartes/${editCardId.value}`, { ...editForm.value }, {
+        preserveScroll: true,
+        onError: (errs) => {
+            const e = errs as Record<string, string>;
+            editFieldErrors.value = e;
+            editError.value = e.card ?? e.message ?? '';
+        },
+        onSuccess: () => {
+            editOpen.value = false;
+            editCardId.value = null;
+        },
+        onFinish: () => {
+            editProcessing.value = false;
+        },
+    });
+}
 
 const statutBadgeClass = (k: StockStatutKey) => {
     switch (k) {
@@ -369,6 +485,12 @@ const statutBadgeClass = (k: StockStatutKey) => {
             >
                 {{ flash.success }}
             </div>
+            <div
+                v-if="flash?.error"
+                class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+            >
+                {{ flash.error }}
+            </div>
 
             <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
                 <div>
@@ -496,10 +618,134 @@ const statutBadgeClass = (k: StockStatutKey) => {
                         >
                             <Eye class="h-4 w-4" />
                         </button>
+                        <button
+                            v-if="isSuperAdmin && item.id"
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-primary hover:bg-primary/10"
+                            title="Modifier la carte (super admin)"
+                            @click="openEditDialog(item)"
+                        >
+                            <Pencil class="h-4 w-4" />
+                        </button>
+                        <button
+                            v-if="isSuperAdmin && item.id"
+                            type="button"
+                            class="inline-flex items-center justify-center rounded-md p-2 text-rose-600 hover:bg-rose-50 hover:text-rose-800"
+                            title="Supprimer la carte (super admin)"
+                            @click="openDeleteDialog(item)"
+                        >
+                            <Trash2 class="h-4 w-4" />
+                        </button>
                     </div>
                 </template>
             </DataTable>
         </div>
 
+        <Dialog :open="editOpen" @update:open="(v) => { if (!v) closeEditDialog(); }">
+            <DialogContent class="sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle class="inline-flex items-center gap-2">
+                        <Pencil class="size-5" />
+                        Modifier la carte
+                    </DialogTitle>
+                    <DialogDescription>
+                        Réservé au super administrateur. Les cartes déjà vendues ne peuvent pas être modifiées.
+                    </DialogDescription>
+                </DialogHeader>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div class="space-y-1.5 sm:col-span-2">
+                        <Label for="edit_numero_carte">Numéro de carte</Label>
+                        <Input id="edit_numero_carte" v-model="editForm.numero_carte" class="font-mono" />
+                        <p v-if="editFieldErrors.numero_carte" class="text-xs text-rose-600">{{ editFieldErrors.numero_carte }}</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="edit_numero_lot">Numéro de lot</Label>
+                        <Input id="edit_numero_lot" v-model="editForm.numero_lot" />
+                        <p v-if="editFieldErrors.numero_lot" class="text-xs text-rose-600">{{ editFieldErrors.numero_lot }}</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="edit_reference_facture">Référence facture</Label>
+                        <Input id="edit_reference_facture" v-model="editForm.reference_facture" />
+                        <p v-if="editFieldErrors.reference_facture" class="text-xs text-rose-600">{{ editFieldErrors.reference_facture }}</p>
+                    </div>
+                    <div class="space-y-1.5 sm:col-span-2">
+                        <Label for="edit_reference_bon_livraison">Référence bon de livraison</Label>
+                        <Input id="edit_reference_bon_livraison" v-model="editForm.reference_bon_livraison" />
+                        <p v-if="editFieldErrors.reference_bon_livraison" class="text-xs text-rose-600">{{ editFieldErrors.reference_bon_livraison }}</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="edit_prix_vente">Prix de vente (F CFA)</Label>
+                        <Input id="edit_prix_vente" v-model="editForm.prix_vente" type="number" min="0" />
+                        <p v-if="editFieldErrors.prix_vente" class="text-xs text-rose-600">{{ editFieldErrors.prix_vente }}</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="edit_prix_achat">Prix d’achat (F CFA)</Label>
+                        <Input id="edit_prix_achat" v-model="editForm.prix_achat" type="number" min="0" />
+                        <p v-if="editFieldErrors.prix_achat" class="text-xs text-rose-600">{{ editFieldErrors.prix_achat }}</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="edit_date_livraison">Date de livraison</Label>
+                        <Input id="edit_date_livraison" v-model="editForm.date_livraison" type="date" />
+                        <p v-if="editFieldErrors.date_livraison" class="text-xs text-rose-600">{{ editFieldErrors.date_livraison }}</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="edit_date_expiration">Date d’expiration</Label>
+                        <Input id="edit_date_expiration" v-model="editForm.date_expiration" type="date" />
+                        <p v-if="editFieldErrors.date_expiration" class="text-xs text-rose-600">{{ editFieldErrors.date_expiration }}</p>
+                    </div>
+                </div>
+                <p v-if="editError" class="text-sm text-rose-700">{{ editError }}</p>
+                <DialogFooter class="gap-2">
+                    <Button type="button" variant="outline" class="bg-white" :disabled="editProcessing" @click="closeEditDialog">
+                        Annuler
+                    </Button>
+                    <Button
+                        type="button"
+                        class="bg-primary hover:bg-primary/90"
+                        :disabled="editProcessing"
+                        @click="confirmEdit"
+                    >
+                        {{ editProcessing ? 'Enregistrement…' : 'Enregistrer' }}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog :open="deleteOpen" @update:open="(v) => { if (!v) closeDeleteDialog(); }">
+            <DialogContent class="sm:max-w-md border-rose-200/80 bg-rose-50/40">
+                <DialogHeader>
+                    <DialogTitle class="inline-flex items-center gap-2 text-rose-950">
+                        <Trash2 class="size-5" />
+                        Supprimer la carte
+                    </DialogTitle>
+                    <DialogDescription class="text-rose-900/80">
+                        Cette action est définitive. Réservée au super administrateur.
+                    </DialogDescription>
+                </DialogHeader>
+                <div v-if="deleteCard" class="rounded-lg border border-rose-200 bg-white/80 px-3 py-2.5 text-sm text-slate-700">
+                    <p class="font-mono tabular-nums font-medium">
+                        {{ formatCardNumberDisplay(deleteCard.numero_carte) }}
+                    </p>
+                    <p class="mt-1 text-xs text-slate-500">
+                        Facture {{ deleteCard.reference_facture || '—' }}
+                        · lot {{ deleteCard.numero_lot || '—' }}
+                    </p>
+                </div>
+                <p v-if="deleteError" class="text-sm text-rose-700">{{ deleteError }}</p>
+                <DialogFooter class="gap-2">
+                    <Button type="button" variant="outline" class="bg-white" :disabled="deleteProcessing" @click="closeDeleteDialog">
+                        Annuler
+                    </Button>
+                    <Button
+                        type="button"
+                        class="bg-rose-600 text-white hover:bg-rose-700"
+                        :disabled="deleteProcessing"
+                        @click="confirmDelete"
+                    >
+                        {{ deleteProcessing ? 'Suppression…' : 'Confirmer la suppression' }}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     </AppLayout>
 </template>

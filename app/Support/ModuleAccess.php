@@ -33,7 +33,6 @@ final class ModuleAccess
         'budget' => 'budget',
         'referentiels' => 'config',
         'monetique' => 'monetique',
-        'monetique_ops' => 'monetique',
         'ca' => 'monetique',
         'cc' => 'monetique',
         'caissier' => 'monetique',
@@ -268,7 +267,7 @@ final class ModuleAccess
             return 'admin';
         }
 
-        if (in_array($slug, ['monetique', 'monetique_ops', 'ca', 'cc', 'caissier'], true)) {
+        if (in_array($slug, ['monetique', 'ca', 'cc', 'caissier'], true)) {
             return 'monetique';
         }
 
@@ -403,7 +402,7 @@ final class ModuleAccess
             'budget' => ['budget'],
             'stock' => ['it', 'responsable_achats', 'responsable_stock'],
             'ecritures' => ['it', 'controle_de_gestion', 'daf'],
-            'monetique' => ['it', 'monetique', 'monetique_ops', 'ca', 'cc', 'caissier'],
+            'monetique' => ['it', 'monetique', 'ca', 'cc', 'caissier'],
             'od' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
             'pod' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf', 'pod'],
             'reconciliation' => ['reconciliation'],
