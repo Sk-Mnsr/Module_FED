@@ -79,6 +79,8 @@ type ApercuRow = {
     numero: string;
     code_agence: string;
     no_compte: string;
+    compte?: string;
+    related_account?: string;
     sens: string;
     montant: number;
     code_operation: string;
@@ -612,6 +614,7 @@ function confirmerSupprimer() {
                                 <th class="px-3 py-2.5 font-semibold sm:px-4">Id</th>
                                 <th class="px-3 py-2.5 font-semibold">Agence</th>
                                 <th class="px-3 py-2.5 font-semibold">N° Compte</th>
+                                <th class="px-3 py-2.5 font-semibold">Compte</th>
                                 <th class="px-3 py-2.5 font-semibold">Sens</th>
                                 <th class="px-3 py-2.5 text-right font-semibold">Montant</th>
                                 <th class="px-3 py-2.5 font-semibold">Code Op.</th>
@@ -628,6 +631,7 @@ function confirmerSupprimer() {
                                 <td class="px-3 py-2 sm:px-4">{{ row.numero || i + 1 }}</td>
                                 <td class="px-3 py-2">{{ row.code_agence }}</td>
                                 <td class="px-3 py-2 font-mono">{{ row.no_compte }}</td>
+                                <td class="px-3 py-2">{{ row.compte || '—' }}</td>
                                 <td class="px-3 py-2">
                                     <span
                                         class="rounded px-1.5 py-0.5 text-[10px] font-semibold"

@@ -83,7 +83,7 @@ type FlatNode = TreeNode & { depth: number };
 </script>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -398,28 +398,7 @@ function isExpanded(node: FlatNode): boolean {
     return expanded.value.has(node.id);
 }
 
-function collectExpandableIds(node: TreeNode, ids: string[] = []): string[] {
-    if (node.children.length > 0) {
-        ids.push(node.id);
-        for (const child of node.children) {
-            collectExpandableIds(child, ids);
-        }
-    }
-
-    return ids;
-}
-
-watch(
-    treeRoot,
-    (root) => {
-        if ((props.totalClasseurs ?? 0) > 0) {
-            expanded.value = new Set(collectExpandableIds(root));
-        } else if (expanded.value.size <= 1) {
-            expanded.value = new Set(['root', 'dept-finance', 'dept-operations']);
-        }
-    },
-    { immediate: true, deep: true },
-);
+// Pas de dépliage auto : expanded démarre sur « root » uniquement (arborescence repliée).
 </script>
 
 <template>
@@ -561,7 +540,7 @@ watch(
                     <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         <div class="space-y-1.5">
                             <Label for="filtre-archive-du" class="text-xs text-muted-foreground">
-                                Archivé du
+                                Date valeur du
                             </Label>
                             <Input
                                 id="filtre-archive-du"
@@ -572,7 +551,7 @@ watch(
                         </div>
                         <div class="space-y-1.5">
                             <Label for="filtre-archive-au" class="text-xs text-muted-foreground">
-                                Archivé au
+                                Date valeur au
                             </Label>
                             <Input
                                 id="filtre-archive-au"

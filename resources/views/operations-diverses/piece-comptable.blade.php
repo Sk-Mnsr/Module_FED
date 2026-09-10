@@ -107,7 +107,7 @@
                     <td>{{ $row['numero'] ?? ($i + 1) }}</td>
                     <td>{{ $row['code_agence'] ?? '' }}</td>
                     <td>{{ $row['no_compte'] ?? '' }}</td>
-                    <td></td>
+                    <td>{{ $row['compte'] ?? '' }}</td>
                     <td class="num">{{ $sens === 'D' ? $fmt($montant) : '' }}</td>
                     <td class="num">{{ $sens === 'C' ? $fmt($montant) : '' }}</td>
                     <td>{{ $row['code_operation'] ?? '' }}</td>

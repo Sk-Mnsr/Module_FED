@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Agence;
 use App\Models\OdClasseur;
 use App\Models\OdClasseurPiece;
+use App\Services\Integrations\FlexcubeAccountDescriptionResolver;
 use App\Services\Integrations\FlexcubeOnlineJournalClient;
 use App\Support\FlashDialog;
 use App\Support\OdArchivage;
@@ -372,7 +373,7 @@ class OperationDiverseController extends Controller
         $this->authorizeClasseur($classeur);
         $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy', 'rejectedBy']);
 
-        $parsed = $this->parseIntegration($classeur);
+        $parsed = $this->enrichRowsWithCompteLibelle($this->parseIntegration($classeur));
         $user = auth()->user();
 
         return Inertia::render('OperationsDiverses/PieceComptableResume', [
@@ -759,12 +760,9 @@ class OperationDiverseController extends Controller
     {
         $this->authorizeClasseur($classeur);
 
-        $classeur->load('user');
-
-        if (! $classeur->piece_pdf_path || ! Storage::disk('local')->exists($classeur->piece_pdf_path)) {
-            $this->genererPieceComptable($classeur);
-            $classeur->refresh();
-        }
+        // Toujours régénérer pour prendre en compte les signatures maker/checker à jour.
+        $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy']));
+        $classeur->refresh();
 
         $filename = 'piece-comptable-'.Str::slug((string) $classeur->numero_piece, '_').'.pdf';
         $path = Storage::disk('local')->path($classeur->piece_pdf_path);
@@ -950,7 +948,7 @@ class OperationDiverseController extends Controller
         OdArchivage::applySearchFilters($query, $filters);
 
         $classeurs = $query
-            ->orderByDesc('archive_date')
+            ->orderByDesc('date_valeur')
             ->orderByDesc('archived_at')
             ->get();
 
@@ -1104,6 +1102,8 @@ class OperationDiverseController extends Controller
                 'numero' => $toUtf8((string) ($row['numero'] ?? '')),
                 'code_agence' => $toUtf8((string) ($row['code_agence'] ?? '')),
                 'no_compte' => $toUtf8((string) ($row['no_compte'] ?? '')),
+                'compte' => $toUtf8((string) ($row['compte'] ?? '')),
+                'related_account' => $toUtf8((string) ($row['related_account'] ?? '')),
                 'sens' => $toUtf8((string) ($row['_sens'] ?? ($row['sens'] ?? ''))),
                 'montant' => $row['_montant'] ?? 0,
                 'code_operation' => $toUtf8((string) ($row['code_operation'] ?? '')),
@@ -1469,6 +1469,7 @@ class OperationDiverseController extends Controller
         $classeur->loadMissing(['user', 'integratedBy', 'assignedChecker', 'validatedBy']);
 
         $parsed = $this->parseIntegration($classeur);
+        $parsed = $this->enrichRowsWithCompteLibelle($parsed);
 
         $userId = '';
         if (! empty($parsed['rows'])) {
@@ -1604,6 +1605,45 @@ class OperationDiverseController extends Controller
             if (isset($manualLines[$i]['related_account'])) {
                 $row['related_account'] = $manualLines[$i]['related_account'];
             }
+        }
+        unset($row);
+
+        return $parsed;
+    }
+
+    /**
+     * Enrichit les lignes avec l’intitulé Flexcube (AC_DESC) pour la colonne « Compte ».
+     *
+     * @param  array<string, mixed>  $parsed
+     * @return array<string, mixed>
+     */
+    private function enrichRowsWithCompteLibelle(array $parsed): array
+    {
+        $rows = $parsed['rows'] ?? [];
+        if (! is_array($rows) || $rows === []) {
+            return $parsed;
+        }
+
+        $accounts = [];
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $no = trim((string) ($row['no_compte'] ?? ''));
+            if ($no !== '') {
+                $accounts[] = $no;
+            }
+        }
+
+        $map = app(FlexcubeAccountDescriptionResolver::class)
+            ->resolveMany($accounts);
+
+        foreach ($parsed['rows'] as &$row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $no = trim((string) ($row['no_compte'] ?? ''));
+            $row['compte'] = $no !== '' ? ($map[$no] ?? '') : '';
         }
         unset($row);
 

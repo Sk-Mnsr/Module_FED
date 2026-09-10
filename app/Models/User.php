@@ -34,6 +34,7 @@ class User extends AuthenticatableBase
         'profile',
         'activated',
         'password_change_required',
+        'signature',
     ];
 
     /**
@@ -44,6 +45,8 @@ class User extends AuthenticatableBase
     protected $hidden = [
         'password',
         'remember_token',
+        // Data URI potentiellement très volumineux — exposé uniquement via savedSignature (profil).
+        'signature',
     ];
 
     /**
@@ -57,6 +60,7 @@ class User extends AuthenticatableBase
      */
     protected $appends = [
         'ability_rules',
+        'has_signature',
     ];
 
     /**

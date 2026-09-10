@@ -206,23 +206,23 @@ final class OdArchivage
         }
 
         if (! empty($filters['annee'])) {
-            $query->whereYear('archive_date', (int) $filters['annee']);
+            $query->whereYear('date_valeur', (int) $filters['annee']);
         }
 
         if (! empty($filters['mois'])) {
-            $query->whereMonth('archive_date', (int) $filters['mois']);
+            $query->whereMonth('date_valeur', (int) $filters['mois']);
         }
 
         if (! empty($filters['jour'])) {
-            $query->whereDay('archive_date', (int) $filters['jour']);
+            $query->whereDay('date_valeur', (int) $filters['jour']);
         }
 
         if (! empty($filters['archive_du'])) {
-            $query->whereDate('archive_date', '>=', $filters['archive_du']);
+            $query->whereDate('date_valeur', '>=', $filters['archive_du']);
         }
 
         if (! empty($filters['archive_au'])) {
-            $query->whereDate('archive_date', '<=', $filters['archive_au']);
+            $query->whereDate('date_valeur', '<=', $filters['archive_au']);
         }
 
         if (! empty($filters['date_valeur_du'])) {
@@ -236,9 +236,13 @@ final class OdArchivage
         return $query;
     }
 
+    /**
+     * Clé de classement arborescence : date de valeur (pas la date de validation).
+     */
     public static function archiveDateKey(OdClasseur $classeur): ?string
     {
-        return optional($classeur->archive_date)->toDateString()
+        return optional($classeur->date_valeur)->toDateString()
+            ?? optional($classeur->archive_date)->toDateString()
             ?? optional($classeur->integrated_at)->toDateString()
             ?? optional($classeur->created_at)->toDateString();
     }
