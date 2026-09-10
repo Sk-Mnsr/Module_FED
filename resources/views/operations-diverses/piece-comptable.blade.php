@@ -38,10 +38,15 @@
         table.lines th { background: #ffffff; font-weight: bold; color: #1a3e8c; font-size: 8px; }
         table.lines td { font-size: 8px; }
         .num { text-align: right; }
-        .footer { width: 100%; margin-top: 34px; }
+        .footer { width: 100%; margin-top: 40px; }
         .footer td { font-weight: bold; vertical-align: top; }
-        .sig-img { max-height: 46px; max-width: 170px; margin-top: 6px; }
-        .sig-wrap-right { text-align: right; margin-top: 6px; }
+        .sig-block { width: 100%; text-align: center; margin-top: 10px; }
+        .sig-img {
+            height: 90px;
+            max-width: 280px;
+            width: auto;
+        }
+        .sig-wrap-right { text-align: center; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -123,15 +128,15 @@
 
     <table class="footer">
         <tr>
-            <td style="width:50%;">
+            <td style="width:50%; text-align:center;">
                 Maker : {{ $makerName ?? '' }}
                 @if(! empty($makerSignature))
-                    <div>
+                    <div class="sig-block">
                         <img class="sig-img" src="{{ $makerSignature }}" alt="Signature maker">
                     </div>
                 @endif
             </td>
-            <td style="width:50%; text-align:right;">
+            <td style="width:50%; text-align:center;">
                 Checker : {{ $checkerName ?? '' }}
                 @if(! empty($checkerSignature))
                     <div class="sig-wrap-right">
