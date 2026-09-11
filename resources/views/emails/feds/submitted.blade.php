@@ -1,13 +1,8 @@
 <x-mail::message>
-# Introduction
+# Demande soumise
 
-The body of your message.
-
-<x-mail::button :url="''">
-Button Text
-</x-mail::button>
+Une demande FED a été soumise et nécessite votre attention.
 
 Thanks,<br>
 {{ config('app.name') }}
 </x-mail::message>
- 
