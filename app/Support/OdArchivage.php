@@ -92,11 +92,15 @@ final class OdArchivage
     }
 
     /**
-     * Visibilité archivage : IT tout voir ; ops/finance voient les pièces de leur pôle.
+     * Visibilité archivage : IT / Contrôleur tout voir ; ops/finance voient leur pôle.
      */
     public static function applyPoleVisibility(Builder $query, User $viewer): Builder
     {
         if ($viewer->isSuperAdmin() || $viewer->hasRole('it') || $viewer->hasRole('admin')) {
+            return $query;
+        }
+
+        if (OdControle::canViewAllArchives($viewer)) {
             return $query;
         }
 
@@ -120,6 +124,10 @@ final class OdArchivage
     public static function canViewClasseur(User $viewer, OdClasseur $classeur): bool
     {
         if ($viewer->isSuperAdmin() || $viewer->hasRole('it') || $viewer->hasRole('admin')) {
+            return true;
+        }
+
+        if (OdControle::canViewAllArchives($viewer) && $classeur->isIntegre()) {
             return true;
         }
 
@@ -160,6 +168,7 @@ final class OdArchivage
         return $viewer->isSuperAdmin()
             || $viewer->hasRole('it')
             || $viewer->hasRole('admin')
+            || OdControle::canViewAllArchives($viewer)
             || $viewer->hasRole(OdChecker::ROLE_OPS)
             || $viewer->hasRole(OdChecker::ROLE_FINANCE);
     }

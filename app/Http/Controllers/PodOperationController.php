@@ -5,11 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\PodOperation;
 use App\Models\PodOperationLigne;
 use App\Models\PodProduit;
+use App\Models\User;
+use App\Support\PodChampSaisie;
+use App\Support\PodConstanteResolver;
+use App\Support\PodEcranAccess;
 use App\Support\PodFraisCalculator;
+use App\Support\PodProduitWorkflow;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 
@@ -67,6 +75,7 @@ class PodOperationController extends Controller
     {
         $produits = PodProduit::query()
             ->where('actif', true)
+            ->whereIn('statut', [PodProduit::STATUT_VALIDE, PodProduit::STATUT_PRODUCTION])
             ->orderBy('code')
             ->get(['id', 'code', 'libelle', 'mode_frais', 'frais_fixe', 'initiateur', 'statut', 'base_calcul', 'devise']);
 
@@ -74,7 +83,7 @@ class PodOperationController extends Controller
         $selected = null;
         if ($selectedId) {
             $selected = PodProduit::query()
-                ->with(['tranches', 'lignesComptables'])
+                ->with(['tranches', 'lignesComptables', 'ecrans', 'champs.ecran', 'constantes', 'scripts'])
                 ->find($selectedId);
         }
 
@@ -90,7 +99,7 @@ class PodOperationController extends Controller
                 'base_calcul' => $p->base_calcul,
                 'devise' => $p->devise,
             ]),
-            'produit' => $selected ? $this->produitPayload($selected) : null,
+            'produit' => $selected ? $this->produitPayload($selected, auth()->user()) : null,
         ]);
     }
 
@@ -126,14 +135,44 @@ class PodOperationController extends Controller
             'frais_saisi' => ['nullable', 'numeric', 'min:0'],
             'reference' => ['nullable', 'string', 'max:100'],
             'libelle' => ['nullable', 'string', 'max:1000'],
+            'champs_saisis' => ['nullable', 'array'],
         ]);
 
-        $produit = PodProduit::query()->findOrFail((int) $validated['pod_produit_id']);
+        $produit = PodProduit::query()
+            ->with(['champs.ecran', 'constantes', 'scripts', 'lignesComptables'])
+            ->findOrFail((int) $validated['pod_produit_id']);
+
+        try {
+            PodProduitWorkflow::assertUsableEnOperation($produit);
+        } catch (ValidationException $e) {
+            return redirect()->back()->withInput()->withErrors($e->errors());
+        }
+
+        try {
+            $champsSaisis = PodChampSaisie::validateAndNormalize(
+                $produit,
+                $validated['champs_saisis'] ?? [],
+                auth()->user(),
+            );
+        } catch (ValidationException $e) {
+            return redirect()->back()->withInput()->withErrors($e->errors());
+        }
 
         try {
             $calc = PodFraisCalculator::compute($produit, $validated);
         } catch (\InvalidArgumentException $e) {
             return redirect()->back()->withInput()->withErrors(['calcul' => $e->getMessage()]);
+        }
+
+        try {
+            $constantes = PodConstanteResolver::resolveAll($produit, [
+                'montant_demande' => $validated['montant_demande'] ?? null,
+                'frais_ht' => $calc['frais_ht'],
+                'taux_taf' => $calc['taux_taf'],
+                'champs_saisis' => $champsSaisis,
+            ]);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->withInput()->withErrors(['constantes' => $e->getMessage()]);
         }
 
         if (! $calc['equilibre']) {
@@ -142,7 +181,7 @@ class PodOperationController extends Controller
             ]);
         }
 
-        $operation = DB::transaction(function () use ($validated, $produit, $calc) {
+        $operation = DB::transaction(function () use ($validated, $produit, $calc, $champsSaisis, $constantes) {
             $operation = PodOperation::create([
                 'pod_produit_id' => $produit->id,
                 'user_id' => auth()->id(),
@@ -163,7 +202,9 @@ class PodOperationController extends Controller
                     'tranche' => $calc['tranche'],
                     'message' => $calc['message'],
                     'frais_saisi' => $validated['frais_saisi'] ?? null,
+                    'constantes' => $constantes,
                 ],
+                'champs_saisis' => $champsSaisis,
                 'statut' => PodOperation::STATUT_BROUILLON,
             ]);
 
@@ -185,7 +226,7 @@ class PodOperationController extends Controller
 
     public function show(PodOperation $operation): InertiaResponse
     {
-        $operation->load(['produit', 'user:id,name', 'lignes']);
+        $operation->load(['produit.champs', 'user:id,name', 'validatedBy:id,name', 'lignes']);
 
         return Inertia::render('Pod/Operations/Show', [
             'operation' => [
@@ -203,9 +244,20 @@ class PodOperationController extends Controller
                 'devise' => $operation->devise,
                 'libelle' => $operation->libelle,
                 'statut' => $operation->statut,
+                'motif_annulation' => $operation->motif_annulation,
+                'validated_at' => optional($operation->validated_at)->toIso8601String(),
+                'validated_by_name' => $operation->validatedBy?->name,
                 'calcul_detail' => $operation->calcul_detail,
+                'champs_saisis' => $operation->champs_saisis ?? [],
+                'champs_labels' => collect($operation->produit?->champs ?? [])
+                    ->mapWithKeys(fn ($c) => [$c->code => [
+                        'libelle' => $c->libelle,
+                        'type' => $c->type,
+                    ]])
+                    ->all(),
                 'user_name' => $operation->user?->name,
                 'created_at' => optional($operation->created_at)->toIso8601String(),
+                'pdf_url' => route('pod.operations.pdf', $operation),
                 'produit' => [
                     'id' => $operation->produit?->id,
                     'code' => $operation->produit?->code,
@@ -224,6 +276,58 @@ class PodOperationController extends Controller
         ]);
     }
 
+    public function valider(PodOperation $operation): RedirectResponse
+    {
+        if ($operation->statut !== PodOperation::STATUT_BROUILLON) {
+            return redirect()->back()->with('error', 'Seuls les brouillons peuvent être validés.');
+        }
+
+        $hasPlaceholder = $operation->lignes()->get()->contains(
+            fn ($l) => (bool) preg_match('/X{3,}/i', (string) $l->compte)
+        );
+        if ($hasPlaceholder) {
+            return redirect()->back()->with('error', 'Impossible de valider : compte placeholder dans les écritures.');
+        }
+
+        $operation->update([
+            'statut' => PodOperation::STATUT_VALIDE,
+            'validated_by_user_id' => auth()->id(),
+            'validated_at' => now(),
+            'motif_annulation' => null,
+        ]);
+
+        return redirect()->back()->with('success', 'Opération validée.');
+    }
+
+    public function annuler(Request $request, PodOperation $operation): RedirectResponse
+    {
+        if ($operation->statut === PodOperation::STATUT_ANNULE) {
+            return redirect()->back()->with('error', 'Opération déjà annulée.');
+        }
+
+        $validated = $request->validate([
+            'motif_annulation' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $operation->update([
+            'statut' => PodOperation::STATUT_ANNULE,
+            'motif_annulation' => $validated['motif_annulation'] ?? null,
+        ]);
+
+        return redirect()->back()->with('success', 'Opération annulée.');
+    }
+
+    public function pdf(PodOperation $operation): Response
+    {
+        $operation->load(['produit', 'user:id,name', 'validatedBy:id,name', 'lignes']);
+
+        $pdf = Pdf::loadView('pod.operation-pdf', [
+            'operation' => $operation,
+        ])->setPaper('a4');
+
+        return $pdf->download('operation-pod-'.$operation->id.'.pdf');
+    }
+
     public function destroy(PodOperation $operation): RedirectResponse
     {
         if ($operation->statut !== PodOperation::STATUT_BROUILLON) {
@@ -240,8 +344,29 @@ class PodOperationController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function produitPayload(PodProduit $p): array
+    private function produitPayload(PodProduit $p, ?User $user = null): array
     {
+        $ecrans = ($p->relationLoaded('ecrans') ? $p->ecrans : collect())
+            ->filter(fn ($e) => $e->actif)
+            ->filter(fn ($e) => ! $user || PodEcranAccess::userCanAccess($user, $e))
+            ->values();
+
+        $accessibleEcranIds = $ecrans->pluck('id')->all();
+
+        $champs = $p->champs
+            ->filter(fn ($c) => $c->visible)
+            ->filter(function ($c) use ($user, $accessibleEcranIds) {
+                if (! $c->pod_produit_ecran_id) {
+                    return true;
+                }
+                if (! $user) {
+                    return true;
+                }
+
+                return in_array((int) $c->pod_produit_ecran_id, array_map('intval', $accessibleEcranIds), true);
+            })
+            ->values();
+
         return [
             'id' => $p->id,
             'code' => $p->code,
@@ -269,6 +394,29 @@ class PodOperationController extends Controller
                 'montant_max' => $t->montant_max,
                 'frais_fixe' => $t->frais_fixe,
                 'taux' => $t->taux,
+            ])->values(),
+            'ecrans' => $ecrans->map(fn ($e) => [
+                'id' => $e->id,
+                'code' => $e->code,
+                'libelle' => $e->libelle,
+                'description' => $e->description,
+                'profils' => $e->profils ?? [],
+            ])->values(),
+            'champs' => $champs->map(fn ($c) => [
+                'code' => $c->code,
+                'libelle' => $c->libelle,
+                'type' => $c->type,
+                'obligatoire' => $c->obligatoire,
+                'visible' => $c->visible,
+                'gris' => $c->gris,
+                'valeur_defaut' => $c->valeur_defaut,
+                'options' => $c->options ?? [],
+                'ecran_code' => $c->ecran?->code,
+                'valeurs' => match ($c->type) {
+                    'liste' => $c->valeursListeActives(),
+                    'table' => $c->valeursTableActives(),
+                    default => [],
+                },
             ])->values(),
         ];
     }

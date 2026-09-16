@@ -27,7 +27,7 @@ final class AppPortal
         'ecritures' => 'Import, consultation et export des écritures comptables.',
         'monetique' => 'Coficarte, ventes, recharges, transferts et encaissements.',
         'od' => 'Intégration automatique ou manuelle des opérations diverses.',
-        'pod' => 'Paramétrage des produits d’opérations diverses (frais, TAF, schémas).',
+        'pod' => 'Création et paramétrage des produits divers (champs, frais, TAF, schémas comptables).',
         'reconciliation' => 'Réconciliation des écritures et soldes Flexcube.',
         'config' => 'Typologies, catégories, banques, fournisseurs et types de dépense.',
     ];

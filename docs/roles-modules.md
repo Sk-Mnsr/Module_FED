@@ -69,7 +69,7 @@ Utilisateur
 | `ecritures` | Écritures comptables |
 | `monetique` | Monétique |
 | `od` | Opérations diverses |
-| `pod` | Produits OD (POD) |
+| `pod` | Produits divers |
 | `reconciliation` | Réconciliation Flexcube (**autorisation seule**) |
 | `config` | **Référentiels** (**autorisation seule**, clé `config`) |
 | `administration` | **Administration** (**autorisation seule**, hors cartes portail) |
@@ -90,8 +90,8 @@ Modules « access only » : `ModuleAccess::ACCESS_ONLY_MODULES`.
 | Référentiels (`config`) | `referentiels` (on/off) |
 | Budget | `budget` (on/off) + droits CRUD granulaires |
 | Réconciliation | `reconciliation` (on/off) |
-| OD | `ops`, `finance` |
-| POD | `pod`, `ops`, `finance` (paramétrage produits OD) |
+| OD | `ops`, `finance`, `controleur` |
+| Produits divers | `pod`, `ops`, `finance` (paramétrage produits divers) |
 | Monétique | `monetique`, `ca`, `cc`, `caissier` |
 | FED | `demandeur`, `n_plus_1`, `responsable_achats`, `daf`, `dga`… |
 | Stock | `responsable_stock`, `responsable_achats` |

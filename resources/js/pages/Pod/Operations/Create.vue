@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import DynamicFieldInput, { type ChampDef } from '@/components/Pod/DynamicFieldInput.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -45,6 +46,14 @@ type ProduitDetail = ProduitOption & {
         frais_fixe: string | number | null;
         taux: string | number | null;
     }>;
+    ecrans: Array<{
+        id: number;
+        code: string;
+        libelle: string;
+        description: string | null;
+        profils: string[];
+    }>;
+    champs: ChampDef[];
 };
 
 type Preview = {
@@ -75,7 +84,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'POD', href: '/pod/produits' },
+    { title: 'Produits divers', href: '/pod/produits' },
     { title: 'Nouvelle opération', href: '/pod/operations/create' },
 ];
 
@@ -101,10 +110,24 @@ const form = useForm({
     frais_saisi: '' as number | '',
     reference: '',
     libelle: props.produit?.libelle_ecriture_produit || props.produit?.libelle || '',
+    champs_saisis: {} as Record<string, string | number | null>,
 });
 
 const produitSearch = ref('');
 const showProductPicker = ref(!props.produit);
+
+const initChampsSaisis = (p: ProduitDetail | null) => {
+    const next: Record<string, string | number | null> = {};
+    for (const c of p?.champs ?? []) {
+        if (c.visible === false) continue;
+        next[c.code] = c.valeur_defaut ?? null;
+    }
+    form.champs_saisis = next;
+};
+
+if (props.produit) {
+    initChampsSaisis(props.produit);
+}
 
 const selectedId = computed(() =>
     form.pod_produit_id === '' ? null : Number(form.pod_produit_id),
@@ -115,6 +138,53 @@ const activeProduit = computed<ProduitDetail | ProduitOption | null>(() => {
         return props.produit;
     }
     return props.produits.find((p) => p.id === selectedId.value) ?? null;
+});
+
+const dynamiquesChamps = computed(() =>
+    (props.produit && Number(props.produit.id) === selectedId.value
+        ? props.produit.champs
+        : []
+    ).filter((c) => c.visible !== false),
+);
+
+const champsParEcran = computed(() => {
+    const champs = dynamiquesChamps.value as Array<ChampDef & { ecran_code?: string | null }>;
+    const ecrans = props.produit && Number(props.produit.id) === selectedId.value
+        ? props.produit.ecrans || []
+        : [];
+
+    const groups: Array<{
+        code: string;
+        libelle: string;
+        description: string | null;
+        champs: typeof champs;
+    }> = [];
+
+    for (const e of ecrans) {
+        const list = champs.filter((c) => (c.ecran_code || '') === e.code);
+        if (list.length) {
+            groups.push({
+                code: e.code,
+                libelle: e.libelle,
+                description: e.description,
+                champs: list,
+            });
+        }
+    }
+
+    const orphelins = champs.filter(
+        (c) => !c.ecran_code || !ecrans.some((e) => e.code === c.ecran_code),
+    );
+    if (orphelins.length) {
+        groups.push({
+            code: '_general',
+            libelle: ecrans.length ? 'Autres champs' : 'Champs produit',
+            description: null,
+            champs: orphelins,
+        });
+    }
+
+    return groups;
 });
 
 const filteredProduits = computed(() => {
@@ -140,6 +210,11 @@ const stepSaisieOk = computed(() => {
     if (!form.compte_client.trim()) return false;
     if (needsMontant.value && (form.montant_demande === '' || Number(form.montant_demande) < 0)) return false;
     if (needsFraisSaisi.value && (form.frais_saisi === '' || Number(form.frais_saisi) < 0)) return false;
+    for (const c of dynamiquesChamps.value) {
+        if (!c.obligatoire || c.gris) continue;
+        const v = form.champs_saisis[c.code];
+        if (v === null || v === undefined || v === '') return false;
+    }
     return true;
 });
 
@@ -148,6 +223,7 @@ const selectProduit = (id: number) => {
     showProductPicker.value = false;
     form.montant_demande = '';
     form.frais_saisi = '';
+    form.champs_saisis = {};
     router.get(
         '/pod/operations/create',
         { produit_id: id },
@@ -159,6 +235,7 @@ const selectProduit = (id: number) => {
                 const p = props.produit;
                 if (p && Number(p.id) === id) {
                     form.libelle = p.libelle_ecriture_produit || p.libelle || '';
+                    initChampsSaisis(p);
                 }
             },
         },
@@ -171,6 +248,9 @@ watch(
         if (p && Number(p.id) === selectedId.value) {
             if (!form.libelle) {
                 form.libelle = p.libelle_ecriture_produit || p.libelle || '';
+            }
+            if (Object.keys(form.champs_saisis).length === 0) {
+                initChampsSaisis(p);
             }
         }
     },
@@ -258,12 +338,13 @@ const submit = () => {
         pod_produit_id: selectedId.value,
         montant_demande: data.montant_demande === '' ? null : data.montant_demande,
         frais_saisi: data.frais_saisi === '' ? null : data.frais_saisi,
+        champs_saisis: data.champs_saisis ?? {},
     })).post('/pod/operations');
 };
 </script>
 
 <template>
-    <Head title="Nouvelle opération POD" />
+    <Head title="Nouvelle opération — Produits divers" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white">
@@ -271,7 +352,7 @@ const submit = () => {
                 <!-- En-tête -->
                 <div class="mb-6 flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <p class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">POD</p>
+                        <p class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Produits divers</p>
                         <h1 class="mt-1 text-3xl font-bold tracking-tight text-slate-900">Nouvelle opération</h1>
                         <p class="mt-2 max-w-xl text-sm text-slate-600">
                             Le produit pilote les règles. Vous ne saisissez que les informations client et les
@@ -508,6 +589,38 @@ const submit = () => {
                                         {{ activeProduit.base_calcul }}
                                     </p>
                                 </div>
+
+                                <template v-if="champsParEcran.length">
+                                    <div
+                                        v-for="group in champsParEcran"
+                                        :key="group.code"
+                                        class="sm:col-span-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+                                    >
+                                        <div>
+                                            <p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                                                <span v-if="group.code !== '_general'" class="font-mono text-primary">
+                                                    {{ group.code }}
+                                                </span>
+                                                <span v-if="group.code !== '_general'"> — </span>
+                                                {{ group.libelle }}
+                                            </p>
+                                            <p v-if="group.description" class="mt-1 text-xs text-slate-500">
+                                                {{ group.description }}
+                                            </p>
+                                        </div>
+                                        <div class="grid gap-4 sm:grid-cols-2">
+                                            <DynamicFieldInput
+                                                v-for="c in group.champs"
+                                                :key="c.code"
+                                                :champ="c"
+                                                :model-value="form.champs_saisis[c.code] ?? null"
+                                                :input-class="fieldClass"
+                                                :error="(form.errors as Record<string, string>)[`champs_saisis.${c.code}`]"
+                                                @update:model-value="(v) => (form.champs_saisis[c.code] = v)"
+                                            />
+                                        </div>
+                                    </div>
+                                </template>
 
                                 <div class="space-y-1.5 sm:col-span-2">
                                     <Label class="text-slate-700">Libellé</Label>

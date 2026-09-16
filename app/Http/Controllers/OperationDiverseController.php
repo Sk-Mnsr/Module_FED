@@ -10,6 +10,7 @@ use App\Services\Integrations\FlexcubeOnlineJournalClient;
 use App\Support\FlashDialog;
 use App\Support\OdArchivage;
 use App\Support\OdChecker;
+use App\Support\OdControle;
 use App\Support\OdFlexcubeJournalPayload;
 use App\Support\OdIntegrationCsv;
 use App\Support\OdIntegrationCsvTemplate;
@@ -371,7 +372,7 @@ class OperationDiverseController extends Controller
     public function pieceComptableResume(OdClasseur $classeur): InertiaResponse
     {
         $this->authorizeClasseur($classeur);
-        $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy', 'rejectedBy']);
+        $classeur->load(['user', 'pieces', 'integratedBy', 'assignedChecker', 'validatedBy', 'rejectedBy', 'controleBy', 'controleAnomalieBy']);
 
         $parsed = $this->enrichRowsWithCompteLibelle($this->parseIntegration($classeur));
         $user = auth()->user();
@@ -634,6 +635,7 @@ class OperationDiverseController extends Controller
         );
 
         $wasAttente = $classeur->isAttenteValidation();
+        $wasArchive = $classeur->isIntegre();
 
         // Soft delete : fichiers conservés pour restauration SuperAdmin
         $classeur->forceFill([
@@ -641,15 +643,131 @@ class OperationDiverseController extends Controller
         ])->save();
         $classeur->delete();
 
-        $route = $wasAttente
-            ? 'operations-diverses.attente-validation'
-            : 'operations-diverses.integrations';
+        $route = match (true) {
+            $wasArchive => 'operations-diverses.archivage',
+            $wasAttente => 'operations-diverses.attente-validation',
+            default => 'operations-diverses.integrations',
+        };
+
+        $message = match (true) {
+            $wasArchive => 'La pièce comptable a été mise en corbeille. Vous pouvez la restaurer ou la supprimer définitivement depuis la Corbeille.',
+            $wasAttente => 'L’intégration a été mise en corbeille. Un SuperAdmin peut la restaurer.',
+            default => 'Le brouillon a été mis en corbeille. Un SuperAdmin peut le restaurer.',
+        };
 
         return redirect()
             ->route($route)
-            ->with('success', $wasAttente
-                ? 'L’intégration a été mise en corbeille. Un SuperAdmin peut la restaurer.'
-                : 'Le brouillon a été mis en corbeille. Un SuperAdmin peut le restaurer.');
+            ->with('success', $message);
+    }
+
+    public function pieceComptableControle(OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless(
+            OdControle::canControl($user, $classeur),
+            403,
+            'Vous n’êtes pas habilité à contrôler cette pièce archivée.'
+        );
+
+        $classeur->forceFill([
+            'controle_at' => now(),
+            'controle_by_user_id' => $user->id,
+            'controle_anomalie_at' => null,
+            'controle_anomalie_motif' => null,
+            'controle_anomalie_by_user_id' => null,
+        ])->save();
+
+        try {
+            $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy', 'controleBy']));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return redirect()
+            ->back()
+            ->with('success', 'Pièce contrôlée : justificatifs et pièce comptable validés.');
+    }
+
+    public function pieceComptableControleAnomalie(Request $request, OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless(
+            OdControle::canSignalAnomalie($user, $classeur),
+            403,
+            'Vous n’êtes pas habilité à signaler une anomalie sur cette pièce.'
+        );
+
+        $validated = $request->validate([
+            'motif' => ['required', 'string', 'min:5', 'max:2000'],
+        ], [
+            'motif.required' => 'Indiquez le motif des erreurs constatées.',
+            'motif.min' => 'Le motif doit contenir au moins 5 caractères.',
+        ]);
+
+        $motif = trim($validated['motif']);
+
+        // La pièce d’origine reste archivée ET contrôlée ; le maker crée une nouvelle pièce de correction.
+        $classeur->forceFill([
+            'controle_at' => now(),
+            'controle_by_user_id' => $user->id,
+            'controle_anomalie_at' => now(),
+            'controle_anomalie_motif' => $motif,
+            'controle_anomalie_by_user_id' => $user->id,
+            'controle_anomalie_ack_at' => null,
+        ])->save();
+
+        try {
+            $this->genererPieceComptable($classeur->fresh([
+                'user', 'integratedBy', 'assignedChecker', 'validatedBy', 'controleBy',
+            ]));
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        $maker = $classeur->integratedBy ?? $classeur->user;
+        if ($maker !== null) {
+            OdWorkflowMail::anomalieControle($classeur->fresh(), $user, $maker, $motif);
+        }
+
+        return redirect()
+            ->back()
+            ->with(
+                'success',
+                'Anomalie signalée. La pièce reste archivée et contrôlée ; le maker a été notifié pour une pièce de correction.'
+            );
+    }
+
+    /**
+     * Maker : démarre une nouvelle intégration (non liée) et retire la notif « Pièces à corriger ».
+     */
+    public function pieceComptableAckCorrection(OdClasseur $classeur): RedirectResponse
+    {
+        $user = auth()->user();
+        $this->authorizeClasseur($classeur);
+
+        $isMaker = (int) ($classeur->integrated_by_user_id ?? $classeur->user_id) === (int) $user->id
+            || ModuleAccess::isAdminUser($user);
+
+        abort_unless(
+            $isMaker && $classeur->hasControleAnomaliePending(),
+            403,
+            'Impossible d’acquitter cette demande de correction.'
+        );
+
+        $classeur->forceFill([
+            'controle_anomalie_ack_at' => now(),
+        ])->save();
+
+        return redirect()
+            ->route('operations-diverses.piece-comptable')
+            ->with(
+                'success',
+                'Créez une nouvelle intégration comme d’habitude (pièce de correction indépendante).'
+            );
     }
 
     public function pieceComptableAjouterJustificatifs(Request $request, OdClasseur $classeur): RedirectResponse
@@ -760,7 +878,7 @@ class OperationDiverseController extends Controller
     {
         $this->authorizeClasseur($classeur);
 
-        // Toujours régénérer pour prendre en compte les signatures maker/checker à jour.
+        // Toujours régénérer pour prendre en compte les signatures maker/checker/contrôleur à jour.
         $this->genererPieceComptable($classeur->fresh(['user', 'integratedBy', 'assignedChecker', 'validatedBy']));
         $classeur->refresh();
 
@@ -851,6 +969,32 @@ class OperationDiverseController extends Controller
 
         $agents = collect([['id' => $user->id, 'name' => $user->name]]);
 
+        $correctionsNeeded = OdClasseur::query()
+            ->with(['controleAnomalieBy:id,name'])
+            ->where('statut', OdClasseur::STATUT_INTEGRE)
+            ->whereNotNull('controle_anomalie_at')
+            ->whereNull('controle_anomalie_ack_at')
+            ->where(function ($q) use ($user) {
+                $q->where('integrated_by_user_id', $user->id)
+                    ->orWhere(function ($inner) use ($user) {
+                        $inner->whereNull('integrated_by_user_id')
+                            ->where('user_id', $user->id);
+                    });
+            })
+            ->orderByDesc('controle_anomalie_at')
+            ->limit(20)
+            ->get()
+            ->map(fn (OdClasseur $c) => [
+                'id' => $c->id,
+                'nom_classeur' => $c->nom_classeur,
+                'numero_batch' => $c->numero_batch,
+                'motif' => $c->controle_anomalie_motif,
+                'signale_par' => $c->controleAnomalieBy?->name,
+                'signale_at' => optional($c->controle_anomalie_at)->toIso8601String(),
+                'resume_url' => route('operations-diverses.piece-comptable.resume', $c),
+                'ack_correction_url' => route('operations-diverses.piece-comptable.ack-correction', $c),
+            ]);
+
         return Inertia::render('OperationsDiverses/Integrations', [
             'classeurs' => $classeurs,
             'agents' => $agents,
@@ -859,6 +1003,7 @@ class OperationDiverseController extends Controller
             'eligibleCheckers' => OdChecker::eligibleFor($user)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values(),
             'checkerPole' => OdChecker::departmentLabelForUser($user),
             'odIntegrationConfigured' => $this->odIntegrationConfigured(),
+            'correctionsNeeded' => $correctionsNeeded,
         ]);
     }
 
@@ -940,7 +1085,7 @@ class OperationDiverseController extends Controller
         ]));
 
         $query = OdClasseur::query()
-            ->with(['user.roles', 'pieces', 'integratedBy', 'validatedBy'])
+            ->with(['user.roles', 'pieces', 'integratedBy', 'validatedBy', 'controleBy', 'controleAnomalieBy'])
             ->where('statut', OdClasseur::STATUT_INTEGRE);
 
         OdArchivage::applyPoleVisibility($query, $user);
@@ -999,17 +1144,36 @@ class OperationDiverseController extends Controller
             'integrated_by_name' => $classeur->integratedBy?->name,
             'assigned_checker_name' => $classeur->assignedChecker?->name,
             'validated_by_name' => $classeur->validatedBy?->name,
+            'controle_at' => optional($classeur->controle_at)->toIso8601String(),
+            'controle_by_name' => $classeur->controleBy?->name,
+            'is_controle' => $classeur->isControle(),
+            'has_controle_anomalie' => $classeur->hasControleAnomalie(),
+            'has_controle_anomalie_pending' => $classeur->hasControleAnomaliePending(),
+            'controle_anomalie_motif' => $classeur->controle_anomalie_motif,
+            'controle_anomalie_by_name' => $classeur->controleAnomalieBy?->name,
+            'controle_anomalie_at' => optional($classeur->controle_anomalie_at)->toIso8601String(),
             'fichier' => $classeur->fichier_integration_original_name,
             'can_integrate' => $viewer && $classeur->canBeIntegratedBy($viewer),
             'can_validate_checker' => $viewer && $classeur->canBeValidatedBy($viewer),
             'can_add_justificatifs' => $viewer && $classeur->canAddJustificatifsBy($viewer),
+            'can_controle' => $viewer && OdControle::canControl($viewer, $classeur),
+            'can_signal_anomalie' => $viewer && OdControle::canSignalAnomalie($viewer, $classeur),
+            'can_ack_correction' => $viewer
+                && $classeur->hasControleAnomaliePending()
+                && (
+                    (int) ($classeur->integrated_by_user_id ?? $classeur->user_id) === (int) $viewer->id
+                    || ModuleAccess::isAdminUser($viewer)
+                ),
             'integrer_url' => route('operations-diverses.piece-comptable.integrer', $classeur),
             'valider_checker_url' => route('operations-diverses.piece-comptable.valider-checker', $classeur),
             'ajouter_justificatifs_url' => route('operations-diverses.piece-comptable.ajouter-justificatifs', $classeur),
+            'controle_url' => route('operations-diverses.piece-comptable.controle', $classeur),
+            'controle_anomalie_url' => route('operations-diverses.piece-comptable.controle-anomalie', $classeur),
+            'ack_correction_url' => route('operations-diverses.piece-comptable.ack-correction', $classeur),
             'modifier_url' => $classeur->isEditable()
                 ? route('operations-diverses.piece-comptable.modifier', $classeur)
                 : null,
-            'supprimer_url' => $classeur->isBrouillon()
+            'supprimer_url' => ($viewer && $classeur->canBeDeletedBy($viewer))
                 ? route('operations-diverses.piece-comptable.destroy', $classeur)
                 : null,
             'rejection_motif' => $classeur->rejection_motif,
@@ -1323,6 +1487,11 @@ class OperationDiverseController extends Controller
      */
     private function folderPayload(OdClasseur $classeur): array
     {
+        $viewer = auth()->user();
+        $canDelete = $viewer && $classeur->canBeDeletedBy($viewer);
+        $canControle = $viewer && OdControle::canControl($viewer, $classeur);
+        $canSignal = $viewer && OdControle::canSignalAnomalie($viewer, $classeur);
+
         return [
             'id' => $classeur->id,
             'nom_classeur' => $classeur->nom_classeur,
@@ -1336,7 +1505,27 @@ class OperationDiverseController extends Controller
             'archived_at' => optional($classeur->archived_at)->toIso8601String(),
             'created_at' => optional($classeur->created_at)->toIso8601String(),
             'integrated_at' => optional($classeur->integrated_at)->toIso8601String(),
+            'controle_at' => optional($classeur->controle_at)->toIso8601String(),
+            'controle_by_name' => $classeur->controleBy?->name,
+            'is_controle' => $classeur->isControle(),
+            'has_controle_anomalie' => $classeur->hasControleAnomalie(),
+            'has_controle_anomalie_pending' => $classeur->hasControleAnomaliePending(),
+            'controle_anomalie_motif' => $classeur->controle_anomalie_motif,
+            'controle_anomalie_by_name' => $classeur->controleAnomalieBy?->name,
+            'controle_anomalie_at' => optional($classeur->controle_anomalie_at)->toIso8601String(),
             'resume_url' => route('operations-diverses.piece-comptable.resume', $classeur),
+            'can_delete' => $canDelete,
+            'supprimer_url' => $canDelete
+                ? route('operations-diverses.piece-comptable.destroy', $classeur)
+                : null,
+            'can_controle' => $canControle,
+            'controle_url' => $canControle
+                ? route('operations-diverses.piece-comptable.controle', $classeur)
+                : null,
+            'can_signal_anomalie' => $canSignal,
+            'controle_anomalie_url' => $canSignal
+                ? route('operations-diverses.piece-comptable.controle-anomalie', $classeur)
+                : null,
             'pieces' => $this->piecesJustificativesPayload($classeur),
         ];
     }
@@ -1466,7 +1655,7 @@ class OperationDiverseController extends Controller
 
     private function genererPieceComptable(OdClasseur $classeur): void
     {
-        $classeur->loadMissing(['user', 'integratedBy', 'assignedChecker', 'validatedBy']);
+        $classeur->loadMissing(['user', 'integratedBy', 'assignedChecker', 'validatedBy', 'controleBy']);
 
         $parsed = $this->parseIntegration($classeur);
         $parsed = $this->enrichRowsWithCompteLibelle($parsed);
@@ -1482,9 +1671,11 @@ class OperationDiverseController extends Controller
         $integratedAt = $classeur->integrated_at instanceof Carbon ? $classeur->integrated_at : now();
         $makerUser = $classeur->integratedBy ?? $classeur->user;
         $checkerUser = $classeur->validatedBy;
+        $controleurUser = $classeur->isControle() ? $classeur->controleBy : null;
 
         $makerName = $makerUser?->name ?? '';
         $checkerName = $checkerUser?->name ?? '';
+        $controleurName = $controleurUser?->name ?? '';
 
         $extractSignatureForDomPdf = static function (?string $signature): ?string {
             if (! filled($signature)) {
@@ -1504,6 +1695,7 @@ class OperationDiverseController extends Controller
 
         $makerSignature = $extractSignatureForDomPdf($makerUser?->signature);
         $checkerSignature = $extractSignatureForDomPdf($checkerUser?->signature);
+        $controleurSignature = $extractSignatureForDomPdf($controleurUser?->signature);
 
         $viewData = [
             'classeur' => $classeur,
@@ -1513,8 +1705,10 @@ class OperationDiverseController extends Controller
             'heure' => $integratedAt->format('H:i:s'),
             'makerName' => $makerName,
             'checkerName' => $checkerName,
+            'controleurName' => $controleurName,
             'makerSignature' => $makerSignature,
             'checkerSignature' => $checkerSignature,
+            'controleurSignature' => $controleurSignature,
         ];
 
         try {
@@ -1529,6 +1723,7 @@ class OperationDiverseController extends Controller
 
             $viewData['makerSignature'] = null;
             $viewData['checkerSignature'] = null;
+            $viewData['controleurSignature'] = null;
 
             $pdf = Pdf::loadView('operations-diverses.piece-comptable', $viewData)
                 ->setPaper('a4', 'landscape');

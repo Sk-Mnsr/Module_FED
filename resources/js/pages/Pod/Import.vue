@@ -11,7 +11,7 @@ defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'POD', href: '/pod/produits' },
+    { title: 'Produits divers', href: '/pod/produits' },
     { title: 'Import', href: '/pod/import' },
 ];
 
@@ -30,7 +30,7 @@ const submit = () => {
 </script>
 
 <template>
-    <Head title="Import fiche POD" />
+    <Head title="Import fiche produits divers" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="mx-auto flex max-w-2xl flex-col gap-6 p-6">
@@ -39,7 +39,8 @@ const submit = () => {
                 <p class="mt-2 text-sm text-muted-foreground">
                     Chargez le fichier Excel (ex. « FICHE PARAMETRAGE APPLICATION DE FORMULAIRE »). Les
                     produits sont créés ou mis à jour par code, avec tranches et schéma comptable par
-                    défaut.
+                    défaut. Feuilles optionnelles : <strong>ECRANS</strong>, <strong>CHAMPS</strong>,
+                    <strong>SCRIPTS</strong>, <strong>CONSTANTES</strong> (colonne CODE_PRODUIT).
                 </p>
             </div>
 

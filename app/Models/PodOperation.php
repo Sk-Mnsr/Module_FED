@@ -19,6 +19,7 @@ class PodOperation extends Model
     protected $fillable = [
         'pod_produit_id',
         'user_id',
+        'validated_by_user_id',
         'reference',
         'compte_client',
         'code_agence',
@@ -32,7 +33,10 @@ class PodOperation extends Model
         'devise',
         'libelle',
         'calcul_detail',
+        'champs_saisis',
         'statut',
+        'validated_at',
+        'motif_annulation',
     ];
 
     protected function casts(): array
@@ -45,6 +49,8 @@ class PodOperation extends Model
             'montant_taf' => 'decimal:2',
             'total_client' => 'decimal:2',
             'calcul_detail' => 'array',
+            'champs_saisis' => 'array',
+            'validated_at' => 'datetime',
         ];
     }
 
@@ -56,6 +62,11 @@ class PodOperation extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function validatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'validated_by_user_id');
     }
 
     public function lignes(): HasMany

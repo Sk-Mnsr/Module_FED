@@ -51,6 +51,17 @@ type ClasseurRow = {
 type Agent = { id: number; name: string };
 type Checker = { id: number; name: string };
 
+type CorrectionNeeded = {
+    id: number;
+    nom_classeur: string;
+    numero_batch: string;
+    motif: string | null;
+    signale_par: string | null;
+    signale_at: string | null;
+    resume_url: string;
+    ack_correction_url: string;
+};
+
 const props = defineProps<{
     classeurs?: ClasseurRow[];
     agents?: Agent[];
@@ -59,6 +70,7 @@ const props = defineProps<{
     eligibleCheckers?: Checker[];
     checkerPole?: string;
     odIntegrationConfigured?: boolean;
+    correctionsNeeded?: CorrectionNeeded[];
 }>();
 
 const breadcrumbs = [
@@ -78,6 +90,17 @@ const showFilters = ref(false);
 const showNewMenu = ref(false);
 const showDeleteConfirm = ref(false);
 const deleteTarget = ref<ClasseurRow | null>(null);
+const ackCorrectionEnCours = ref<number | null>(null);
+
+function demarrerCorrection(item: CorrectionNeeded) {
+    if (ackCorrectionEnCours.value !== null || !item.ack_correction_url) return;
+    ackCorrectionEnCours.value = item.id;
+    router.post(item.ack_correction_url, {}, {
+        onFinish: () => {
+            ackCorrectionEnCours.value = null;
+        },
+    });
+}
 
 const fieldClass =
     'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
@@ -205,6 +228,70 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
             >
                 {{ flash.warning }}
             </div>
+
+            <section
+                v-if="(correctionsNeeded?.length ?? 0) > 0"
+                class="overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/80 shadow-sm dark:border-amber-900 dark:bg-amber-950/30"
+            >
+                <div class="border-b border-amber-200/80 px-5 py-3 dark:border-amber-900">
+                    <h2 class="text-sm font-semibold text-amber-950 dark:text-amber-100">
+                        Pièces à corriger ({{ correctionsNeeded?.length }})
+                    </h2>
+                    <p class="mt-0.5 text-xs text-amber-800 dark:text-amber-200/80">
+                        Le Contrôleur a signalé des erreurs. La pièce d’origine reste archivée et
+                        contrôlée. Cliquez ci-dessous pour démarrer une nouvelle intégration
+                        (indépendante).
+                    </p>
+                </div>
+                <ul class="divide-y divide-amber-200/70 dark:divide-amber-900/60">
+                    <li
+                        v-for="item in correctionsNeeded"
+                        :key="item.id"
+                        class="flex flex-wrap items-start justify-between gap-3 px-5 py-3"
+                    >
+                        <div class="min-w-0">
+                            <p class="text-sm font-medium text-amber-950 dark:text-amber-50">
+                                {{ item.nom_classeur }}
+                                <span class="font-normal text-amber-800/80 dark:text-amber-200/70">
+                                    · batch {{ item.numero_batch }}
+                                </span>
+                            </p>
+                            <p
+                                v-if="item.motif"
+                                class="mt-1 whitespace-pre-line text-xs text-amber-900/90 dark:text-amber-100/80"
+                            >
+                                {{ item.motif }}
+                            </p>
+                            <p
+                                v-if="item.signale_par"
+                                class="mt-1 text-[11px] text-amber-800/70 dark:text-amber-200/60"
+                            >
+                                Signalé par {{ item.signale_par }}
+                            </p>
+                        </div>
+                        <div class="flex shrink-0 flex-wrap gap-2">
+                            <Link
+                                :href="item.resume_url"
+                                class="inline-flex h-8 items-center rounded-md border border-amber-300 bg-white px-3 text-xs font-medium text-amber-900 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-100"
+                            >
+                                Voir la pièce
+                            </Link>
+                            <button
+                                type="button"
+                                class="inline-flex h-8 items-center rounded-md bg-amber-700 px-3 text-xs font-medium text-white hover:bg-amber-800 disabled:opacity-60"
+                                :disabled="ackCorrectionEnCours === item.id"
+                                @click="demarrerCorrection(item)"
+                            >
+                                {{
+                                    ackCorrectionEnCours === item.id
+                                        ? 'Ouverture…'
+                                        : 'J’ai créé la correction'
+                                }}
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </section>
 
             <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
                 <div

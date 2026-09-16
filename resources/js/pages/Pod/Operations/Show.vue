@@ -3,7 +3,8 @@ import { computed } from 'vue';
 import { Head, Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, Plus, Trash2 } from 'lucide-vue-next';
+import { AlertTriangle, CheckCircle2, Download, Plus, Trash2, XCircle } from 'lucide-vue-next';
+import { labelStatutOperation, statutOperationClass } from '@/lib/podLabels';
 
 type Operation = {
     id: number;
@@ -20,9 +21,15 @@ type Operation = {
     devise: string;
     libelle: string | null;
     statut: string;
+    motif_annulation: string | null;
+    validated_at: string | null;
+    validated_by_name: string | null;
     calcul_detail: Record<string, unknown> | null;
+    champs_saisis: Record<string, string | number | null>;
+    champs_labels: Record<string, { libelle: string; type: string }>;
     user_name: string | null;
     created_at: string | null;
+    pdf_url: string;
     produit: {
         id: number | null;
         code: string | null;
@@ -44,7 +51,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'POD', href: '/pod/produits' },
+    { title: 'Produits divers', href: '/pod/produits' },
     { title: 'Opérations', href: '/pod/operations' },
     { title: `#${props.operation.id}`, href: `/pod/operations/${props.operation.id}` },
 ];
@@ -84,15 +91,53 @@ const destroy = () => {
     router.delete(`/pod/operations/${props.operation.id}`);
 };
 
-const statutClass = (s: string) => {
-    if (s === 'valide') return 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200';
-    if (s === 'annule') return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
-    return 'bg-amber-50 text-amber-900 ring-1 ring-amber-200';
+const valider = () => {
+    if (!confirm('Valider cette opération ?')) return;
+    router.post(`/pod/operations/${props.operation.id}/valider`);
+};
+
+const annuler = () => {
+    const motif = window.prompt('Motif d’annulation (optionnel) :') ?? '';
+    router.post(`/pod/operations/${props.operation.id}/annuler`, { motif_annulation: motif });
+};
+
+const statutClass = statutOperationClass;
+
+const champsEntries = computed(() => {
+    const saisies = props.operation.champs_saisis || {};
+    const labels = props.operation.champs_labels || {};
+    return Object.keys(saisies).map((code) => ({
+        code,
+        libelle: labels[code]?.libelle || code,
+        value: saisies[code],
+    }));
+});
+
+const constantesEntries = computed(() => {
+    const detail = props.operation.calcul_detail || {};
+    const raw = detail.constantes;
+    if (!raw || typeof raw !== 'object') return [] as Array<{
+        code: string;
+        libelle: string;
+        mode?: string;
+        valeur: string | number | null;
+    }>;
+    return Object.values(raw as Record<string, {
+        code: string;
+        libelle: string;
+        mode?: string;
+        valeur: string | number | null;
+    }>);
+});
+
+const displayChampValue = (v: string | number | null | undefined) => {
+    if (v === null || v === undefined || v === '') return '—';
+    return String(v);
 };
 </script>
 
 <template>
-    <Head :title="`Opération POD #${operation.id}`" />
+    <Head :title="`Opération #${operation.id}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white">
@@ -107,7 +152,7 @@ const statutClass = (s: string) => {
                                 class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
                                 :class="statutClass(operation.statut)"
                             >
-                                {{ operation.statut }}
+                                {{ labelStatutOperation(operation.statut) }}
                             </span>
                             <span class="text-xs text-slate-500">
                                 {{ modeLabels[operation.produit.mode_frais || ''] || operation.produit.mode_frais }}
@@ -120,13 +165,42 @@ const statutClass = (s: string) => {
                             Opération #{{ operation.id }}
                             · {{ operation.user_name || '—' }}
                             <span v-if="operation.reference"> · Réf. {{ operation.reference }}</span>
+                            <span v-if="operation.validated_by_name">
+                                · Validée par {{ operation.validated_by_name }}
+                            </span>
+                        </p>
+                        <p
+                            v-if="operation.statut === 'annule' && operation.motif_annulation"
+                            class="mt-1 text-sm text-slate-500"
+                        >
+                            Motif annulation : {{ operation.motif_annulation }}
                         </p>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
+                        <Button as-child variant="outline" class="h-11">
+                            <a :href="operation.pdf_url" target="_blank" rel="noopener">
+                                <Download class="mr-2 h-4 w-4" /> PDF
+                            </a>
+                        </Button>
                         <Button as-child variant="outline" class="h-11">
                             <Link href="/pod/operations/create">
                                 <Plus class="mr-2 h-4 w-4" /> Nouvelle
                             </Link>
+                        </Button>
+                        <Button
+                            v-if="operation.statut === 'brouillon'"
+                            class="h-11"
+                            @click="valider"
+                        >
+                            <CheckCircle2 class="mr-2 h-4 w-4" /> Valider
+                        </Button>
+                        <Button
+                            v-if="operation.statut !== 'annule'"
+                            variant="outline"
+                            class="h-11 text-amber-800"
+                            @click="annuler"
+                        >
+                            <XCircle class="mr-2 h-4 w-4" /> Annuler
                         </Button>
                         <Button
                             v-if="operation.statut === 'brouillon'"
@@ -210,6 +284,39 @@ const statutClass = (s: string) => {
                         <dd class="mt-1 font-medium text-slate-900">{{ operation.libelle || '—' }}</dd>
                     </div>
                 </dl>
+
+                <section
+                    v-if="champsEntries.length"
+                    class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                    <div class="border-b border-slate-100 px-5 py-4">
+                        <h2 class="text-sm font-semibold text-slate-900">Champs produit saisis</h2>
+                    </div>
+                    <dl class="grid gap-4 p-5 sm:grid-cols-2">
+                        <div v-for="c in champsEntries" :key="c.code">
+                            <dt class="text-xs text-slate-500 uppercase">{{ c.libelle }}</dt>
+                            <dd class="mt-1 font-medium text-slate-900">{{ displayChampValue(c.value) }}</dd>
+                        </div>
+                    </dl>
+                </section>
+
+                <section
+                    v-if="constantesEntries.length"
+                    class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                >
+                    <div class="border-b border-slate-100 px-5 py-4">
+                        <h2 class="text-sm font-semibold text-slate-900">Constantes résolues</h2>
+                    </div>
+                    <dl class="grid gap-4 p-5 sm:grid-cols-2">
+                        <div v-for="c in constantesEntries" :key="c.code">
+                            <dt class="text-xs text-slate-500 uppercase">
+                                {{ c.libelle }}
+                                <span v-if="c.mode" class="font-mono normal-case text-slate-400"> · {{ c.mode }}</span>
+                            </dt>
+                            <dd class="mt-1 font-medium text-slate-900">{{ displayChampValue(c.valeur) }}</dd>
+                        </div>
+                    </dl>
+                </section>
 
                 <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                     <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">

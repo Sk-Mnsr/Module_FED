@@ -33,6 +33,12 @@ class OdClasseur extends Model
         'validated_at',
         'archive_date',
         'archived_at',
+        'controle_at',
+        'controle_by_user_id',
+        'controle_anomalie_at',
+        'controle_anomalie_motif',
+        'controle_anomalie_by_user_id',
+        'controle_anomalie_ack_at',
         'integration_status_code',
         'rejection_motif',
         'rejected_by_user_id',
@@ -51,6 +57,9 @@ class OdClasseur extends Model
             'validated_at' => 'datetime',
             'archive_date' => 'date',
             'archived_at' => 'datetime',
+            'controle_at' => 'datetime',
+            'controle_anomalie_at' => 'datetime',
+            'controle_anomalie_ack_at' => 'datetime',
             'rejected_at' => 'datetime',
             'deleted_at' => 'datetime',
         ];
@@ -69,6 +78,22 @@ class OdClasseur extends Model
     public function isIntegre(): bool
     {
         return $this->statut === self::STATUT_INTEGRE;
+    }
+
+    public function isControle(): bool
+    {
+        return $this->controle_at !== null;
+    }
+
+    public function hasControleAnomalie(): bool
+    {
+        return $this->controle_anomalie_at !== null;
+    }
+
+    /** Anomalie encore à traiter côté maker (notification « Pièces à corriger »). */
+    public function hasControleAnomaliePending(): bool
+    {
+        return $this->hasControleAnomalie() && $this->controle_anomalie_ack_at === null;
     }
 
     public function isEditable(): bool
@@ -94,6 +119,16 @@ class OdClasseur extends Model
     public function validatedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'validated_by_user_id');
+    }
+
+    public function controleBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'controle_by_user_id');
+    }
+
+    public function controleAnomalieBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'controle_anomalie_by_user_id');
     }
 
     public function deletedBy(): BelongsTo
@@ -128,12 +163,13 @@ class OdClasseur extends Model
     }
 
     /**
-     * Suppression : brouillon (créateur / admin) ; en attente : admin uniquement (checker valide ou rejette).
+     * Suppression : brouillon (créateur / admin) ; en attente : admin ;
+     * archivé : SuperAdmin uniquement (mise en corbeille).
      */
     public function canBeDeletedBy(User $user): bool
     {
         if ($this->isIntegre()) {
-            return false;
+            return $user->isSuperAdmin();
         }
 
         if ($this->isBrouillon()) {

@@ -34,7 +34,8 @@ Le module **Opérations diverses** permet de :
 |------|--------------|---------------------|
 | **Maker** | L’agent qui crée l’intégration | Créer, modifier, intégrer, désigner un checker |
 | **Checker** | Un **autre** agent du **même pôle** (Operations ou Finance) | Valider et archiver, ou rejeter |
-| **SuperAdmin** | Administrateur | Voir toute la file, accéder à la **Corbeille**, restaurer |
+| **Contrôleur** | Profil dédié au contrôle documentaire (distinct du Contrôle de gestion FED) | Après archivage : contrôler OK, ou **signaler une erreur** (notif maker → pièce de correction) |
+| **SuperAdmin** | Administrateur | Voir toute la file, accéder à la **Corbeille**, restaurer, détruire |
 
 **Règle essentielle :**  
 un agent **Operations** ne peut désigner comme checker qu’un autre agent **Operations**.  
@@ -69,6 +70,8 @@ Opérations diverses
 | **Brouillon** | En cours de préparation, pas encore envoyée |
 | **Attente de validation** | Transmise à Flexcube, en attente du checker |
 | **Archivé** | Validée par le checker ; pièce disponible dans l’archivage |
+| **Archivé · Contrôlé** | Le Contrôleur a validé justificatifs + pièce comptable |
+| **Archivé · Contrôlé · Correction** | Contrôlée avec erreurs signalées ; la pièce d’origine reste archivée ; le maker crée une **nouvelle** pièce de correction |
 
 ---
 
@@ -227,6 +230,7 @@ Seul le **checker désigné** peut valider ou rejeter.
 
 - Contient les intégrations **supprimées** (fichiers conservés).
 - Action **Restaurer** : le dossier réapparaît selon son statut d’origine (brouillon, attente ou archivage).
+- Action **Supprimer définitivement** : efface les fichiers et l’enregistrement.
 
 ### Qui peut supprimer ?
 
@@ -234,7 +238,7 @@ Seul le **checker désigné** peut valider ou rejeter.
 |-----------|--------------------|
 | Brouillon | Le créateur (ou SuperAdmin) |
 | En attente | Le checker, le maker, ou SuperAdmin |
-| Archivé | **Non supprimable** |
+| Archivé | **SuperAdmin uniquement** (mise en corbeille, puis suppression définitive possible) |
 
 ---
 
@@ -261,8 +265,10 @@ Vous pouvez :
 - Rechercher (classeur, batch, agent…)
 - Ouvrir une pièce
 - Télécharger le PDF et les justificatifs
+- **Contrôleur** : **Contrôler la pièce** (OK) ou **Signaler une erreur** (notif maker)
+- **Maker** : bouton **J’ai créé la correction** → retire la notif et ouvre une **nouvelle intégration** (indépendante, non liée)
 
-**Visibilité :** chaque pôle voit principalement ses pièces ; SuperAdmin voit tout.
+**Visibilité :** chaque pôle voit principalement ses pièces ; Contrôleur et SuperAdmin voient tout.
 
 ---
 
@@ -283,6 +289,9 @@ Automatique  ou  Manuelle
      │         │
      ▼         ▼
  Archivage   Brouillon (corriger puis renvoyer)
+     │
+     ▼  Contrôleur
+ Archivé · Contrôlé
 ```
 
 ---
@@ -447,7 +456,7 @@ Actions utiles :
 → Lire le message (ex. session Flexcube déjà ouverte ailleurs). Corriger puis réessayer. Les **Détails techniques** aident le support.
 
 ### J’ai validé par erreur
-→ Une validation archive l’intégration. Contacter un SuperAdmin / le support selon la procédure interne ; la suppression n’est pas possible une fois **archivé**.
+→ Une validation archive l’intégration. Un **SuperAdmin** peut la **supprimer** depuis **Archivage** (mise en corbeille), puis éventuellement la supprimer définitivement depuis la **Corbeille**.
 
 ### J’ai supprimé un brouillon
 → Un SuperAdmin peut le **restaurer** depuis **Corbeille**.
@@ -467,6 +476,7 @@ Actions utiles :
 | Valider / rejeter | OD → **En attente** |
 | Restaurer une suppression | OD → **Corbeille** (SuperAdmin) |
 | Consulter les pièces validées | OD → **Archivage** |
+| Supprimer une pièce archivée | OD → **Archivage** (SuperAdmin) → Corbeille |
 | Créer un partenaire | Réconciliation → **Partenaires** |
 | Lancer un rapprochement | Réconciliation → **Reconciliation** |
 | Revoir un ancien run | Réconciliation → **Historique** |

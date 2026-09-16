@@ -67,6 +67,7 @@ use App\Http\Controllers\OffreController;
 use App\Http\Controllers\OperationDiverseController;
 use App\Http\Controllers\PodProduitController;
 use App\Http\Controllers\PodOperationController;
+use App\Http\Controllers\PodDataTableController;
 use App\Http\Controllers\PublicSoumissionController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\StockController;
@@ -271,6 +272,9 @@ Route::middleware(['auth'])->group(function () {
         Route::post('operations-diverses/piece-comptable/{classeur}/integrer', [OperationDiverseController::class, 'pieceComptableIntegrer'])->name('operations-diverses.piece-comptable.integrer');
         Route::post('operations-diverses/piece-comptable/{classeur}/valider-checker', [OperationDiverseController::class, 'pieceComptableValiderChecker'])->name('operations-diverses.piece-comptable.valider-checker');
         Route::post('operations-diverses/piece-comptable/{classeur}/rejeter-checker', [OperationDiverseController::class, 'pieceComptableRejeterChecker'])->name('operations-diverses.piece-comptable.rejeter-checker');
+        Route::post('operations-diverses/piece-comptable/{classeur}/controle', [OperationDiverseController::class, 'pieceComptableControle'])->name('operations-diverses.piece-comptable.controle');
+        Route::post('operations-diverses/piece-comptable/{classeur}/controle-anomalie', [OperationDiverseController::class, 'pieceComptableControleAnomalie'])->name('operations-diverses.piece-comptable.controle-anomalie');
+        Route::post('operations-diverses/piece-comptable/{classeur}/ack-correction', [OperationDiverseController::class, 'pieceComptableAckCorrection'])->name('operations-diverses.piece-comptable.ack-correction');
         Route::post('operations-diverses/piece-comptable/{classeur}/ajouter-justificatifs', [OperationDiverseController::class, 'pieceComptableAjouterJustificatifs'])->name('operations-diverses.piece-comptable.ajouter-justificatifs');
         Route::post('operations-diverses/piece-comptable/{classeur}/restaurer', [OperationDiverseController::class, 'pieceComptableRestore'])->withTrashed()->name('operations-diverses.piece-comptable.restaurer');
         Route::delete('operations-diverses/piece-comptable/{classeur}/definitif', [OperationDiverseController::class, 'pieceComptableForceDestroy'])->withTrashed()->name('operations-diverses.piece-comptable.force-destroy');
@@ -285,7 +289,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('operations-diverses/archivage', [OperationDiverseController::class, 'archivage'])->name('operations-diverses.archivage');
     });
 
-    // Produits d'opérations diverses (POD)
+    // Produits divers (clé technique module: pod)
     Route::middleware('module:pod')->prefix('pod')->name('pod.')->group(function () {
         Route::get('/', fn () => redirect()->route('pod.produits.index'))->name('index');
         Route::get('produits', [PodProduitController::class, 'index'])->name('produits.index');
@@ -300,11 +304,26 @@ Route::middleware(['auth'])->group(function () {
         Route::get('import', [PodProduitController::class, 'importForm'])->name('import');
         Route::post('import', [PodProduitController::class, 'import'])->name('import.store');
 
+        Route::get('tables', [PodDataTableController::class, 'index'])->name('tables.index');
+        Route::get('tables/create', [PodDataTableController::class, 'create'])->name('tables.create');
+        Route::post('tables', [PodDataTableController::class, 'store'])->name('tables.store');
+        Route::get('tables/options/{code}', [PodDataTableController::class, 'options'])->name('tables.options');
+        Route::get('tables/{podDataTable}', [PodDataTableController::class, 'show'])->name('tables.show');
+        Route::get('tables/{podDataTable}/edit', [PodDataTableController::class, 'edit'])->name('tables.edit');
+        Route::put('tables/{podDataTable}', [PodDataTableController::class, 'update'])->name('tables.update');
+        Route::delete('tables/{podDataTable}', [PodDataTableController::class, 'destroy'])->name('tables.destroy');
+        Route::post('tables/{podDataTable}/import', [PodDataTableController::class, 'import'])->name('tables.import');
+        Route::post('tables/{podDataTable}/rows', [PodDataTableController::class, 'storeRow'])->name('tables.rows.store');
+        Route::delete('tables/{podDataTable}/rows/{row}', [PodDataTableController::class, 'destroyRow'])->name('tables.rows.destroy');
+
         Route::get('operations', [PodOperationController::class, 'index'])->name('operations.index');
         Route::get('operations/create', [PodOperationController::class, 'create'])->name('operations.create');
         Route::post('operations/preview', [PodOperationController::class, 'preview'])->name('operations.preview');
         Route::post('operations', [PodOperationController::class, 'store'])->name('operations.store');
         Route::get('operations/{operation}', [PodOperationController::class, 'show'])->name('operations.show');
+        Route::post('operations/{operation}/valider', [PodOperationController::class, 'valider'])->name('operations.valider');
+        Route::post('operations/{operation}/annuler', [PodOperationController::class, 'annuler'])->name('operations.annuler');
+        Route::get('operations/{operation}/pdf', [PodOperationController::class, 'pdf'])->name('operations.pdf');
         Route::delete('operations/{operation}', [PodOperationController::class, 'destroy'])->name('operations.destroy');
     });
 

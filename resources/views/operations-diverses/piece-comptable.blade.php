@@ -128,7 +128,7 @@
 
     <table class="footer">
         <tr>
-            <td style="width:50%; text-align:center;">
+            <td style="width:33%; text-align:center; vertical-align:top;">
                 Maker : {{ $makerName ?? '' }}
                 @if(! empty($makerSignature))
                     <div class="sig-block">
@@ -136,7 +136,15 @@
                     </div>
                 @endif
             </td>
-            <td style="width:50%; text-align:center;">
+            <td style="width:34%; text-align:center; vertical-align:top; padding-top:70px;">
+                Contrôleur : {{ $controleurName ?? '' }}
+                @if(! empty($controleurSignature))
+                    <div class="sig-block">
+                        <img class="sig-img" src="{{ $controleurSignature }}" alt="Signature contrôleur">
+                    </div>
+                @endif
+            </td>
+            <td style="width:33%; text-align:center; vertical-align:top;">
                 Checker : {{ $checkerName ?? '' }}
                 @if(! empty($checkerSignature))
                     <div class="sig-wrap-right">

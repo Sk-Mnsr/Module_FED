@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Search, Eye } from 'lucide-vue-next';
+import { labelStatutOperation, statutOperationClass } from '@/lib/podLabels';
 
 type Op = {
     id: number;
@@ -36,7 +37,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'POD', href: '/pod/produits' },
+    { title: 'Produits divers', href: '/pod/produits' },
     { title: 'Opérations', href: '/pod/operations' },
 ];
 
@@ -56,25 +57,19 @@ const fmt = (v: string | number | null | undefined) => {
     return Number(v).toLocaleString('fr-FR');
 };
 
-const statutClass = (s: string) => {
-    if (s === 'valide') return 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200';
-    if (s === 'annule') return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
-    return 'bg-amber-50 text-amber-900 ring-1 ring-amber-200';
-};
-
 const fieldClass =
     'h-11 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30';
 </script>
 
 <template>
-    <Head title="Opérations POD" />
+    <Head title="Opérations — Produits divers" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white">
             <div class="mx-auto flex max-w-7xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
                 <div class="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <p class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">POD</p>
+                        <p class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Produits divers</p>
                         <h1 class="mt-1 text-3xl font-bold tracking-tight text-slate-900">Opérations</h1>
                         <p class="mt-2 text-sm text-slate-600">
                             {{ operations.total }} opération(s) enregistrée(s)
@@ -109,9 +104,9 @@ const fieldClass =
                             class="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm"
                         >
                             <option value="">Tous</option>
-                            <option value="brouillon">brouillon</option>
-                            <option value="valide">valide</option>
-                            <option value="annule">annule</option>
+                            <option value="brouillon">Brouillon</option>
+                            <option value="valide">Validée</option>
+                            <option value="annule">Annulée</option>
                         </select>
                     </div>
                     <Button type="button" class="h-11" @click="applyFilters">Filtrer</Button>
@@ -155,9 +150,9 @@ const fieldClass =
                                 <td class="px-5 py-4">
                                     <span
                                         class="inline-flex rounded-full px-2.5 py-1 text-xs font-medium"
-                                        :class="statutClass(op.statut)"
+                                        :class="statutOperationClass(op.statut)"
                                     >
-                                        {{ op.statut }}
+                                        {{ labelStatutOperation(op.statut) }}
                                     </span>
                                 </td>
                                 <td class="px-5 py-4 text-right">

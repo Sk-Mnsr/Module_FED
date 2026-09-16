@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Search, Upload } from 'lucide-vue-next';
+import { labelModeFrais, labelStatutProduit, statutProduitClass } from '@/lib/podLabels';
 
 type Produit = {
     id: number;
@@ -40,7 +41,7 @@ const props = defineProps<{
 }>();
 
 const breadcrumbs = [
-    { title: 'POD', href: '/pod/produits' },
+    { title: 'Produits divers', href: '/pod/produits' },
     { title: 'Produits', href: '/pod/produits' },
 ];
 
@@ -71,12 +72,6 @@ const applyFilters = () => {
     );
 };
 
-const statutClass = (s: string) => {
-    if (s === 'production') return 'bg-emerald-100 text-emerald-800';
-    if (s === 'valide') return 'bg-sky-100 text-sky-800';
-    return 'bg-amber-100 text-amber-900';
-};
-
 const saveTaux = () => {
     tauxForm.post('/pod/parametres/taux-taf', { preserveScroll: true });
 };
@@ -85,15 +80,15 @@ const totalLabel = computed(() => `${props.produits.total} produit(s)`);
 </script>
 
 <template>
-    <Head title="Produits OD (POD)" />
+    <Head title="Produits divers" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex flex-col gap-6 p-6">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                    <h1 class="text-2xl font-bold text-foreground">Produits d’opérations diverses</h1>
+                    <h1 class="text-2xl font-bold text-foreground">Produits divers</h1>
                     <p class="mt-1 text-sm text-muted-foreground">
-                        Paramétrage des codes, frais, TAF et schémas comptables. {{ totalLabel }}
+                        Paramétrage des produits (frais, TAF, schémas comptables). {{ totalLabel }}
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
@@ -126,7 +121,7 @@ const totalLabel = computed(() => `${props.produits.total} produit(s)`);
                     <Label>Statut</Label>
                     <select v-model="statut" class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                         <option value="">Tous</option>
-                        <option v-for="s in statuts" :key="s" :value="s">{{ s }}</option>
+                        <option v-for="s in statuts" :key="s" :value="s">{{ labelStatutProduit(s) }}</option>
                     </select>
                 </div>
                 <div class="w-full space-y-1 sm:w-36">
@@ -185,14 +180,17 @@ const totalLabel = computed(() => `${props.produits.total} produit(s)`);
                             </td>
                             <td class="px-4 py-3">{{ p.initiateur || '—' }}</td>
                             <td class="px-4 py-3">
-                                {{ p.mode_frais }}
+                                {{ labelModeFrais(p.mode_frais) }}
                                 <span v-if="p.frais_fixe != null" class="text-muted-foreground">
                                     ({{ p.frais_fixe }})
                                 </span>
                             </td>
                             <td class="px-4 py-3">
-                                <span class="rounded-full px-2 py-0.5 text-xs font-medium" :class="statutClass(p.statut)">
-                                    {{ p.statut }}
+                                <span
+                                    class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
+                                    :class="statutProduitClass(p.statut)"
+                                >
+                                    {{ labelStatutProduit(p.statut) }}
                                 </span>
                             </td>
                             <td class="px-4 py-3 text-muted-foreground">

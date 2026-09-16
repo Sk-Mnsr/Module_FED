@@ -177,15 +177,15 @@ const submitDecision = () => {
         alert('Veuillez saisir votre commentaire avant de continuer.');
         return;
     }
-
+    
     showActionModal.value = false;
 
     if (action === 'approve') {
         if (!confirm('Confirmer la validation de cette offre ?')) return;
         router.post(
             `/feds/facilities/${props.fed.id}/approve`,
-            {
-                comment: c,
+            { 
+                comment: c, 
                 offre_choisie_id: offreChoisieId.value,
                 request_expert_opinion: requestExpertOpinion.value,
             },
@@ -300,7 +300,7 @@ const statusLabel = (s: string) => {
                         <Link href="/feds/facilities" class="inline-flex items-center gap-1.5">
                             <ArrowLeft class="size-4" />
                             Retour à la liste
-                        </Link>
+                    </Link>
                     </Button>
                     <span
                         :class="[
@@ -330,40 +330,40 @@ const statusLabel = (s: string) => {
                         <div class="rounded-lg border-2 border-gray-900 bg-white p-5 shadow-sm lg:p-6">
                             <div class="mb-6 flex items-start justify-between gap-4 border-b border-gray-300 pb-4">
                                 <img src="/logo_Cofina.png" alt="Cofina" class="h-12 object-contain lg:h-14" />
-                                <div class="text-right">
+                    <div class="text-right">
                                     <h1 class="text-lg font-bold uppercase text-gray-900 lg:text-xl">
                                         Fiche d'Engagement de dépense
                                     </h1>
-                                    <p class="mt-1 text-sm font-medium">
-                                        Réf. : FED n°
+                        <p class="mt-1 text-sm font-medium">
+                            Réf. : FED n°
                                         <span class="inline-block min-w-[120px] border-b border-gray-400 font-semibold">
                                             {{ props.fed.code }}
                                         </span>
-                                    </p>
-                                </div>
-                            </div>
+                        </p>
+                    </div>
+                </div>
 
                             <div class="mb-6 border-2 border-gray-900 p-4">
-                                <h2 class="mb-4 text-base font-bold uppercase">Demande</h2>
-                                <div class="grid gap-3 text-sm">
+                    <h2 class="mb-4 text-base font-bold uppercase">Demande</h2>
+                    <div class="grid gap-3 text-sm">
                                     <div class="grid grid-cols-[140px_1fr] gap-2 sm:grid-cols-[170px_1fr]">
                                         <span class="font-medium text-gray-600">Date :</span>
-                                        <span>{{ formatDate(props.fed.date) }}</span>
-                                    </div>
+                            <span>{{ formatDate(props.fed.date) }}</span>
+                        </div>
                                     <div class="grid grid-cols-[140px_1fr] gap-2 sm:grid-cols-[170px_1fr]">
                                         <span class="font-medium text-gray-600">Demandeur :</span>
                                         <span class="font-semibold uppercase">
                                             {{ props.fed.demandeur || props.fed.requester?.name || '—' }}
                                         </span>
-                                    </div>
+                        </div>
                                     <div class="grid grid-cols-[140px_1fr] gap-2 sm:grid-cols-[170px_1fr]">
                                         <span class="font-medium text-gray-600">Fonction :</span>
-                                        <span class="uppercase">{{ props.fed.fonction || '—' }}</span>
-                                    </div>
+                            <span class="uppercase">{{ props.fed.fonction || '—' }}</span>
+                        </div>
                                     <div class="grid grid-cols-[140px_1fr] gap-2 sm:grid-cols-[170px_1fr]">
                                         <span class="font-medium text-gray-600">Département :</span>
-                                        <span>{{ props.fed.department || '—' }}</span>
-                                    </div>
+                            <span>{{ props.fed.department || '—' }}</span>
+                        </div>
                                     <div
                                         class="grid grid-cols-[140px_1fr] gap-2 rounded border-l-4 border-red-500 bg-red-50/80 px-2 py-1.5 sm:grid-cols-[170px_1fr]"
                                     >
@@ -375,11 +375,11 @@ const statusLabel = (s: string) => {
                                     <div class="grid grid-cols-[140px_1fr] gap-2 sm:grid-cols-[170px_1fr]">
                                         <span class="font-medium text-gray-600">Motif :</span>
                                         <span class="font-medium uppercase">{{ props.fed.motive || '—' }}</span>
-                                    </div>
+                        </div>
                                     <div class="grid grid-cols-[140px_1fr] gap-2 sm:grid-cols-[170px_1fr]">
                                         <span class="font-medium text-gray-600">Bénéficiaire(s) :</span>
-                                        <span>{{ props.fed.beneficiaire || '—' }}</span>
-                                    </div>
+                            <span>{{ props.fed.beneficiaire || '—' }}</span>
+                        </div>
 
                                     <div class="mt-6 grid grid-cols-1 gap-6 border-t border-gray-300 pt-6 sm:grid-cols-2">
                                         <div class="flex flex-col items-center">
@@ -392,9 +392,9 @@ const statusLabel = (s: string) => {
                                                     alt="Signature demandeur"
                                                     class="max-h-full max-w-full object-contain"
                                                 />
-                                            </div>
-                                            <span class="text-xs font-medium">Demandeur</span>
-                                        </div>
+                                </div>
+                                <span class="text-xs font-medium">Demandeur</span>
+                            </div>
                                         <div class="flex flex-col items-center">
                                             <div
                                                 class="mb-2 flex h-20 w-full max-w-[200px] items-center justify-center border-2 border-gray-500 bg-gray-50 p-2"
@@ -405,28 +405,28 @@ const statusLabel = (s: string) => {
                                                     alt="Signature Manager"
                                                     class="max-h-full max-w-full object-contain"
                                                 />
-                                            </div>
-                                            <span class="text-xs font-medium">Manager (N+1)</span>
-                                        </div>
-                                    </div>
                                 </div>
-                            </div>
+                                <span class="text-xs font-medium">Manager (N+1)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
                             <div v-if="props.fed.items?.length" class="mb-6 border border-gray-400 p-4">
                                 <h2 class="mb-3 text-sm font-bold uppercase">Articles / Services</h2>
                                 <div class="overflow-x-auto">
-                                    <table class="w-full text-sm">
-                                        <thead>
+                    <table class="w-full text-sm">
+                        <thead>
                                             <tr
                                                 class="border-b border-gray-400 bg-gray-100 text-[11px] uppercase text-gray-700"
                                             >
-                                                <th class="px-2 py-2 text-left font-bold">Ligne(s) Budgétaire(s)</th>
-                                                <th class="px-2 py-2 text-left font-bold">Intitulé</th>
-                                                <th class="px-2 py-2 text-center font-bold">Quantité</th>
-                                                <th class="px-2 py-2 text-center font-bold">Description</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
+                                <th class="px-2 py-2 text-left font-bold">Ligne(s) Budgétaire(s)</th>
+                                <th class="px-2 py-2 text-left font-bold">Intitulé</th>
+                                <th class="px-2 py-2 text-center font-bold">Quantité</th>
+                                <th class="px-2 py-2 text-center font-bold">Description</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                                             <tr
                                                 v-for="item in props.fed.items"
                                                 :key="item.id"
@@ -435,24 +435,24 @@ const statusLabel = (s: string) => {
                                                 <td class="px-2 py-2 font-medium uppercase text-red-700">
                                                     {{ item.budget_line?.code || '—' }}
                                                 </td>
-                                                <td class="px-2 py-2 uppercase">{{ item.label }}</td>
+                                <td class="px-2 py-2 uppercase">{{ item.label }}</td>
                                                 <td class="px-2 py-2 text-center">
                                                     {{ formatQuantity(item.quantity) }}
                                                 </td>
                                                 <td class="px-2 py-2 text-center text-xs italic text-gray-600">
                                                     {{ item.description || '—' }}
                                                 </td>
-                                            </tr>
-                                        </tbody>
-                                        <tfoot>
-                                            <tr class="bg-gray-100 font-medium">
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-gray-100 font-medium">
                                                 <td colspan="3" class="px-2 py-2">Montant total estimé</td>
                                                 <td class="px-2 py-2 text-right">
                                                     {{ formatAmount(props.fed.estimated_total) }}
                                                 </td>
-                                            </tr>
-                                        </tfoot>
-                                    </table>
+                            </tr>
+                        </tfoot>
+                    </table>
                                 </div>
                             </div>
 
@@ -469,12 +469,12 @@ const statusLabel = (s: string) => {
                                         target="_blank"
                                         class="block text-blue-600 hover:underline"
                                     >
-                                        {{ attachment.original_name }}
-                                    </a>
-                                </div>
+                            {{ attachment.original_name }}
+                        </a>
+                    </div>
                                 <p v-else class="text-sm text-muted-foreground">Aucune pièce jointe.</p>
-                            </div>
-                        </div>
+                </div>
+            </div>
                     </div>
                 </div>
 
@@ -501,7 +501,7 @@ const statusLabel = (s: string) => {
                                 <dt class="text-muted-foreground">Statut</dt>
                                 <dd class="mt-1">
                                     <span
-                                        :class="[
+                            :class="[
                                             'inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium',
                                             statusBadge(props.fed.status),
                                         ]"
@@ -689,14 +689,14 @@ const statusLabel = (s: string) => {
                             "
                         >
                             <div v-if="canValidate" class="shrink-0">
-                                <input
-                                    v-model="offreChoisieId"
-                                    type="radio"
-                                    :name="`offre-${props.fed.id}`"
-                                    :value="group.representative_id"
+                                    <input
+                                        v-model="offreChoisieId"
+                                        type="radio"
+                                        :name="`offre-${props.fed.id}`"
+                                        :value="group.representative_id"
                                     class="size-4 cursor-pointer text-green-600 focus:ring-green-500"
-                                />
-                            </div>
+                                    />
+                                </div>
                             <span
                                 v-else-if="isSelectedOffer(group)"
                                 class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-green-600 text-xs font-bold text-white"
@@ -715,7 +715,7 @@ const statusLabel = (s: string) => {
                                         <h3 class="text-base font-bold uppercase text-foreground">
                                             {{ group.fournisseur }}
                                         </h3>
-                                        <span
+                                            <span 
                                             v-if="
                                                 group.offres.some(
                                                     (o) => o.id === props.fed.expert_opinion_offre_id,
@@ -724,13 +724,13 @@ const statusLabel = (s: string) => {
                                             class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800"
                                         >
                                             Choix expert
-                                        </span>
+                                            </span>
                                         <ChevronDown
                                             class="size-4 text-muted-foreground transition-transform"
-                                            :class="{ 'rotate-180': expandedGroups[group.id] }"
+                                                :class="{ 'rotate-180': expandedGroups[group.id] }"
                                         />
-                                    </div>
-                                    <div class="text-right">
+                                        </div>
+                                        <div class="text-right">
                                         <p class="text-[10px] font-semibold uppercase text-muted-foreground">
                                             Montant total TTC
                                         </p>
@@ -740,7 +740,7 @@ const statusLabel = (s: string) => {
                                     </div>
                                 </div>
                             </button>
-                        </div>
+                            </div>
 
                         <div
                             class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border bg-background px-4 py-2 text-xs"
@@ -769,18 +769,18 @@ const statusLabel = (s: string) => {
                                 <span class="font-semibold uppercase text-muted-foreground">Acompte :</span>
                                 {{ group.acompte }}
                             </span>
-                        </div>
+                            </div>
 
                         <div v-show="expandedGroups[group.id]" class="border-b border-border bg-muted/20 p-3">
-                            <table class="w-full text-xs">
+                                <table class="w-full text-xs">
                                 <thead class="bg-muted text-[10px] font-semibold uppercase text-muted-foreground">
                                     <tr>
                                         <th class="px-3 py-2 text-left">Article</th>
                                         <th class="w-16 px-3 py-2 text-center">Qté</th>
                                         <th class="w-28 px-3 py-2 text-right">P.U.</th>
                                         <th class="w-28 px-3 py-2 text-right">Total TTC</th>
-                                    </tr>
-                                </thead>
+                                        </tr>
+                                    </thead>
                                 <tbody class="divide-y divide-border">
                                     <tr v-for="o in group.offres" :key="o.id">
                                         <td class="px-3 py-2 font-medium text-foreground">
@@ -788,38 +788,38 @@ const statusLabel = (s: string) => {
                                                 props.fed.items?.find((i) => i.id === o.fed_item_id)?.label ||
                                                 'Montant global'
                                             }}
-                                        </td>
+                                            </td>
                                         <td class="px-3 py-2 text-center text-muted-foreground">
-                                            {{ formatQuantity(getArticleQuantity(o.fed_item_id)) }}
-                                        </td>
+                                                {{ formatQuantity(getArticleQuantity(o.fed_item_id)) }}
+                                            </td>
                                         <td class="px-3 py-2 text-right">
-                                            {{ formatAmount(o.prix_unitaire) }}
-                                        </td>
+                                                {{ formatAmount(o.prix_unitaire) }}
+                                            </td>
                                         <td class="px-3 py-2 text-right font-semibold">
                                             {{
                                                 formatAmount(
                                                     (o.prix_unitaire ?? 0) * getArticleQuantity(o.fed_item_id),
                                                 )
                                             }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
 
                         <div class="flex flex-wrap items-center gap-2 bg-muted/30 px-4 py-2">
-                            <template v-if="group.attachments.length">
-                                <a
-                                    v-for="att in group.attachments"
-                                    :key="att.id"
-                                    :href="`/storage/${att.path}`"
-                                    target="_blank"
+                                    <template v-if="group.attachments.length">
+                                        <a 
+                                            v-for="att in group.attachments" 
+                                            :key="att.id" 
+                                            :href="`/storage/${att.path}`" 
+                                            target="_blank" 
                                     class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-[11px] font-medium text-blue-600 hover:bg-muted"
-                                >
+                                        >
                                     <Paperclip class="size-3" />
                                     {{ att.original_name }}
-                                </a>
-                            </template>
+                                        </a>
+                                    </template>
                             <span v-else class="text-[11px] italic text-muted-foreground">
                                 Aucun document joint
                             </span>
@@ -836,10 +836,10 @@ const statusLabel = (s: string) => {
         </Dialog>
 
         <!-- Modale de décision -->
-        <Dialog v-model:open="showActionModal">
-            <DialogContent class="sm:max-w-lg">
-                <DialogHeader>
-                    <DialogTitle>
+            <Dialog v-model:open="showActionModal">
+                <DialogContent class="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>
                         {{
                             pendingAction === 'approve'
                                 ? "Validation de l'offre"
@@ -847,11 +847,11 @@ const statusLabel = (s: string) => {
                                   ? 'Rejet de la demande'
                                   : 'Demande de complément'
                         }}
-                    </DialogTitle>
-                    <DialogDescription>
-                        Veuillez accompagner votre action d'un commentaire explicatif.
-                    </DialogDescription>
-                </DialogHeader>
+                        </DialogTitle>
+                        <DialogDescription>
+                            Veuillez accompagner votre action d'un commentaire explicatif.
+                        </DialogDescription>
+                    </DialogHeader>
 
                 <div class="space-y-4 py-2">
                     <div v-if="pendingAction === 'approve' && selectedGroup" class="rounded-lg bg-muted/40 p-3 text-sm">
@@ -861,20 +861,20 @@ const statusLabel = (s: string) => {
                     </div>
                     <div>
                         <label class="mb-1.5 block text-sm font-medium">
-                            Commentaire / Avis <span class="text-red-500">*</span>
-                        </label>
-                        <textarea
-                            v-model="comment"
-                            rows="4"
+                                Commentaire / Avis <span class="text-red-500">*</span>
+                            </label>
+                            <textarea
+                                v-model="comment"
+                                rows="4"
                             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             placeholder="Saisissez votre commentaire obligatoire…"
                         />
                     </div>
-                </div>
+                    </div>
 
-                <DialogFooter>
-                    <Button variant="outline" @click="showActionModal = false">Annuler</Button>
-                    <Button
+                    <DialogFooter>
+                        <Button variant="outline" @click="showActionModal = false">Annuler</Button>
+                        <Button 
                         :class="
                             pendingAction === 'approve'
                                 ? 'bg-green-600 text-white hover:bg-green-700'
@@ -882,12 +882,12 @@ const statusLabel = (s: string) => {
                                   ? 'bg-red-600 text-white hover:bg-red-700'
                                   : 'bg-orange-600 text-white hover:bg-orange-700'
                         "
-                        @click="submitDecision"
-                    >
-                        Confirmer
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                            @click="submitDecision"
+                        >
+                            Confirmer
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
     </AppLayout>
 </template>

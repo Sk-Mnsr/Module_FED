@@ -150,7 +150,7 @@ final class AppNavigation
 
         $podItems = self::podItems($modules);
         if ($podItems !== []) {
-            $groups[] = ['module' => 'pod', 'label' => 'Produits OD (POD)', 'items' => $podItems];
+            $groups[] = ['module' => 'pod', 'label' => 'Produits divers', 'items' => $podItems];
         }
 
         $reconciliationItems = self::reconciliationItems(
@@ -496,6 +496,7 @@ final class AppNavigation
             self::link('Nouvelle opération', '/pod/operations/create', 'plus-circle'),
             self::link('Opérations', '/pod/operations', 'list'),
             self::link('Produits', '/pod/produits', 'package'),
+            self::link('Tables sources', '/pod/tables', 'table-2'),
         ];
     }
 

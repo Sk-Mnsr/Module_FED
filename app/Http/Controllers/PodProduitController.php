@@ -3,13 +3,23 @@
 namespace App\Http\Controllers;
 
 use App\Models\AppSetting;
+use App\Models\PodDataTable;
 use App\Models\PodLigneComptable;
 use App\Models\PodProduit;
+use App\Models\PodProduitChamp;
+use App\Models\PodProduitConstante;
+use App\Models\PodProduitEcran;
+use App\Models\PodProduitScript;
 use App\Models\PodTrancheFrais;
 use App\Support\PodFicheParametrageImport;
+use App\Support\PodProduitAuditor;
+use App\Support\PodProduitWorkflow;
+use App\Support\PodScriptRegistry;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
 
@@ -87,7 +97,7 @@ class PodProduitController extends Controller
     {
         $validated = $this->validateProduit($request);
 
-        $produit = DB::transaction(function () use ($request, $validated) {
+        $produit = DB::transaction(function () use ($validated) {
             $produit = PodProduit::create([
                 ...$this->produitAttributes($validated),
                 'created_by_user_id' => auth()->id(),
@@ -95,28 +105,55 @@ class PodProduitController extends Controller
             ]);
 
             $this->syncChildren($produit, $validated);
+            PodProduitAuditor::log(
+                $produit,
+                'created',
+                'Création du produit '.$produit->code,
+                null,
+                PodProduitAuditor::snapshot($produit),
+            );
 
             return $produit;
         });
 
         return redirect()
             ->route('pod.produits.show', $produit)
-            ->with('success', 'Produit POD créé.');
+            ->with('success', 'Produit divers créé.');
     }
 
     public function show(PodProduit $produit): InertiaResponse
     {
-        $produit->load(['tranches', 'lignesComptables', 'createdBy:id,name', 'updatedBy:id,name']);
+        $produit->load([
+            'tranches',
+            'lignesComptables',
+            'ecrans',
+            'champs.ecran',
+            'constantes',
+            'scripts',
+            'audits' => fn ($q) => $q->with('user:id,name')->limit(50),
+            'createdBy:id,name',
+            'updatedBy:id,name',
+        ]);
 
         return Inertia::render('Pod/Show', [
             'produit' => $this->detailPayload($produit),
             'tauxTafDefaut' => (float) AppSetting::get('pod.taux_taf_defaut', 10),
+            'profilsEcran' => PodProduitEcran::profilOptions(),
+            'audits' => $produit->audits->map(fn ($a) => [
+                'id' => $a->id,
+                'action' => $a->action,
+                'resume' => $a->resume,
+                'user_name' => $a->user?->name,
+                'created_at' => optional($a->created_at)->toIso8601String(),
+                'avant' => $a->avant,
+                'apres' => $a->apres,
+            ])->values(),
         ]);
     }
 
     public function edit(PodProduit $produit): InertiaResponse
     {
-        $produit->load(['tranches', 'lignesComptables']);
+        $produit->load(['tranches', 'lignesComptables', 'ecrans', 'champs.ecran', 'constantes', 'scripts']);
 
         return Inertia::render('Pod/Form', [
             'produit' => $this->detailPayload($produit),
@@ -130,26 +167,41 @@ class PodProduitController extends Controller
         $validated = $this->validateProduit($request, $produit);
 
         DB::transaction(function () use ($produit, $validated) {
+            $avant = PodProduitAuditor::snapshot($produit);
+
             $produit->update([
                 ...$this->produitAttributes($validated),
                 'updated_by_user_id' => auth()->id(),
             ]);
 
             $this->syncChildren($produit, $validated);
+            $produit->refresh();
+
+            PodProduitAuditor::log(
+                $produit,
+                'updated',
+                'Mise à jour du paramétrage',
+                $avant,
+                PodProduitAuditor::snapshot($produit),
+            );
         });
 
         return redirect()
             ->route('pod.produits.show', $produit)
-            ->with('success', 'Produit POD mis à jour.');
+            ->with('success', 'Produit divers mis à jour.');
     }
 
     public function destroy(PodProduit $produit): RedirectResponse
     {
+        if ($produit->statut === PodProduit::STATUT_PRODUCTION) {
+            return redirect()->back()->with('error', 'Impossible de supprimer un produit en production (repassez-le en valide).');
+        }
+
         $produit->delete();
 
         return redirect()
             ->route('pod.produits.index')
-            ->with('success', 'Produit POD supprimé.');
+            ->with('success', 'Produit divers supprimé.');
     }
 
     public function updateStatut(Request $request, PodProduit $produit): RedirectResponse
@@ -158,10 +210,25 @@ class PodProduitController extends Controller
             'statut' => ['required', 'in:brouillon,valide,production'],
         ]);
 
+        try {
+            PodProduitWorkflow::assertCanTransition($produit, $validated['statut']);
+        } catch (ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors());
+        }
+
+        $avant = $produit->statut;
         $produit->update([
             'statut' => $validated['statut'],
             'updated_by_user_id' => auth()->id(),
         ]);
+
+        PodProduitAuditor::log(
+            $produit,
+            'statut',
+            "Statut {$avant} → {$validated['statut']}",
+            ['statut' => $avant],
+            ['statut' => $validated['statut']],
+        );
 
         return redirect()->back()->with('success', 'Statut mis à jour.');
     }
@@ -176,7 +243,7 @@ class PodProduitController extends Controller
             ['key' => 'pod.taux_taf_defaut'],
             [
                 'value' => (string) $validated['taux_taf_defaut'],
-                'label' => 'Taux TAF par défaut (POD)',
+                'label' => 'Taux TAF par défaut (Produits divers)',
                 'description' => 'Taux de taxe sur activité financière appliqué si non défini sur le produit.',
                 'type' => 'number',
             ]
@@ -188,7 +255,7 @@ class PodProduitController extends Controller
     public function importForm(): InertiaResponse
     {
         return Inertia::render('Pod/Import', [
-            'templateHint' => 'Fiche paramétrage (colonnes : OPERATION, PRIX UNITAIRE, COMPTE PRODUIT, NEW CODE PRODUIT, LIBELLE ECRITURE PRODUIT, NEW CODE TAF, LIBELLE ECRITURE TAF, INITIATEUR)',
+            'templateHint' => 'Sheet1 : OPERATION, PRIX UNITAIRE, COMPTE PRODUIT, NEW CODE PRODUIT, LIBELLE… Feuilles optionnelles : ECRANS, CHAMPS, SCRIPTS, CONSTANTES (colonne CODE_PRODUIT).',
         ]);
     }
 
@@ -202,10 +269,14 @@ class PodProduitController extends Controller
         $stats = PodFicheParametrageImport::fromPath((string) $path, auth()->user());
 
         $msg = sprintf(
-            'Import terminé : %d créé(s), %d mis à jour, %d ignoré(s).',
+            'Import terminé : %d créé(s), %d mis à jour, %d ignoré(s). Feuilles : %d écran(s), %d champ(s), %d script(s), %d constante(s).',
             $stats['created'],
             $stats['updated'],
-            $stats['skipped']
+            $stats['skipped'],
+            $stats['ecrans'] ?? 0,
+            $stats['champs'] ?? 0,
+            $stats['scripts'] ?? 0,
+            $stats['constantes'] ?? 0,
         );
 
         $redirect = redirect()->route('pod.produits.index')->with('success', $msg);
@@ -226,7 +297,44 @@ class PodProduitController extends Controller
             ? 'required|string|max:50|unique:pod_produits,code,'.$produit->id
             : 'required|string|max:50|unique:pod_produits,code';
 
-        return $request->validate([
+        if ($request->has('champs') && is_array($request->input('champs'))) {
+            $request->merge([
+                'champs' => collect($request->input('champs'))
+                    ->map(function ($c) {
+                        if (! is_array($c)) {
+                            return $c;
+                        }
+                        if (isset($c['code'])) {
+                            $c['code'] = strtoupper(trim((string) $c['code']));
+                        }
+                        if (isset($c['ecran_code'])) {
+                            $c['ecran_code'] = strtoupper(trim((string) $c['ecran_code']));
+                        }
+
+                        return $c;
+                    })
+                    ->all(),
+            ]);
+        }
+
+        if ($request->has('ecrans') && is_array($request->input('ecrans'))) {
+            $request->merge([
+                'ecrans' => collect($request->input('ecrans'))
+                    ->map(function ($e) {
+                        if (! is_array($e)) {
+                            return $e;
+                        }
+                        if (isset($e['code'])) {
+                            $e['code'] = strtoupper(trim((string) $e['code']));
+                        }
+
+                        return $e;
+                    })
+                    ->all(),
+            ]);
+        }
+
+        $validated = $request->validate([
             'code' => $codeRule,
             'libelle' => ['required', 'string', 'max:255'],
             'type_operation' => ['nullable', 'string', 'max:255'],
@@ -266,7 +374,132 @@ class PodProduitController extends Controller
             'lignes.*.montant_fixe' => ['nullable', 'numeric', 'min:0'],
             'lignes.*.taux' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'lignes.*.obligatoire' => ['nullable', 'boolean'],
+            'champs' => ['nullable', 'array'],
+            'champs.*.code' => [
+                'required_with:champs',
+                'string',
+                'max:80',
+                'regex:/^[A-Za-z][A-Za-z0-9_]*$/',
+                Rule::notIn(PodProduitChamp::CODES_RESERVES),
+            ],
+            'champs.*.libelle' => ['required_with:champs', 'string', 'max:255'],
+            'champs.*.type' => ['required_with:champs', Rule::in(PodProduitChamp::TYPES)],
+            'champs.*.obligatoire' => ['nullable', 'boolean'],
+            'champs.*.visible' => ['nullable', 'boolean'],
+            'champs.*.gris' => ['nullable', 'boolean'],
+            'champs.*.valeur_defaut' => ['nullable', 'string', 'max:255'],
+            'champs.*.options' => ['nullable', 'array'],
+            'champs.*.options.max_length' => ['nullable', 'integer', 'min:1', 'max:5000'],
+            'champs.*.options.min' => ['nullable', 'numeric'],
+            'champs.*.options.max' => ['nullable', 'numeric'],
+            'champs.*.options.decimales' => ['nullable', 'integer', 'min:0', 'max:6'],
+            'champs.*.options.valeurs' => ['nullable', 'array'],
+            'champs.*.options.valeurs.*.code' => ['required_with:champs.*.options.valeurs', 'string', 'max:80'],
+            'champs.*.options.valeurs.*.libelle' => ['required_with:champs.*.options.valeurs', 'string', 'max:255'],
+            'champs.*.options.valeurs.*.actif' => ['nullable', 'boolean'],
+            'champs.*.options.valeurs.*.ordre' => ['nullable', 'integer', 'min:0'],
+            'champs.*.options.table_code' => ['nullable', 'string', 'max:80'],
+            'champs.*.options.colonne_valeur' => ['nullable', 'string', 'max:80'],
+            'champs.*.options.colonne_libelle' => ['nullable', 'string', 'max:80'],
+            'champs.*.options.colonnes_desactivees' => ['nullable', 'array'],
+            'champs.*.options.colonnes_desactivees.*' => ['string', 'max:80'],
+            'champs.*.ecran_code' => ['nullable', 'string', 'max:40'],
+            'ecrans' => ['nullable', 'array'],
+            'ecrans.*.code' => ['required_with:ecrans', 'string', 'max:40', 'regex:/^[A-Za-z][A-Za-z0-9_]*$/'],
+            'ecrans.*.libelle' => ['required_with:ecrans', 'string', 'max:255'],
+            'ecrans.*.description' => ['nullable', 'string'],
+            'ecrans.*.profils' => ['nullable', 'array'],
+            'ecrans.*.profils.*' => ['string', Rule::in(array_keys(PodProduitEcran::PROFILS))],
+            'ecrans.*.actif' => ['nullable', 'boolean'],
+            'constantes' => ['nullable', 'array'],
+            'constantes.*.code' => ['required_with:constantes', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9_]*$/'],
+            'constantes.*.libelle' => ['required_with:constantes', 'string', 'max:255'],
+            'constantes.*.type' => ['required_with:constantes', Rule::in(PodProduitConstante::TYPES)],
+            'constantes.*.mode' => ['required_with:constantes', Rule::in(PodProduitConstante::MODES)],
+            'constantes.*.valeur_reference' => ['nullable', 'string', 'max:255'],
+            'constantes.*.obligatoire' => ['nullable', 'boolean'],
+            'scripts' => ['nullable', 'array'],
+            'scripts.*.code' => ['required_with:scripts', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9_]*$/'],
+            'scripts.*.libelle' => ['required_with:scripts', 'string', 'max:255'],
+            'scripts.*.moteur' => ['required_with:scripts', Rule::in(array_keys(PodScriptRegistry::MOTEURS))],
+            'scripts.*.parametres' => ['nullable', 'array'],
+            'scripts.*.description' => ['nullable', 'string'],
+            'scripts.*.actif' => ['nullable', 'boolean'],
         ]);
+
+        foreach ($validated['champs'] ?? [] as $i => $champ) {
+            if (($champ['type'] ?? '') !== PodProduitChamp::TYPE_TABLE) {
+                continue;
+            }
+            $opts = $champ['options'] ?? [];
+            if (empty($opts['table_code']) || empty($opts['colonne_valeur']) || empty($opts['colonne_libelle'])) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    "champs.{$i}.options.table_code" => 'Pour un champ Table, renseignez la table, la colonne valeur et la colonne libellé.',
+                ]);
+            }
+        }
+
+        $codes = collect($validated['champs'] ?? [])
+            ->map(fn ($c) => strtoupper(trim((string) ($c['code'] ?? ''))))
+            ->filter();
+        if ($codes->count() !== $codes->unique()->count()) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'champs' => 'Chaque code de champ doit être unique sur le produit.',
+            ]);
+        }
+
+        $ecranCodes = collect($validated['ecrans'] ?? [])
+            ->map(fn ($e) => strtoupper(trim((string) ($e['code'] ?? ''))))
+            ->filter();
+        if ($ecranCodes->count() !== $ecranCodes->unique()->count()) {
+            throw ValidationException::withMessages([
+                'ecrans' => 'Chaque code d’écran doit être unique sur le produit.',
+            ]);
+        }
+
+        foreach ($validated['champs'] ?? [] as $i => $champ) {
+            $ecranCode = strtoupper(trim((string) ($champ['ecran_code'] ?? '')));
+            if ($ecranCode !== '' && ! $ecranCodes->contains($ecranCode)) {
+                throw ValidationException::withMessages([
+                    "champs.{$i}.ecran_code" => "L’écran « {$ecranCode} » n’existe pas sur ce produit.",
+                ]);
+            }
+        }
+
+        $scriptCodes = collect($validated['scripts'] ?? [])
+            ->map(fn ($s) => strtoupper(trim((string) ($s['code'] ?? ''))))
+            ->filter();
+        if ($scriptCodes->count() !== $scriptCodes->unique()->count()) {
+            throw ValidationException::withMessages([
+                'scripts' => 'Chaque code de script doit être unique.',
+            ]);
+        }
+
+        $constanteCodes = collect($validated['constantes'] ?? [])
+            ->map(fn ($c) => strtoupper(trim((string) ($c['code'] ?? ''))))
+            ->filter();
+        if ($constanteCodes->count() !== $constanteCodes->unique()->count()) {
+            throw ValidationException::withMessages([
+                'constantes' => 'Chaque code de constante doit être unique.',
+            ]);
+        }
+
+        foreach ($validated['constantes'] ?? [] as $i => $c) {
+            $mode = $c['mode'] ?? '';
+            $ref = trim((string) ($c['valeur_reference'] ?? ''));
+            if (in_array($mode, ['champ', 'script', 'schema'], true) && $ref === '') {
+                throw ValidationException::withMessages([
+                    "constantes.{$i}.valeur_reference" => 'La référence est obligatoire pour ce mode.',
+                ]);
+            }
+            if ($mode === 'script' && ! $scriptCodes->contains(strtoupper($ref))) {
+                throw ValidationException::withMessages([
+                    "constantes.{$i}.valeur_reference" => "Script « {$ref} » inconnu sur ce produit.",
+                ]);
+            }
+        }
+
+        return $validated;
     }
 
     /**
@@ -337,6 +570,116 @@ class PodProduitController extends Controller
                 'obligatoire' => (bool) ($ligne['obligatoire'] ?? true),
             ]);
         }
+
+        $produit->champs()->delete();
+        $produit->ecrans()->delete();
+
+        $ecranIdsByCode = [];
+        foreach ($validated['ecrans'] ?? [] as $order => $ecran) {
+            $code = strtoupper(trim((string) $ecran['code']));
+            $created = PodProduitEcran::create([
+                'pod_produit_id' => $produit->id,
+                'code' => $code,
+                'libelle' => $ecran['libelle'],
+                'description' => $ecran['description'] ?? null,
+                'profils' => array_values($ecran['profils'] ?? []),
+                'actif' => array_key_exists('actif', $ecran) ? (bool) $ecran['actif'] : true,
+                'sort_order' => $order,
+            ]);
+            $ecranIdsByCode[$code] = $created->id;
+        }
+
+        foreach ($validated['champs'] ?? [] as $order => $champ) {
+            $type = $champ['type'];
+            $options = $this->normalizeChampOptions($type, $champ['options'] ?? []);
+            $ecranCode = strtoupper(trim((string) ($champ['ecran_code'] ?? '')));
+
+            PodProduitChamp::create([
+                'pod_produit_id' => $produit->id,
+                'pod_produit_ecran_id' => $ecranCode !== '' ? ($ecranIdsByCode[$ecranCode] ?? null) : null,
+                'code' => strtoupper(trim((string) $champ['code'])),
+                'libelle' => $champ['libelle'],
+                'type' => $type,
+                'obligatoire' => (bool) ($champ['obligatoire'] ?? false),
+                'visible' => array_key_exists('visible', $champ) ? (bool) $champ['visible'] : true,
+                'gris' => (bool) ($champ['gris'] ?? false),
+                'valeur_defaut' => $champ['valeur_defaut'] ?? null,
+                'options' => $options,
+                'sort_order' => $order,
+            ]);
+        }
+
+        $produit->scripts()->delete();
+        foreach ($validated['scripts'] ?? [] as $order => $script) {
+            PodProduitScript::create([
+                'pod_produit_id' => $produit->id,
+                'code' => strtoupper(trim((string) $script['code'])),
+                'libelle' => $script['libelle'],
+                'moteur' => $script['moteur'],
+                'parametres' => $script['parametres'] ?? [],
+                'description' => $script['description'] ?? null,
+                'actif' => array_key_exists('actif', $script) ? (bool) $script['actif'] : true,
+                'sort_order' => $order,
+            ]);
+        }
+
+        $produit->constantes()->delete();
+        foreach ($validated['constantes'] ?? [] as $order => $constante) {
+            PodProduitConstante::create([
+                'pod_produit_id' => $produit->id,
+                'code' => strtoupper(trim((string) $constante['code'])),
+                'libelle' => $constante['libelle'],
+                'type' => $constante['type'],
+                'mode' => $constante['mode'],
+                'valeur_reference' => $constante['valeur_reference'] ?? null,
+                'obligatoire' => (bool) ($constante['obligatoire'] ?? false),
+                'sort_order' => $order,
+            ]);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     * @return array<string, mixed>
+     */
+    private function normalizeChampOptions(string $type, array $options): array
+    {
+        return match ($type) {
+            PodProduitChamp::TYPE_TEXTE => [
+                'max_length' => isset($options['max_length']) ? (int) $options['max_length'] : null,
+            ],
+            PodProduitChamp::TYPE_NUMERIQUE => [
+                'min' => $options['min'] ?? null,
+                'max' => $options['max'] ?? null,
+                'decimales' => isset($options['decimales']) ? (int) $options['decimales'] : 2,
+            ],
+            PodProduitChamp::TYPE_LISTE => [
+                'valeurs' => collect($options['valeurs'] ?? [])
+                    ->values()
+                    ->map(function ($v, $i) {
+                        return [
+                            'code' => trim((string) ($v['code'] ?? '')),
+                            'libelle' => (string) ($v['libelle'] ?? ''),
+                            'actif' => array_key_exists('actif', $v) ? (bool) $v['actif'] : true,
+                            'ordre' => (int) ($v['ordre'] ?? $i),
+                        ];
+                    })
+                    ->filter(fn ($v) => $v['code'] !== '')
+                    ->values()
+                    ->all(),
+            ],
+            PodProduitChamp::TYPE_TABLE => [
+                'table_code' => strtoupper(trim((string) ($options['table_code'] ?? ''))),
+                'colonne_valeur' => strtoupper(trim((string) ($options['colonne_valeur'] ?? ''))),
+                'colonne_libelle' => strtoupper(trim((string) ($options['colonne_libelle'] ?? ''))),
+                'colonnes_desactivees' => collect($options['colonnes_desactivees'] ?? [])
+                    ->map(fn ($c) => strtoupper(trim((string) $c)))
+                    ->filter()
+                    ->values()
+                    ->all(),
+            ],
+            default => [],
+        };
     }
 
     /**
@@ -417,6 +760,49 @@ class PodProduitController extends Controller
                 'obligatoire' => $l->obligatoire,
                 'sort_order' => $l->sort_order,
             ])->values(),
+            'champs' => $p->champs->map(fn (PodProduitChamp $c) => [
+                'id' => $c->id,
+                'code' => $c->code,
+                'libelle' => $c->libelle,
+                'type' => $c->type,
+                'obligatoire' => $c->obligatoire,
+                'visible' => $c->visible,
+                'gris' => $c->gris,
+                'valeur_defaut' => $c->valeur_defaut,
+                'options' => $c->options ?? [],
+                'sort_order' => $c->sort_order,
+                'ecran_code' => $c->ecran?->code,
+                'valeurs' => match ($c->type) {
+                    PodProduitChamp::TYPE_LISTE => $c->valeursListeActives(),
+                    PodProduitChamp::TYPE_TABLE => $c->valeursTableActives(),
+                    default => [],
+                },
+            ])->values(),
+            'ecrans' => ($p->relationLoaded('ecrans') ? $p->ecrans : $p->ecrans()->get())->map(fn (PodProduitEcran $e) => [
+                'id' => $e->id,
+                'code' => $e->code,
+                'libelle' => $e->libelle,
+                'description' => $e->description,
+                'profils' => $e->profils ?? [],
+                'actif' => $e->actif,
+                'sort_order' => $e->sort_order,
+            ])->values(),
+            'constantes' => ($p->relationLoaded('constantes') ? $p->constantes : collect())->map(fn (PodProduitConstante $c) => [
+                'code' => $c->code,
+                'libelle' => $c->libelle,
+                'type' => $c->type,
+                'mode' => $c->mode,
+                'valeur_reference' => $c->valeur_reference,
+                'obligatoire' => $c->obligatoire,
+            ])->values(),
+            'scripts' => ($p->relationLoaded('scripts') ? $p->scripts : collect())->map(fn (PodProduitScript $s) => [
+                'code' => $s->code,
+                'libelle' => $s->libelle,
+                'moteur' => $s->moteur,
+                'parametres' => $s->parametres ?? [],
+                'description' => $s->description,
+                'actif' => $s->actif,
+            ])->values(),
         ];
     }
 
@@ -442,6 +828,26 @@ class PodProduitController extends Controller
             'naturesCompte' => ['client', 'produit', 'taf', 'contrepartie', 'autre'],
             'typesMontant' => ['frais_ht', 'taf', 'frais_plus_taf', 'montant_operation', 'fixe', 'pourcentage'],
             'initiateurs' => ['CC', 'OPS', 'FINANCE'],
+            'typesChamp' => PodProduitChamp::TYPES,
+            'profilsEcran' => PodProduitEcran::profilOptions(),
+            'ecranTemplates' => PodProduitEcran::TEMPLATES,
+            'modesConstante' => PodProduitConstante::MODES,
+            'typesConstante' => PodProduitConstante::TYPES,
+            'moteursScript' => PodScriptRegistry::options(),
+            'tablesSources' => PodDataTable::query()
+                ->where('actif', true)
+                ->with(['columns' => fn ($q) => $q->where('actif', true)->orderBy('sort_order')])
+                ->orderBy('code')
+                ->get()
+                ->map(fn (PodDataTable $t) => [
+                    'code' => $t->code,
+                    'libelle' => $t->libelle,
+                    'columns' => $t->columns->map(fn ($c) => [
+                        'code' => $c->code,
+                        'libelle' => $c->libelle,
+                    ])->values(),
+                ])
+                ->values(),
         ];
     }
 }

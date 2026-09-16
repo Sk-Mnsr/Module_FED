@@ -58,13 +58,27 @@ type Classeur = {
     integrated_by_name: string | null;
     assigned_checker_name: string | null;
     validated_by_name: string | null;
+    controle_at?: string | null;
+    controle_by_name?: string | null;
+    is_controle?: boolean;
+    has_controle_anomalie?: boolean;
+    has_controle_anomalie_pending?: boolean;
+    controle_anomalie_motif?: string | null;
+    controle_anomalie_by_name?: string | null;
+    controle_anomalie_at?: string | null;
     fichier: string | null;
     can_integrate: boolean;
     can_validate_checker: boolean;
     can_add_justificatifs?: boolean;
+    can_controle?: boolean;
+    can_signal_anomalie?: boolean;
+    can_ack_correction?: boolean;
     integrer_url: string;
     valider_checker_url: string;
     ajouter_justificatifs_url?: string;
+    controle_url?: string;
+    controle_anomalie_url?: string;
+    ack_correction_url?: string;
     modifier_url: string | null;
     supprimer_url: string | null;
     rejection_motif?: string | null;
@@ -194,7 +208,45 @@ const deleting = ref(false);
 const showIntegrerModal = ref(false);
 const showValiderConfirm = ref(false);
 const showDeleteConfirm = ref(false);
+const showControleConfirm = ref(false);
+const controlling = ref(false);
+const ackCorrectionEnCours = ref(false);
 const selectedCheckerId = ref('');
+
+function demarrerCorrection() {
+    if (ackCorrectionEnCours.value || !props.classeur.can_ack_correction || !props.classeur.ack_correction_url) {
+        return;
+    }
+    ackCorrectionEnCours.value = true;
+    router.post(props.classeur.ack_correction_url, {}, {
+        onFinish: () => {
+            ackCorrectionEnCours.value = false;
+        },
+    });
+}
+
+function demanderControle() {
+    if (controlling.value || !props.classeur.can_controle || !props.classeur.controle_url) {
+        return;
+    }
+    showControleConfirm.value = true;
+}
+
+function confirmerControle() {
+    if (controlling.value || !props.classeur.controle_url) return;
+    controlling.value = true;
+    router.post(
+        props.classeur.controle_url,
+        {},
+        {
+            preserveScroll: true,
+            onFinish: () => {
+                controlling.value = false;
+                showControleConfirm.value = false;
+            },
+        },
+    );
+}
 
 function addJustificatifLigne() {
     newJustificatifs.value.push({ description: '', file: null });
@@ -243,12 +295,20 @@ const selectClass =
     'flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
 
 const statutLabel = computed(() => {
+    if (isIntegre.value && props.classeur.is_controle) {
+        return props.classeur.has_controle_anomalie
+            ? 'Archivé · Contrôlé · Correction'
+            : 'Archivé · Contrôlé';
+    }
     if (isIntegre.value) return 'Archivé';
     if (isAttenteValidation.value) return 'Attente de validation';
     return 'Brouillon';
 });
 
 const statutClass = computed(() => {
+    if (isIntegre.value && props.classeur.is_controle) {
+        return 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300';
+    }
     if (isIntegre.value) {
         return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
     }
@@ -327,7 +387,7 @@ function confirmerValiderChecker() {
 }
 
 function supprimer() {
-    if (deleting.value || !isBrouillon.value || !props.classeur.supprimer_url) {
+    if (deleting.value || !props.classeur.supprimer_url) {
         return;
     }
     showDeleteConfirm.value = true;
@@ -375,6 +435,30 @@ function confirmerSupprimer() {
                 >
                     Par {{ classeur.rejected_by_name }}
                 </p>
+            </div>
+
+            <div
+                v-if="classeur.has_controle_anomalie && classeur.controle_anomalie_motif"
+                class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+            >
+                <p class="font-semibold">Correction demandée par le Contrôleur</p>
+                <p class="mt-1 whitespace-pre-line">{{ classeur.controle_anomalie_motif }}</p>
+                <p
+                    v-if="classeur.controle_anomalie_by_name"
+                    class="mt-1 text-xs text-amber-800/80 dark:text-amber-200/70"
+                >
+                    Signalé par {{ classeur.controle_anomalie_by_name }}. Cette pièce reste archivée
+                    et contrôlée. La correction est une nouvelle intégration indépendante.
+                </p>
+                <button
+                    v-if="classeur.can_ack_correction && classeur.ack_correction_url"
+                    type="button"
+                    class="mt-3 inline-flex h-8 items-center rounded-md bg-amber-700 px-3 text-xs font-medium text-white hover:bg-amber-800 disabled:opacity-60"
+                    :disabled="ackCorrectionEnCours"
+                    @click="demarrerCorrection"
+                >
+                    {{ ackCorrectionEnCours ? 'Ouverture…' : 'J’ai créé la correction' }}
+                </button>
             </div>
 
             <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
@@ -853,6 +937,30 @@ function confirmerSupprimer() {
                         <FolderArchive class="size-4" /> Voir l’archivage
                     </Link>
 
+                    <Button
+                        v-if="isIntegre && classeur.can_controle && classeur.controle_url"
+                        type="button"
+                        class="h-9 bg-sky-600 text-white hover:bg-sky-700"
+                        :disabled="controlling || processing"
+                        @click="demanderControle"
+                    >
+                        <ShieldCheck class="size-4" />
+                        {{ controlling ? 'Contrôle…' : 'Contrôler la pièce' }}
+                    </Button>
+
+                    <Button
+                        v-if="isIntegre && classeur.supprimer_url"
+                        type="button"
+                        variant="ghost"
+                        class="h-8 px-2 text-xs font-normal text-muted-foreground hover:bg-transparent hover:text-red-600 dark:hover:text-red-400"
+                        :disabled="deleting || processing"
+                        title="Action SuperAdmin"
+                        @click="supprimer"
+                    >
+                        <Trash2 class="size-3.5 opacity-70" />
+                        {{ deleting ? 'Destruction…' : 'Détruire la pièce' }}
+                    </Button>
+
                     <template v-if="isBrouillon">
                         <Link
                             v-if="classeur.modifier_url"
@@ -1034,10 +1142,21 @@ function confirmerSupprimer() {
                 @confirm="confirmerValiderChecker"
             />
             <OdConfirmDialog
+                v-model:open="showControleConfirm"
+                title="Contrôler la pièce"
+                :description="`Confirmer le contrôle de « ${classeur.nom_classeur} » (justificatifs + pièce comptable) ?`"
+                confirm-label="Marquer contrôlé"
+                :loading="controlling"
+                variant="success"
+                @confirm="confirmerControle"
+            />
+            <OdConfirmDialog
                 v-model:open="showDeleteConfirm"
-                title="Supprimer"
-                :description="`Voulez-vous vraiment supprimer « ${classeur.nom_classeur} » ?`"
-                confirm-label="Supprimer"
+                title="Détruire la pièce"
+                :description="isIntegre
+                    ? `Détruire « ${classeur.nom_classeur} » ? La pièce sera mise en corbeille. Réservé au SuperAdmin.`
+                    : `Voulez-vous vraiment supprimer « ${classeur.nom_classeur} » ?`"
+                :confirm-label="isIntegre ? 'Détruire' : 'Supprimer'"
                 :loading="deleting"
                 variant="danger"
                 @confirm="confirmerSupprimer"

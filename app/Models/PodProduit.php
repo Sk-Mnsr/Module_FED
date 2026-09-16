@@ -77,6 +77,31 @@ class PodProduit extends Model
         return $this->hasMany(PodLigneComptable::class, 'pod_produit_id')->orderBy('sort_order');
     }
 
+    public function champs(): HasMany
+    {
+        return $this->hasMany(PodProduitChamp::class, 'pod_produit_id')->orderBy('sort_order');
+    }
+
+    public function ecrans(): HasMany
+    {
+        return $this->hasMany(PodProduitEcran::class, 'pod_produit_id')->orderBy('sort_order');
+    }
+
+    public function constantes(): HasMany
+    {
+        return $this->hasMany(PodProduitConstante::class, 'pod_produit_id')->orderBy('sort_order');
+    }
+
+    public function scripts(): HasMany
+    {
+        return $this->hasMany(PodProduitScript::class, 'pod_produit_id')->orderBy('sort_order');
+    }
+
+    public function audits(): HasMany
+    {
+        return $this->hasMany(PodProduitAudit::class, 'pod_produit_id')->orderByDesc('created_at');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');

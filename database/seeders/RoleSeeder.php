@@ -119,11 +119,19 @@ class RoleSeeder extends Seeder
                 'actif' => true,
             ],
             [
-                'nom' => 'POD',
+                'nom' => 'Contrôleur',
+                'slug' => 'controleur',
+                'module' => 'od',
+                'access_profile' => 'other',
+                'description' => 'Contrôle final des pièces archivées (justificatifs + pièce comptable). Pas d’intégration ni de validation maker/checker.',
+                'actif' => true,
+            ],
+            [
+                'nom' => 'Produits divers',
                 'slug' => 'pod',
                 'module' => 'pod',
                 'access_profile' => 'other',
-                'description' => 'Paramétrage des produits d’opérations diverses (frais, TAF, schémas comptables)',
+                'description' => 'Paramétrage des produits divers (champs, frais, TAF, schémas comptables)',
                 'actif' => true,
             ],
             [
@@ -202,7 +210,7 @@ class RoleSeeder extends Seeder
 
         foreach (Role::all() as $role) {
             if ($role->moduleKeys() !== []) {
-                // Assure l’accès POD aux rôles OPS / Finance déjà synchronisés
+                // Assure l’accès Produits divers aux rôles OPS / Finance déjà synchronisés
                 if (in_array($role->slug, ['ops', 'finance', 'controle_de_gestion', 'daf'], true)
                     && ! in_array('pod', $role->moduleKeys(), true)) {
                     $role->syncModuleKeys(array_values(array_unique([...$role->moduleKeys(), 'pod'])));

@@ -21,7 +21,21 @@ export type ArchiveFolder = {
     archived_at: string | null;
     created_at: string | null;
     integrated_at: string | null;
+    controle_at?: string | null;
+    controle_by_name?: string | null;
+    is_controle?: boolean;
+    has_controle_anomalie?: boolean;
+    has_controle_anomalie_pending?: boolean;
+    controle_anomalie_motif?: string | null;
+    controle_anomalie_by_name?: string | null;
+    controle_anomalie_at?: string | null;
     resume_url: string;
+    can_delete?: boolean;
+    supprimer_url?: string | null;
+    can_controle?: boolean;
+    controle_url?: string | null;
+    can_signal_anomalie?: boolean;
+    controle_anomalie_url?: string | null;
     piece_folder_name?: string;
     piece_display_name?: string;
     department?: string;
@@ -83,12 +97,14 @@ type FlatNode = TreeNode & { depth: number };
 </script>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import {
+    AlertTriangle,
     CalendarDays,
     ChevronDown,
     ChevronRight,
@@ -98,6 +114,8 @@ import {
     Folder,
     FolderOpen,
     Search,
+    Trash2,
+    ShieldCheck,
     SlidersHorizontal,
     User,
     X,
@@ -131,6 +149,137 @@ const selectClass =
 
 const page = usePage();
 const flash = computed(() => page.props.flash as { success?: string; error?: string; warning?: string } | undefined);
+const showDeleteConfirm = ref(false);
+const deleting = ref(false);
+const showControleConfirm = ref(false);
+const controlling = ref(false);
+const showAnomalieConfirm = ref(false);
+const signalingAnomalie = ref(false);
+const anomalieMotif = ref('');
+
+function demanderSuppression() {
+    if (deleting.value || !selectedPiece.value?.can_delete || !selectedPiece.value?.supprimer_url) {
+        return;
+    }
+    showDeleteConfirm.value = true;
+}
+
+function confirmerSuppression() {
+    const piece = selectedPiece.value;
+    if (deleting.value || !piece?.supprimer_url) return;
+    deleting.value = true;
+    router.delete(piece.supprimer_url, {
+        preserveScroll: true,
+        onFinish: () => {
+            deleting.value = false;
+            showDeleteConfirm.value = false;
+            selectedPiece.value = null;
+            selectedId.value = null;
+        },
+    });
+}
+
+function demanderControle() {
+    if (controlling.value || !selectedPiece.value?.can_controle || !selectedPiece.value?.controle_url) {
+        return;
+    }
+    showControleConfirm.value = true;
+}
+
+function confirmerControle() {
+    const piece = selectedPiece.value;
+    if (controlling.value || !piece?.controle_url) return;
+    controlling.value = true;
+    router.post(
+        piece.controle_url,
+        {},
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                refreshSelectedPieceFromTree(piece.id);
+            },
+            onFinish: () => {
+                controlling.value = false;
+                showControleConfirm.value = false;
+            },
+        },
+    );
+}
+
+function demanderAnomalie() {
+    if (
+        signalingAnomalie.value ||
+        !selectedPiece.value?.can_signal_anomalie ||
+        !selectedPiece.value?.controle_anomalie_url
+    ) {
+        return;
+    }
+    anomalieMotif.value = '';
+    showAnomalieConfirm.value = true;
+}
+
+function confirmerAnomalie() {
+    const piece = selectedPiece.value;
+    const motif = anomalieMotif.value.trim();
+    if (signalingAnomalie.value || !piece?.controle_anomalie_url || motif.length < 5) return;
+    signalingAnomalie.value = true;
+    router.post(
+        piece.controle_anomalie_url,
+        { motif },
+        {
+            preserveScroll: true,
+            onSuccess: () => {
+                refreshSelectedPieceFromTree(piece.id);
+            },
+            onFinish: () => {
+                signalingAnomalie.value = false;
+                showAnomalieConfirm.value = false;
+                anomalieMotif.value = '';
+            },
+        },
+    );
+}
+
+function pieceIconClass(piece?: ArchiveFolder | null): string {
+    if (piece?.is_controle) {
+        return 'text-emerald-600 dark:text-emerald-400';
+    }
+    return 'text-primary';
+}
+
+function findPieceInTree(raw: ArchiveTree, pieceId: number): ArchiveFolder | null {
+    for (const years of Object.values(raw)) {
+        for (const months of Object.values(years ?? {})) {
+            for (const days of Object.values(months ?? {})) {
+                for (const agentNode of Object.values(days ?? {})) {
+                    const found = (agentNode?.classeurs ?? []).find((c) => c.id === pieceId);
+                    if (found) return found;
+                }
+            }
+        }
+    }
+    return null;
+}
+
+function refreshSelectedPieceFromTree(pieceId?: number) {
+    const id = pieceId ?? selectedPiece.value?.id;
+    if (id == null) return;
+    const fresh = findPieceInTree(tree.value, id);
+    if (fresh) {
+        selectedPiece.value = fresh;
+        selectedId.value = `p-${fresh.id}`;
+    }
+}
+
+watch(
+    () => props.tree,
+    () => {
+        if (selectedPiece.value?.id != null) {
+            refreshSelectedPieceFromTree(selectedPiece.value.id);
+        }
+    },
+    { deep: true },
+);
 
 const MONTHS_FR = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -696,7 +845,11 @@ function isExpanded(node: FlatNode): boolean {
                                     v-else-if="node.kind !== 'piece'"
                                     class="size-4 shrink-0 text-amber-500"
                                 />
-                                <FileText v-else class="size-4 shrink-0 text-primary" />
+                                <FileText
+                                    v-else
+                                    class="size-4 shrink-0"
+                                    :class="pieceIconClass(node.piece)"
+                                />
                                 <span
                                     class="truncate"
                                     :class="
@@ -740,7 +893,12 @@ function isExpanded(node: FlatNode): boolean {
                             <div class="flex flex-wrap items-start justify-between gap-3">
                                 <div class="min-w-0">
                                     <div
-                                        class="mb-2 flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                                        class="mb-2 flex size-10 items-center justify-center rounded-lg"
+                                        :class="
+                                            selectedPiece.is_controle
+                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                                : 'bg-primary/10 text-primary'
+                                        "
                                     >
                                         <FileText class="size-5" />
                                     </div>
@@ -754,11 +912,34 @@ function isExpanded(node: FlatNode): boolean {
                                         N° batch {{ selectedPiece.numero_batch }}
                                     </p>
                                 </div>
-                                <span
-                                    class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
-                                >
-                                    Intégré · Archivé
-                                </span>
+                                <div class="flex flex-col items-end gap-2">
+                                    <span
+                                        class="rounded-full px-2.5 py-1 text-xs font-semibold"
+                                        :class="
+                                            selectedPiece.is_controle
+                                                ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'
+                                                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                                        "
+                                    >
+                                        {{
+                                            selectedPiece.is_controle
+                                                ? 'Archivé · Contrôlé'
+                                                : 'Intégré · Archivé'
+                                        }}
+                                    </span>
+                                    <span
+                                        v-if="selectedPiece.is_controle && selectedPiece.controle_by_name"
+                                        class="text-[10px] text-muted-foreground"
+                                    >
+                                        Contrôle : {{ selectedPiece.controle_by_name }}
+                                    </span>
+                                    <span
+                                        v-if="selectedPiece.has_controle_anomalie_pending"
+                                        class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                                    >
+                                        Correction demandée
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -809,6 +990,19 @@ function isExpanded(node: FlatNode): boolean {
                             </div>
                         </div>
 
+                        <div
+                            v-if="
+                                selectedPiece.has_controle_anomalie_pending &&
+                                selectedPiece.controle_anomalie_motif
+                            "
+                            class="border-b border-amber-200 bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100"
+                        >
+                            <p class="font-medium">Correction demandée au maker</p>
+                            <p class="mt-1 whitespace-pre-line text-xs opacity-90">
+                                {{ selectedPiece.controle_anomalie_motif }}
+                            </p>
+                        </div>
+
                         <div class="flex flex-wrap gap-2 border-b border-border/80 bg-card px-6 py-4">
                             <Link
                                 :href="selectedPiece.resume_url"
@@ -817,6 +1011,27 @@ function isExpanded(node: FlatNode): boolean {
                                 <FileSearch class="size-4" />
                                 Voir le résumé
                             </Link>
+                            <Button
+                                v-if="selectedPiece.can_controle && selectedPiece.controle_url"
+                                type="button"
+                                class="h-9 bg-sky-600 text-white hover:bg-sky-700"
+                                :disabled="controlling || signalingAnomalie"
+                                @click="demanderControle"
+                            >
+                                <ShieldCheck class="size-4" />
+                                {{ controlling ? 'Contrôle…' : 'Contrôler la pièce' }}
+                            </Button>
+                            <Button
+                                v-if="selectedPiece.can_signal_anomalie && selectedPiece.controle_anomalie_url"
+                                type="button"
+                                variant="outline"
+                                class="h-9 border-amber-300 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                                :disabled="controlling || signalingAnomalie"
+                                @click="demanderAnomalie"
+                            >
+                                <AlertTriangle class="size-4" />
+                                Signaler une erreur
+                            </Button>
                         </div>
 
                         <div v-if="selectedPiece.pieces.length" class="flex-1 bg-card px-6 py-4">
@@ -864,9 +1079,82 @@ function isExpanded(node: FlatNode): boolean {
                                 </div>
                             </div>
                         </div>
+
+                        <div
+                            v-if="selectedPiece.can_delete && selectedPiece.supprimer_url"
+                            class="mt-auto border-t border-border/60 bg-muted/20 px-6 py-3"
+                        >
+                            <button
+                                type="button"
+                                class="inline-flex items-center gap-1.5 text-xs text-muted-foreground/80 transition hover:text-red-600 dark:hover:text-red-400"
+                                :disabled="deleting"
+                                title="Action SuperAdmin — met la pièce en corbeille"
+                                @click="demanderSuppression"
+                            >
+                                <Trash2 class="size-3 opacity-70" />
+                                {{ deleting ? 'Destruction…' : 'Détruire la pièce' }}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </section>
+
+        <OdConfirmDialog
+            :open="showAnomalieConfirm"
+            title="Signaler une erreur"
+            :description="selectedPiece
+                ? `Indiquez les erreurs sur « ${selectedPiece.nom_classeur} ». La pièce restera archivée et contrôlée ; le maker sera notifié pour créer une nouvelle pièce de correction.`
+                : ''"
+            confirm-label="Notifier le maker"
+            cancel-label="Annuler"
+            variant="warning"
+            :loading="signalingAnomalie"
+            :disabled="anomalieMotif.trim().length < 5"
+            @confirm="confirmerAnomalie"
+            @cancel="showAnomalieConfirm = false"
+            @update:open="(v: boolean) => (showAnomalieConfirm = v)"
+        >
+            <div class="space-y-2">
+                <Label for="anomalie-motif" class="text-sm font-medium">Motif (obligatoire)</Label>
+                <textarea
+                    id="anomalie-motif"
+                    v-model="anomalieMotif"
+                    rows="4"
+                    class="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm shadow-sm focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card"
+                    placeholder="Décrivez les erreurs sur les justificatifs ou la pièce comptable…"
+                />
+            </div>
+        </OdConfirmDialog>
+
+        <OdConfirmDialog
+            :open="showControleConfirm"
+            title="Contrôler la pièce"
+            :description="selectedPiece
+                ? `Confirmer le contrôle de « ${selectedPiece.nom_classeur} » (justificatifs + pièce comptable) ?`
+                : ''"
+            confirm-label="Marquer contrôlé"
+            cancel-label="Annuler"
+            variant="success"
+            :loading="controlling"
+            @confirm="confirmerControle"
+            @cancel="showControleConfirm = false"
+            @update:open="(v: boolean) => (showControleConfirm = v)"
+        />
+
+        <OdConfirmDialog
+            :open="showDeleteConfirm"
+            title="Détruire la pièce comptable"
+            :description="selectedPiece
+                ? `Détruire « ${selectedPiece.nom_classeur} » ? La pièce sera mise en corbeille (restauration ou suppression définitive possibles ensuite). Réservé au SuperAdmin.`
+                : ''"
+            confirm-label="Détruire"
+            cancel-label="Annuler"
+            variant="danger"
+            :loading="deleting"
+            @confirm="confirmerSuppression"
+            @cancel="showDeleteConfirm = false"
+            @update:open="(v: boolean) => (showDeleteConfirm = v)"
+        />
     </div>
 </template>

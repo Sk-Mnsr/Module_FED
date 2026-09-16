@@ -28,6 +28,7 @@ final class ModuleAccess
         'responsable_stock' => 'stock',
         'ops' => 'od',
         'finance' => 'od',
+        'controleur' => 'od',
         'pod' => 'pod',
         'reconciliation' => 'reconciliation',
         'budget' => 'budget',
@@ -46,7 +47,7 @@ final class ModuleAccess
         'ecritures' => 'Écritures comptables',
         'monetique' => 'Monétique',
         'od' => 'Opérations diverses',
-        'pod' => 'Produits OD (POD)',
+        'pod' => 'Produits divers',
         'reconciliation' => 'Réconciliation Flexcube',
         'config' => 'Référentiels',
         'administration' => 'Administration',
@@ -199,15 +200,16 @@ final class ModuleAccess
     public static function modules(): array
     {
         $byModule = self::roleSlugsByModule();
+        $modules = [];
 
-        return array_map(
-            fn (string $key, string $label) => [
+        foreach (self::MODULE_LABELS as $key => $label) {
+            $modules[$key] = [
                 'label' => $label,
                 'roles' => $byModule[$key] ?? [],
-            ],
-            array_keys(self::MODULE_LABELS),
-            self::MODULE_LABELS,
-        );
+            ];
+        }
+
+        return $modules;
     }
 
     /**
@@ -403,7 +405,7 @@ final class ModuleAccess
             'stock' => ['it', 'responsable_achats', 'responsable_stock'],
             'ecritures' => ['it', 'controle_de_gestion', 'daf'],
             'monetique' => ['it', 'monetique', 'ca', 'cc', 'caissier'],
-            'od' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf'],
+            'od' => ['it', 'ops', 'finance', 'controleur', 'controle_de_gestion', 'daf'],
             'pod' => ['it', 'ops', 'finance', 'controle_de_gestion', 'daf', 'pod'],
             'reconciliation' => ['reconciliation'],
             'config' => ['referentiels'],

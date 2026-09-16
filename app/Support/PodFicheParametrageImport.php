@@ -15,11 +15,29 @@ use PhpOffice\PhpSpreadsheet\IOFactory;
 final class PodFicheParametrageImport
 {
     /**
-     * @return array{created: int, updated: int, skipped: int, errors: list<string>}
+     * @return array{
+     *   created: int,
+     *   updated: int,
+     *   skipped: int,
+     *   ecrans?: int,
+     *   champs?: int,
+     *   scripts?: int,
+     *   constantes?: int,
+     *   errors: list<string>
+     * }
      */
     public static function fromPath(string $path, ?User $user = null): array
     {
-        $stats = ['created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => []];
+        $stats = [
+            'created' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'ecrans' => 0,
+            'champs' => 0,
+            'scripts' => 0,
+            'constantes' => 0,
+            'errors' => [],
+        ];
 
         try {
             $spreadsheet = IOFactory::load($path);
@@ -193,6 +211,13 @@ final class PodFicheParametrageImport
                 self::seedDefaultSchema($produit);
             }
         });
+
+        $extra = PodParametrageSheetsImport::fromSpreadsheet($spreadsheet);
+        $stats['ecrans'] = $extra['ecrans'];
+        $stats['champs'] = $extra['champs'];
+        $stats['scripts'] = $extra['scripts'];
+        $stats['constantes'] = $extra['constantes'];
+        $stats['errors'] = array_merge($stats['errors'], $extra['errors']);
 
         return $stats;
     }
