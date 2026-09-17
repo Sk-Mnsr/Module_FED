@@ -103,6 +103,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
+import OdActionIcon from '@/components/OdActionIcon.vue';
 import {
     AlertTriangle,
     CalendarDays,
@@ -1046,35 +1047,40 @@ function isExpanded(node: FlatNode): boolean {
                                     :key="p.id"
                                     class="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-muted/30"
                                 >
-                                    <FileText
-                                        class="size-4 shrink-0"
+                                    <div
+                                        class="flex size-9 shrink-0 items-center justify-center rounded-xl"
                                         :class="
                                             p.is_piece_comptable
-                                                ? 'text-primary'
-                                                : 'text-muted-foreground'
+                                                ? 'bg-primary/10 text-primary'
+                                                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
                                         "
-                                    />
+                                    >
+                                        <FileText class="size-4" stroke-width="2" />
+                                    </div>
                                     <span class="min-w-0 flex-1 truncate">{{
                                         p.description || p.original_name
                                     }}</span>
-                                    <div class="flex shrink-0 items-center gap-2">
-                                        <a
+                                    <div
+                                        class="inline-flex shrink-0 items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
+                                        role="group"
+                                        aria-label="Actions pièce"
+                                    >
+                                        <OdActionIcon
                                             v-if="p.preview_url"
+                                            label="Voir"
+                                            :icon="Eye"
                                             :href="p.preview_url"
+                                            external
                                             target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                                            title="Visualiser"
-                                        >
-                                            <Eye class="size-3.5" /> Voir
-                                        </a>
-                                        <a
+                                            variant="primary"
+                                        />
+                                        <OdActionIcon
+                                            label="Télécharger"
+                                            :icon="Download"
                                             :href="p.url"
-                                            class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                                            title="Télécharger"
-                                        >
-                                            <Download class="size-3.5" /> Télécharger
-                                        </a>
+                                            external
+                                            variant="neutral"
+                                        />
                                     </div>
                                 </div>
                             </div>

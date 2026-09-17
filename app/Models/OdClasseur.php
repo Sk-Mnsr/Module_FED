@@ -189,14 +189,35 @@ class OdClasseur extends Model
     }
 
     /**
-     * Ajout de pièces justificatives après intégration (maker, tant que non archivé).
+     * Ajout de pièces justificatives : brouillon, attente, ou déjà archivée.
      */
     public function canAddJustificatifsBy(User $user): bool
     {
-        if (! $this->isAttenteValidation()) {
+        if (! $this->isBrouillon() && ! $this->isAttenteValidation() && ! $this->isIntegre()) {
             return false;
         }
 
+        return $this->isMakerOrAdmin($user);
+    }
+
+    /**
+     * Suppression de justificatifs : uniquement avant archivage (brouillon / attente).
+     */
+    public function canManageJustificatifsBy(User $user): bool
+    {
+        if ($this->isIntegre()) {
+            return false;
+        }
+
+        if (! $this->isBrouillon() && ! $this->isAttenteValidation()) {
+            return false;
+        }
+
+        return $this->isMakerOrAdmin($user);
+    }
+
+    private function isMakerOrAdmin(User $user): bool
+    {
         $isMaker = (int) $this->user_id === (int) $user->id
             || (int) ($this->integrated_by_user_id ?? 0) === (int) $user->id;
 

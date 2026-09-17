@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import {
 } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 import { odFileTooLarge } from '@/lib/odUpload';
+import OdActionIcon from '@/components/OdActionIcon.vue';
 
 type OdLigne = {
     date_de_valeur: string;
@@ -49,6 +50,8 @@ type EditPiece = {
     url: string;
     preview_url?: string | null;
     is_piece_comptable?: boolean;
+    can_delete?: boolean;
+    supprimer_url?: string | null;
 };
 
 type EditClasseur = {
@@ -80,6 +83,19 @@ const flashSuccess = computed(() => flash.value?.success);
 const flashWarning = computed(() => flash.value?.warning);
 const justificatifListKey = ref(0);
 const maxUploadMo = computed(() => props.maxUploadMo ?? 25);
+const deletingPieceId = ref<number | string | null>(null);
+
+function supprimerJustificatifExistant(p: EditPiece) {
+    if (deletingPieceId.value !== null || !p.can_delete || !p.supprimer_url) return;
+    if (!confirm(`Supprimer la pièce « ${p.description || p.original_name} » ?`)) return;
+    deletingPieceId.value = p.id;
+    router.delete(p.supprimer_url, {
+        preserveScroll: true,
+        onFinish: () => {
+            deletingPieceId.value = null;
+        },
+    });
+}
 
 const fieldClass =
     'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
@@ -663,23 +679,36 @@ function formatBytes(size: number): string {
                                     </p>
                                 </div>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <a
+                            <div
+                                class="inline-flex shrink-0 items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
+                                role="group"
+                                aria-label="Actions pièce"
+                            >
+                                <OdActionIcon
                                     v-if="p.preview_url"
+                                    label="Voir"
+                                    :icon="Eye"
                                     :href="p.preview_url"
+                                    external
                                     target="_blank"
-                                    rel="noopener noreferrer"
-                                    class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                                    title="Visualiser"
-                                >
-                                    <Eye class="size-3.5" /> Voir
-                                </a>
-                                <a
+                                    variant="primary"
+                                />
+                                <OdActionIcon
+                                    label="Télécharger"
+                                    :icon="Download"
                                     :href="p.url"
-                                    class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                                >
-                                    <Download class="size-3.5" /> Télécharger
-                                </a>
+                                    external
+                                    variant="neutral"
+                                />
+                                <OdActionIcon
+                                    v-if="p.can_delete && p.supprimer_url"
+                                    label="Supprimer"
+                                    :icon="Trash2"
+                                    variant="danger"
+                                    :loading="deletingPieceId === p.id"
+                                    :disabled="deletingPieceId === p.id"
+                                    @click="supprimerJustificatifExistant(p)"
+                                />
                             </div>
                         </li>
                     </ul>

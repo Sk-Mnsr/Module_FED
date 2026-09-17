@@ -799,6 +799,40 @@ class OperationDiverseController extends Controller
             ->with('success', 'Pièce(s) justificative(s) ajoutée(s).');
     }
 
+    public function justificatifDestroy(OdClasseur $classeur, OdClasseurPiece $piece): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless(
+            $classeur->canManageJustificatifsBy($user),
+            403,
+            'Impossible de supprimer une pièce à ce stade.'
+        );
+
+        abort_unless(
+            $piece->od_classeur_id === $classeur->id,
+            404
+        );
+
+        // Au moins une pièce justificative réelle doit rester.
+        if ($classeur->pieces()->count() <= 1) {
+            return redirect()
+                ->back()
+                ->with('warning', 'Conservez au moins une pièce justificative.');
+        }
+
+        if ($piece->storage_path && Storage::disk('local')->exists($piece->storage_path)) {
+            Storage::disk('local')->delete($piece->storage_path);
+        }
+
+        $piece->delete();
+
+        return redirect()
+            ->back()
+            ->with('success', 'Pièce justificative supprimée.');
+    }
+
     public function corbeille(Request $request): InertiaResponse
     {
         $user = auth()->user();
@@ -1222,6 +1256,10 @@ class OperationDiverseController extends Controller
      */
     private function piecesJustificativesPayload(OdClasseur $classeur): \Illuminate\Support\Collection
     {
+        $viewer = auth()->user();
+        $canManage = $viewer && $classeur->canManageJustificatifsBy($viewer);
+        $realPiecesCount = $classeur->pieces->count();
+
         $items = $classeur->pieces->map(fn (OdClasseurPiece $p) => [
             'id' => $p->id,
             'description' => $p->description,
@@ -1231,6 +1269,10 @@ class OperationDiverseController extends Controller
                 ? route('operations-diverses.justificatif.preview', [$classeur, $p])
                 : null,
             'is_piece_comptable' => false,
+            'can_delete' => $canManage && $realPiecesCount > 1,
+            'supprimer_url' => ($canManage && $realPiecesCount > 1)
+                ? route('operations-diverses.justificatif.destroy', [$classeur, $p])
+                : null,
         ]);
 
         $piecePdfName = 'piece-comptable-'.Str::slug((string) $classeur->numero_piece, '_').'.pdf';
@@ -1241,6 +1283,8 @@ class OperationDiverseController extends Controller
             'url' => route('operations-diverses.piece-comptable.pdf', $classeur),
             'preview_url' => route('operations-diverses.piece-comptable.pdf', [$classeur, 'inline' => 1]),
             'is_piece_comptable' => true,
+            'can_delete' => false,
+            'supprimer_url' => null,
         ]);
 
         return $items->values();

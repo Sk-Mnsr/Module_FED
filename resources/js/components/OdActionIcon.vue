@@ -14,12 +14,17 @@ const props = withDefaults(
         label: string;
         icon: LucideIcon;
         href?: string | null;
+        /** Lien fichier / nouvel onglet (pas Inertia). */
+        external?: boolean;
+        target?: string | null;
         disabled?: boolean;
         loading?: boolean;
         variant?: 'neutral' | 'primary' | 'success' | 'warning' | 'danger';
     }>(),
     {
         href: null,
+        external: false,
+        target: null,
         disabled: false,
         loading: false,
         variant: 'neutral',
@@ -31,24 +36,26 @@ const emit = defineEmits<{
 }>();
 
 const baseClass =
-    'inline-flex size-9 items-center justify-center rounded-xl transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:pointer-events-none disabled:opacity-40';
+    'inline-flex size-9 items-center justify-center rounded-xl border border-transparent transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:pointer-events-none disabled:opacity-40';
 
 const toneClass = computed(() => {
     switch (props.variant) {
         case 'primary':
-            return 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90';
+            return 'bg-primary/10 text-primary hover:bg-primary/15 dark:bg-primary/20';
         case 'success':
-            return 'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700';
+            return 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300';
         case 'warning':
-            return 'text-amber-700 hover:bg-amber-100 hover:text-amber-900 dark:text-amber-300 dark:hover:bg-amber-950/50';
+            return 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300';
         case 'danger':
-            return 'text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40';
+            return 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-950/40 dark:text-red-400';
         default:
-            return 'text-slate-600 hover:bg-white hover:text-primary hover:shadow-sm dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-primary';
+            return 'bg-slate-50 text-slate-600 hover:bg-white hover:text-primary hover:shadow-sm dark:bg-slate-800/60 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-primary';
     }
 });
 
 const isDisabled = computed(() => props.disabled || props.loading);
+const useAnchor = computed(() => Boolean(props.href) && props.external);
+const useInertiaLink = computed(() => Boolean(props.href) && !props.external);
 
 function onClick(e: MouseEvent) {
     if (isDisabled.value) {
@@ -63,9 +70,23 @@ function onClick(e: MouseEvent) {
     <TooltipProvider :delay-duration="200">
         <Tooltip>
             <TooltipTrigger as-child>
+                <a
+                    v-if="useAnchor"
+                    :href="href!"
+                    :target="target ?? undefined"
+                    :rel="target === '_blank' ? 'noopener noreferrer' : undefined"
+                    :aria-label="label"
+                    :class="[baseClass, toneClass, isDisabled ? 'pointer-events-none opacity-40' : '']"
+                    :tabindex="isDisabled ? -1 : 0"
+                    @click="onClick"
+                >
+                    <Loader2 v-if="loading" class="size-4 animate-spin" />
+                    <component :is="icon" v-else class="size-4" stroke-width="2" />
+                    <span class="sr-only">{{ label }}</span>
+                </a>
                 <Link
-                    v-if="href"
-                    :href="href"
+                    v-else-if="useInertiaLink"
+                    :href="href!"
                     :aria-label="label"
                     :class="[baseClass, toneClass, isDisabled ? 'pointer-events-none opacity-40' : '']"
                     :tabindex="isDisabled ? -1 : 0"

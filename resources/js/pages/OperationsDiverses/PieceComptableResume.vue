@@ -2,6 +2,7 @@
 import { Head, Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
+import OdActionIcon from '@/components/OdActionIcon.vue';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -43,6 +44,8 @@ type Piece = {
     url: string;
     preview_url?: string | null;
     is_piece_comptable?: boolean;
+    can_delete?: boolean;
+    supprimer_url?: string | null;
 };
 
 type Classeur = {
@@ -384,6 +387,20 @@ function confirmerValiderChecker() {
             },
         },
     );
+}
+
+const deletingPieceId = ref<number | string | null>(null);
+
+function supprimerJustificatif(p: Piece) {
+    if (deletingPieceId.value !== null || !p.can_delete || !p.supprimer_url) return;
+    if (!confirm(`Supprimer la pièce « ${p.description || p.original_name} » ?`)) return;
+    deletingPieceId.value = p.id;
+    router.delete(p.supprimer_url, {
+        preserveScroll: true,
+        onFinish: () => {
+            deletingPieceId.value = null;
+        },
+    });
 }
 
 function supprimer() {
@@ -764,17 +781,17 @@ function confirmerSupprimer() {
                             {{ classeur.pieces.length }} document(s) joint(s)
                         </p>
                     </div>
-                    <Button
+                    <div
                         v-if="classeur.can_add_justificatifs"
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        class="h-9 border-primary/30 text-primary hover:bg-primary/5"
-                        @click="showAddJustificatifs = !showAddJustificatifs"
+                        class="inline-flex items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
                     >
-                        <Paperclip class="size-4" />
-                        {{ showAddJustificatifs ? 'Fermer' : 'Ajouter une pièce' }}
-                    </Button>
+                        <OdActionIcon
+                            :label="showAddJustificatifs ? 'Fermer' : 'Ajouter une pièce'"
+                            :icon="showAddJustificatifs ? X : Paperclip"
+                            :variant="showAddJustificatifs ? 'neutral' : 'primary'"
+                            @click="showAddJustificatifs = !showAddJustificatifs"
+                        />
+                    </div>
                 </div>
 
                 <div
@@ -782,7 +799,14 @@ function confirmerSupprimer() {
                     class="space-y-3 border-b border-border/80 bg-slate-50/80 px-5 py-4 dark:bg-muted/20 sm:px-6"
                 >
                     <p class="text-xs text-muted-foreground">
-                        Ajoutez des justificatifs complémentaires pendant l’attente de validation.
+                        <template v-if="isIntegre">
+                            Vous pouvez joindre des justificatifs complémentaires sur une pièce
+                            archivée.
+                        </template>
+                        <template v-else>
+                            Ajoutez ou retirez des justificatifs tant que la pièce n’est pas encore
+                            validée / archivée.
+                        </template>
                     </p>
                     <div
                         v-for="(ligne, index) in newJustificatifs"
@@ -857,14 +881,14 @@ function confirmerSupprimer() {
                     >
                         <div class="flex min-w-0 items-center gap-2.5 text-sm">
                             <div
-                                class="flex size-8 shrink-0 items-center justify-center rounded-lg"
+                                class="flex size-9 shrink-0 items-center justify-center rounded-xl"
                                 :class="
                                     p.is_piece_comptable
                                         ? 'bg-primary/10 text-primary'
-                                        : 'bg-muted text-muted-foreground'
+                                        : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
                                 "
                             >
-                                <FileText class="size-4" />
+                                <FileText class="size-4" stroke-width="2" />
                             </div>
                             <div class="min-w-0">
                                 <p class="truncate font-medium text-foreground">
@@ -875,23 +899,36 @@ function confirmerSupprimer() {
                                 </p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <a
+                        <div
+                            class="inline-flex shrink-0 items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
+                            role="group"
+                            aria-label="Actions pièce"
+                        >
+                            <OdActionIcon
                                 v-if="p.preview_url"
+                                label="Voir"
+                                :icon="Eye"
                                 :href="p.preview_url"
+                                external
                                 target="_blank"
-                                rel="noopener noreferrer"
-                                class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-                                title="Visualiser"
-                            >
-                                <Eye class="size-3.5" /> Voir
-                            </a>
-                            <a
+                                variant="primary"
+                            />
+                            <OdActionIcon
+                                label="Télécharger"
+                                :icon="Download"
                                 :href="p.url"
-                                class="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-                            >
-                                <Download class="size-3.5" /> Télécharger
-                            </a>
+                                external
+                                variant="neutral"
+                            />
+                            <OdActionIcon
+                                v-if="p.can_delete && p.supprimer_url"
+                                label="Supprimer"
+                                :icon="Trash2"
+                                variant="danger"
+                                :loading="deletingPieceId === p.id"
+                                :disabled="deletingPieceId === p.id"
+                                @click="supprimerJustificatif(p)"
+                            />
                         </div>
                     </li>
                     <li

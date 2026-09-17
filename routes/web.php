@@ -282,6 +282,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('operations-diverses/piece-comptable/{classeur}/pdf', [OperationDiverseController::class, 'pieceComptablePdf'])->name('operations-diverses.piece-comptable.pdf');
         Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/download', [OperationDiverseController::class, 'justificatifDownload'])->name('operations-diverses.justificatif.download');
         Route::get('operations-diverses/classeurs/{classeur}/pieces/{piece}/preview', [OperationDiverseController::class, 'justificatifPreview'])->name('operations-diverses.justificatif.preview');
+        Route::delete('operations-diverses/classeurs/{classeur}/pieces/{piece}', [OperationDiverseController::class, 'justificatifDestroy'])->name('operations-diverses.justificatif.destroy');
         Route::get('operations-diverses/piece-comptable', [OperationDiverseController::class, 'pieceComptable'])->name('operations-diverses.piece-comptable');
         Route::get('operations-diverses/integrations', [OperationDiverseController::class, 'integrations'])->name('operations-diverses.integrations');
         Route::get('operations-diverses/attente-validation', [OperationDiverseController::class, 'attenteValidation'])->name('operations-diverses.attente-validation');
