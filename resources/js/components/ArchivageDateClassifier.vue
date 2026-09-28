@@ -157,6 +157,7 @@ const controlling = ref(false);
 const showAnomalieConfirm = ref(false);
 const signalingAnomalie = ref(false);
 const anomalieMotif = ref('');
+const activeJustificatifId = ref<number | string | null>(null);
 
 function demanderSuppression() {
     if (deleting.value || !selectedPiece.value?.can_delete || !selectedPiece.value?.supprimer_url) {
@@ -241,11 +242,28 @@ function confirmerAnomalie() {
     );
 }
 
+function pieceHasAnomalie(piece?: ArchiveFolder | null): boolean {
+    return Boolean(piece?.is_controle && piece?.has_controle_anomalie);
+}
+
 function pieceIconClass(piece?: ArchiveFolder | null): string {
+    if (pieceHasAnomalie(piece)) {
+        return 'text-amber-800 dark:text-amber-300';
+    }
     if (piece?.is_controle) {
         return 'text-emerald-600 dark:text-emerald-400';
     }
     return 'text-primary';
+}
+
+function pieceBadgeClass(piece?: ArchiveFolder | null): string {
+    if (pieceHasAnomalie(piece)) {
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
+    }
+    if (piece?.is_controle) {
+        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300';
+    }
+    return 'bg-primary/10 text-primary';
 }
 
 function findPieceInTree(raw: ArchiveTree, pieceId: number): ArchiveFolder | null {
@@ -281,6 +299,26 @@ watch(
     },
     { deep: true },
 );
+
+function syncActiveJustificatif(piece: ArchiveFolder | null) {
+    const pieces = piece?.pieces ?? [];
+    if (!pieces.length) {
+        activeJustificatifId.value = null;
+        return;
+    }
+    if (pieces.some((p) => p.id === activeJustificatifId.value)) {
+        return;
+    }
+    const preferred = pieces.find((p) => p.is_piece_comptable) ?? pieces[0];
+    activeJustificatifId.value = preferred.id;
+}
+
+watch(selectedPiece, (piece) => syncActiveJustificatif(piece), { immediate: true });
+
+const activeJustificatif = computed(() => {
+    const pieces = selectedPiece.value?.pieces ?? [];
+    return pieces.find((p) => p.id === activeJustificatifId.value) ?? pieces[0] ?? null;
+});
 
 const MONTHS_FR = [
     'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
@@ -895,11 +933,7 @@ function isExpanded(node: FlatNode): boolean {
                                 <div class="min-w-0">
                                     <div
                                         class="mb-2 flex size-10 items-center justify-center rounded-lg"
-                                        :class="
-                                            selectedPiece.is_controle
-                                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
-                                                : 'bg-primary/10 text-primary'
-                                        "
+                                        :class="pieceBadgeClass(selectedPiece)"
                                     >
                                         <FileText class="size-5" />
                                     </div>
@@ -1035,41 +1069,85 @@ function isExpanded(node: FlatNode): boolean {
                             </Button>
                         </div>
 
-                        <div v-if="selectedPiece.pieces.length" class="flex-1 bg-card px-6 py-4">
+                        <div
+                            v-if="selectedPiece.pieces.length && activeJustificatif"
+                            class="flex flex-1 flex-col bg-card px-6 py-4"
+                        >
                             <p
                                 class="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                             >
                                 Justificatifs ({{ selectedPiece.pieces.length }})
                             </p>
-                            <div class="space-y-1">
-                                <div
+                            <div
+                                class="grid gap-2"
+                                :class="
+                                    selectedPiece.pieces.length > 1
+                                        ? 'sm:grid-cols-2'
+                                        : 'grid-cols-1'
+                                "
+                                role="tablist"
+                                aria-label="Justificatifs"
+                            >
+                                <button
                                     v-for="p in selectedPiece.pieces"
                                     :key="p.id"
-                                    class="flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-sm transition hover:border-slate-200 hover:bg-slate-50 dark:hover:border-slate-700 dark:hover:bg-muted/30"
+                                    type="button"
+                                    role="tab"
+                                    class="flex min-w-0 items-center gap-2.5 rounded-xl border px-3 py-2 text-left text-sm transition"
+                                    :class="
+                                        activeJustificatif.id === p.id
+                                            ? 'border-primary/40 bg-primary/5 ring-1 ring-primary/30'
+                                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-card dark:hover:bg-muted/40'
+                                    "
+                                    :aria-selected="activeJustificatif.id === p.id"
+                                    @click="activeJustificatifId = p.id"
                                 >
                                     <div
-                                        class="flex size-9 shrink-0 items-center justify-center rounded-xl"
+                                        class="flex size-8 shrink-0 items-center justify-center rounded-lg"
                                         :class="
                                             p.is_piece_comptable
                                                 ? 'bg-primary/10 text-primary'
                                                 : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'
                                         "
                                     >
-                                        <FileText class="size-4" stroke-width="2" />
+                                        <FileText class="size-3.5" stroke-width="2" />
                                     </div>
-                                    <span class="min-w-0 flex-1 truncate">{{
-                                        p.description || p.original_name
-                                    }}</span>
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate font-medium">{{
+                                            p.description || p.original_name
+                                        }}</span>
+                                        <span
+                                            v-if="p.is_piece_comptable"
+                                            class="block truncate text-[10px] font-medium uppercase tracking-wide text-primary"
+                                        >
+                                            Pièce comptable
+                                        </span>
+                                    </span>
+                                </button>
+                            </div>
+
+                            <div
+                                class="mt-3 flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-muted/20"
+                            >
+                                <div
+                                    class="flex items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-card"
+                                >
+                                    <p class="min-w-0 truncate text-sm font-medium">
+                                        {{
+                                            activeJustificatif.description ||
+                                            activeJustificatif.original_name
+                                        }}
+                                    </p>
                                     <div
                                         class="inline-flex shrink-0 items-center gap-0.5 rounded-2xl border border-slate-200/90 bg-slate-50/90 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/40"
                                         role="group"
                                         aria-label="Actions pièce"
                                     >
                                         <OdActionIcon
-                                            v-if="p.preview_url"
-                                            label="Voir"
+                                            v-if="activeJustificatif.preview_url"
+                                            label="Ouvrir"
                                             :icon="Eye"
-                                            :href="p.preview_url"
+                                            :href="activeJustificatif.preview_url"
                                             external
                                             target="_blank"
                                             variant="primary"
@@ -1077,11 +1155,28 @@ function isExpanded(node: FlatNode): boolean {
                                         <OdActionIcon
                                             label="Télécharger"
                                             :icon="Download"
-                                            :href="p.url"
+                                            :href="activeJustificatif.url"
                                             external
                                             variant="neutral"
                                         />
                                     </div>
+                                </div>
+                                <iframe
+                                    v-if="activeJustificatif.preview_url"
+                                    :key="String(activeJustificatif.id)"
+                                    :src="activeJustificatif.preview_url"
+                                    class="min-h-[380px] w-full flex-1 bg-white"
+                                    :title="
+                                        activeJustificatif.description ||
+                                        activeJustificatif.original_name
+                                    "
+                                />
+                                <div
+                                    v-else
+                                    class="flex min-h-[220px] flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-sm text-muted-foreground"
+                                >
+                                    <FileText class="size-8 opacity-40" />
+                                    <p>Aperçu indisponible pour ce fichier.</p>
                                 </div>
                             </div>
                         </div>
