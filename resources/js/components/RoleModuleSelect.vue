@@ -58,9 +58,6 @@ const canAssignSuperAdmin = computed(() => Boolean(page.props.auth?.isSuperAdmin
 
 const superAdminRole = computed(() => props.roles.find((role) => role.slug === 'it') ?? null);
 
-const selectClass =
-    'mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-base text-gray-900 shadow-sm transition-[color,box-shadow] outline-none focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400';
-
 const matrixByKey = computed(() => {
     const map = new Map<string, ModuleMatrixRow>();
     for (const row of props.moduleMatrix) {
@@ -107,7 +104,7 @@ const modulesWithRoles = computed(() => {
         }));
 });
 
-const assignments = reactive<Record<string, number | null>>({});
+const assignments = reactive<Record<string, number[]>>({});
 const abilityState = reactive<Record<string, AbilityMap>>({});
 
 const rolesByModule = (moduleKey: string): Role[] => {
@@ -115,10 +112,10 @@ const rolesByModule = (moduleKey: string): Role[] => {
     if (matrix) {
         return matrix.roles
             .map((slug) => rolesBySlug.value.get(slug))
-            .filter((role): role is Role => role !== undefined);
+            .filter((role): role is Role => role !== undefined && role.slug !== 'it' && role.slug !== 'admin');
     }
 
-    return props.roles.filter((role) => role.module === moduleKey);
+    return props.roles.filter((role) => role.module === moduleKey && role.slug !== 'it' && role.slug !== 'admin');
 };
 
 const accessRoleForModule = (moduleKey: string): Role | null => {
@@ -142,12 +139,10 @@ const modulesCoveredByRole = (role: Role): string[] => {
 };
 
 const selectedRoleIds = computed(() =>
-    [...new Set(Object.values(assignments).filter((id): id is number => id !== null))],
+    [...new Set(Object.values(assignments).flat())].sort((a, b) => a - b),
 );
 
-const selectedCount = computed(
-    () => Object.values(assignments).filter((id) => id !== null).length,
-);
+const selectedCount = computed(() => selectedRoleIds.value.length);
 
 const hasItSelected = computed(() =>
     selectedRoleIds.value.some((id) => {
@@ -193,9 +188,29 @@ const emitAbilities = () => {
     }
 };
 
+const sameIds = (left: number[], right: number[]) => {
+    if (left.length !== right.length) {
+        return false;
+    }
+    const a = [...left].sort((x, y) => x - y);
+    const b = [...right].sort((x, y) => x - y);
+    return a.every((id, index) => id === b[index]);
+};
+
+const addRole = (moduleKey: string, roleId: number) => {
+    const current = assignments[moduleKey] ?? [];
+    if (!current.includes(roleId)) {
+        assignments[moduleKey] = [...current, roleId];
+    }
+};
+
+const removeRole = (moduleKey: string, roleId: number) => {
+    assignments[moduleKey] = (assignments[moduleKey] ?? []).filter((id) => id !== roleId);
+};
+
 const syncFromModel = () => {
     for (const module of modulesWithRoles.value) {
-        assignments[module.key] = null;
+        assignments[module.key] = [];
         if (module.abilities.length > 0) {
             ensureAbilityState(module.key);
             abilityState[module.key] = {
@@ -214,7 +229,7 @@ const syncFromModel = () => {
         if (role.slug === 'it' || role.slug === 'admin') {
             for (const module of modulesWithRoles.value) {
                 if (!module.accessOnly && module.key in assignments) {
-                    assignments[module.key] = roleId;
+                    assignments[module.key] = [roleId];
                 }
                 if (module.abilities.length > 0) {
                     abilityState[module.key] = allAbilities(module.key);
@@ -230,7 +245,7 @@ const syncFromModel = () => {
             if (isAccessOnly(moduleKey) && role.slug !== moduleKey && role.module !== moduleKey) {
                 continue;
             }
-            assignments[moduleKey] = roleId;
+            addRole(moduleKey, roleId);
             if (abilitiesFor(moduleKey).length > 0) {
                 ensureAbilityState(moduleKey);
                 abilityState[moduleKey] = {
@@ -252,7 +267,7 @@ watch(
     assignments,
     () => {
         const ids = selectedRoleIds.value;
-        if (JSON.stringify(ids) !== JSON.stringify(props.modelValue)) {
+        if (!sameIds(ids, props.modelValue)) {
             emit('update:modelValue', ids);
         }
         emitAbilities();
@@ -266,49 +281,31 @@ watch(
     { deep: true },
 );
 
-const onModuleRoleChange = (moduleKey: string, roleId: number | null) => {
-    const previousId = assignments[moduleKey] ?? null;
+const isRoleChecked = (moduleKey: string, roleId: number) =>
+    (assignments[moduleKey] ?? []).includes(roleId);
 
-    if (roleId === null) {
-        if (previousId !== null) {
-            const previousRole = props.roles.find((item) => item.id === previousId);
-            const keysToClear = previousRole
-                ? modulesCoveredByRole(previousRole).filter(
-                      (key) => !isAccessOnly(key) || previousRole.slug === key || previousRole.module === key,
-                  )
-                : [moduleKey];
-
-            for (const key of keysToClear) {
-                if (assignments[key] === previousId) {
-                    assignments[key] = null;
-                }
-            }
-        } else {
-            assignments[moduleKey] = null;
-        }
-        return;
-    }
-
+const toggleRole = (moduleKey: string, roleId: number, enabled: boolean) => {
     const role = props.roles.find((item) => item.id === roleId);
-    if (!role) {
-        assignments[moduleKey] = roleId;
-        return;
-    }
+    const keys = role ? modulesCoveredByRole(role) : [moduleKey];
 
-    for (const key of modulesCoveredByRole(role)) {
+    for (const key of keys) {
         if (!(key in assignments)) {
             continue;
         }
-        if (isAccessOnly(key) && role.slug !== key && role.module !== key) {
+        if (role && isAccessOnly(key) && role.slug !== key && role.module !== key) {
             continue;
         }
-        assignments[key] = roleId;
+        if (enabled) {
+            addRole(key, roleId);
+        } else {
+            removeRole(key, roleId);
+        }
     }
 };
 
 const toggleAccessOnly = (moduleKey: string, enabled: boolean) => {
     if (!enabled) {
-        assignments[moduleKey] = null;
+        assignments[moduleKey] = [];
         if (abilitiesFor(moduleKey).length > 0) {
             abilityState[moduleKey] = defaultAbilities(moduleKey);
         }
@@ -316,7 +313,7 @@ const toggleAccessOnly = (moduleKey: string, enabled: boolean) => {
     }
 
     const role = accessRoleForModule(moduleKey);
-    assignments[moduleKey] = role?.id ?? null;
+    assignments[moduleKey] = role ? [role.id] : [];
     if (abilitiesFor(moduleKey).length > 0) {
         abilityState[moduleKey] = {
             ...defaultAbilities(moduleKey),
@@ -329,7 +326,7 @@ const isAccessEnabled = (moduleKey: string): boolean => {
     if (hasItSelected.value) {
         return true;
     }
-    return assignments[moduleKey] !== null && assignments[moduleKey] !== undefined;
+    return (assignments[moduleKey]?.length ?? 0) > 0;
 };
 
 const setAbility = (moduleKey: string, abilityKey: string, enabled: boolean) => {
@@ -375,19 +372,14 @@ const descriptionForModule = (moduleKey: string) => {
             ?? 'Cochez pour autoriser l’accès à ce module.';
     }
 
-    const roleId = assignments[moduleKey];
-    if (!roleId) {
-        return null;
-    }
-
-    return props.roles.find((role) => role.id === roleId)?.description ?? null;
+    return null;
 };
 </script>
 
 <template>
     <div class="grid gap-4">
         <p v-if="!hasItSelected" class="text-sm text-gray-600">
-            Attribuez un rôle par module. Pour Budget, cochez l’accès puis les droits (consultation, ajouter…).
+            Cochez un ou plusieurs rôles par module. Caissier et Chargé clientèle peuvent être cumulés. Pour Budget, cochez l’accès puis les droits.
         </p>
 
         <div
@@ -497,29 +489,27 @@ const descriptionForModule = (moduleKey: string) => {
                 </div>
             </template>
 
-            <select
-                v-else
-                :id="`role-${module.key}`"
-                :value="assignments[module.key] ?? ''"
-                :class="selectClass"
-                @change="
-                    onModuleRoleChange(
-                        module.key,
-                        ($event.target as HTMLSelectElement).value === ''
-                            ? null
-                            : Number(($event.target as HTMLSelectElement).value),
-                    )
-                "
-            >
-                <option value="">Aucun accès</option>
-                <option
+            <div v-else class="mt-3 grid gap-2 sm:grid-cols-2">
+                <label
                     v-for="role in rolesByModule(module.key)"
                     :key="role.id"
-                    :value="role.id"
+                    class="flex cursor-pointer items-start gap-2.5 rounded-md border border-gray-200 bg-gray-50 px-3 py-2"
+                    :class="isRoleChecked(module.key, role.id) ? 'border-primary/40 bg-primary/5' : ''"
                 >
-                    {{ role.nom }}
-                </option>
-            </select>
+                    <input
+                        type="checkbox"
+                        class="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        :checked="isRoleChecked(module.key, role.id)"
+                        @change="toggleRole(module.key, role.id, ($event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="min-w-0 text-sm text-gray-800">
+                        <span class="font-medium">{{ role.nom }}</span>
+                        <span v-if="role.description" class="mt-0.5 block text-xs text-gray-500">
+                            {{ role.description }}
+                        </span>
+                    </span>
+                </label>
+            </div>
 
             <p v-if="descriptionForModule(module.key)" class="mt-1 text-xs text-gray-500">
                 {{ descriptionForModule(module.key) }}
@@ -533,7 +523,7 @@ const descriptionForModule = (moduleKey: string) => {
             Profil SuperAdmin — accès total à l’application.
         </p>
         <p v-else class="text-xs text-gray-500">
-            {{ selectedCount }} module{{ selectedCount > 1 ? 's' : '' }} configuré{{ selectedCount > 1 ? 's' : '' }}.
+            {{ selectedCount }} rôle{{ selectedCount > 1 ? 's' : '' }} attribué{{ selectedCount > 1 ? 's' : '' }}.
         </p>
 
         <p v-if="roles.length === 0" class="text-sm text-gray-500">

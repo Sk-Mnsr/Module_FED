@@ -14,7 +14,6 @@ import {
     Building2,
     CreditCard,
     History,
-    Info,
     Mail,
     Megaphone,
     MessageSquare,
@@ -126,7 +125,7 @@ const goHistorique = () => router.visit('/monetique/recharges/historique');
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50/90 via-white to-violet-50/30">
-            <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+            <div class="w-full px-4 py-6 sm:px-6 lg:px-8">
                 <!-- En-tête page -->
                 <header class="mb-8 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                     <div class="space-y-3">
@@ -152,24 +151,6 @@ const goHistorique = () => router.visit('/monetique/recharges/historique');
                         Historique des recharges
                     </Button>
                 </header>
-
-                <!-- Alerte workflow -->
-                <div
-                    class="mb-8 flex gap-4 rounded-2xl border border-amber-200/70 bg-gradient-to-r from-amber-50 to-amber-50/50 px-5 py-4 text-sm text-amber-950 shadow-sm"
-                    role="status"
-                >
-                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
-                        <Info class="h-5 w-5" />
-                    </div>
-                    <div class="min-w-0 pt-0.5">
-                        <p class="font-semibold text-amber-950">En attente caisse</p>
-                        <p class="mt-1 leading-relaxed text-amber-900/90">
-                            Tant que la caisse n’a pas confirmé l’encaissement, la recharge reste au statut
-                            <span class="whitespace-nowrap font-medium">« En attente caisse »</span>. Vous pouvez suivre
-                            l’avancement depuis l’historique.
-                        </p>
-                    </div>
-                </div>
 
                 <form class="grid gap-8 lg:grid-cols-12 lg:items-start" @submit.prevent="submit">
                     <!-- Colonne formulaire -->

@@ -4,6 +4,12 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import DataTable from '@/components/DataTable.vue';
 import ExpirationBar from '@/components/ExpirationBar.vue';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -22,14 +28,13 @@ import {
     Building2,
     CreditCard,
     Download,
-    Landmark,
     LayoutDashboard,
+    MoreHorizontal,
     Plus,
     Layers,
     Pencil,
     RotateCcw,
     Eye,
-    ShoppingBag,
     Trash2,
 } from 'lucide-vue-next';
 
@@ -213,24 +218,33 @@ const statutLabel = (k: StockStatutKey) => {
     }
 };
 
-function statutLabelAvecAgence(r: StockCardRow): string {
+function statutCourt(r: StockCardRow): string {
     const base = statutLabel(r.statut_key);
-    if (r.statut_key === 'au_siege' || !r.agence_nom?.trim()) {
+    if (r.statut_key === 'au_siege') {
         return base;
     }
+    const code = r.agence_code?.trim();
+    return code ? `${base} · ${code}` : base;
+}
+
+function statutDetail(r: StockCardRow): string {
+    const nom = r.agence_nom?.trim();
+    if (!nom || r.statut_key === 'au_siege') {
+        return statutLabel(r.statut_key);
+    }
     const code = r.agence_code?.trim() ? ` (${r.agence_code})` : '';
-    return `${base} · ${r.agence_nom}${code}`;
+    return `${statutLabel(r.statut_key)} — ${nom}${code}`;
 }
 
 const columns = [
-    { key: 'numero_carte', title: 'Numéro de carte' },
+    { key: 'numero_carte', title: 'N° carte' },
     { key: 'numero_lot', title: 'Lot' },
-    { key: 'prix_vente', title: 'Prix de vente' },
-    { key: 'reference_facture', title: 'Référence de la facture' },
+    { key: 'prix_vente', title: 'Prix' },
+    { key: 'reference_facture', title: 'Facture' },
     { key: 'possesseur', title: 'Possesseur' },
     { key: 'statut', title: 'Statut' },
-    { key: 'expiration', title: 'Expiration' },
-    { key: 'actions', title: 'Actions' },
+    { key: 'expiration', title: 'Expire' },
+    { key: 'actions', title: '' },
 ];
 
 const page = usePage();
@@ -238,6 +252,7 @@ const flash = computed(() => page.props.flash as { success?: string; error?: str
 const canResponsableMonetique = computed(() => page.props.auth.canResponsableMonetique === true);
 const isSuperAdmin = computed(() => page.props.auth.isSuperAdmin === true);
 const stockPanorama = computed(() => props.stockPanorama ?? null);
+const panoramaOuvert = ref(false);
 const formatCfa = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
 const reload = () => router.reload({ only: ['cards', 'stockPanorama', 'references', 'lots', 'filters'] });
 
@@ -396,18 +411,21 @@ const statutBadgeClass = (k: StockStatutKey) => {
 
             <section
                 v-if="stockPanorama"
-                class="rounded-xl border border-primary/25 bg-gradient-to-br from-primary/5 via-white to-white p-6 shadow-sm space-y-5"
+                class="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
             >
-                <div class="flex items-start gap-3">
-                    <div class="rounded-lg bg-primary/10 p-2 text-primary">
-                        <LayoutDashboard class="h-5 w-5" />
-                    </div>
-                    <div>
-                        <h2 class="text-base font-semibold text-gray-900">Stock coficartes</h2>
-                        <p class="text-sm text-gray-600 mt-0.5">
-                            Totaux tous périmètres (siège et agences) — répartition par entité.
-                        </p>
-                    </div>
+                <div class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                        <LayoutDashboard class="h-4 w-4 text-primary" />
+                        Stock
+                    </span>
+                    <button
+                        v-if="!panoramaOuvert"
+                        type="button"
+                        class="text-xs font-medium text-primary hover:underline"
+                        @click="panoramaOuvert = true"
+                    >
+                        Répartition
+                    </button>
                 </div>
 
                 <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -439,7 +457,16 @@ const statutBadgeClass = (k: StockStatutKey) => {
                     </div>
                 </div>
 
-                <div class="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                <div v-show="panoramaOuvert" class="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                    <div class="flex items-center justify-end border-b border-gray-200 bg-gray-50/90 px-3 py-1.5">
+                        <button
+                            type="button"
+                            class="text-xs font-medium text-primary hover:underline"
+                            @click="panoramaOuvert = false"
+                        >
+                            Masquer
+                        </button>
+                    </div>
                     <table class="min-w-full text-sm">
                         <thead>
                             <tr class="border-b border-gray-200 bg-gray-50/90 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
@@ -492,12 +519,8 @@ const statutBadgeClass = (k: StockStatutKey) => {
                 {{ flash.error }}
             </div>
 
-            <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-                <div>
-                    <p class="text-sm font-semibold text-gray-700 uppercase tracking-wider">Filtres</p>
-                </div>
-
-                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm px-4 py-3">
+                <div class="grid grid-cols-1 items-end gap-3 sm:grid-cols-2 xl:grid-cols-6">
                     <div class="space-y-2">
                         <Label for="reference_facture" class="text-xs font-medium text-gray-600">Référence facture</Label>
                         <select
@@ -551,14 +574,14 @@ const statutBadgeClass = (k: StockStatutKey) => {
                             @keydown.enter="applyFilters"
                         />
                     </div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <Button type="button" class="bg-primary hover:bg-primary/90" @click="applyFilters">
-                        Filtrer
-                    </Button>
-                    <Button type="button" variant="outline" class="bg-white" @click="resetFilters">
-                        Réinitialiser
-                    </Button>
+                    <div class="flex flex-wrap items-center gap-2 xl:col-span-2">
+                        <Button type="button" class="bg-primary hover:bg-primary/90" @click="applyFilters">
+                            Filtrer
+                        </Button>
+                        <Button type="button" variant="outline" class="bg-white" @click="resetFilters">
+                            Réinitialiser
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -573,69 +596,87 @@ const statutBadgeClass = (k: StockStatutKey) => {
                 :on-items-per-page-change="onItemsPerPageChange"
             >
                 <template #item.numero_carte="{ item }">
-                    <div class="flex items-center gap-3">
-                        <div class="h-8 w-8 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-rose-600">
+                    <div class="flex items-center gap-3 whitespace-nowrap">
+                        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-rose-100 bg-rose-50 text-rose-600">
                             <CreditCard class="h-4 w-4" />
                         </div>
-                        <span class="font-medium font-mono text-gray-900 tabular-nums">
+                        <span class="font-mono font-medium tabular-nums text-gray-900">
                             {{ formatCardNumberDisplay(item.numero_carte) }}
                         </span>
                     </div>
                 </template>
 
                 <template #item.numero_lot="{ item }">
-                    <span class="text-sm text-gray-700">{{ item.numero_lot || '—' }}</span>
+                    <span class="whitespace-nowrap text-sm text-gray-700">{{ item.numero_lot || '—' }}</span>
                 </template>
 
                 <template #item.prix_vente="{ item }">
-                    <span class="text-sm text-gray-600">{{ formatCfa(item.prix_vente) }}</span>
+                    <span class="whitespace-nowrap text-sm text-gray-600">{{ formatCfa(item.prix_vente) }}</span>
+                </template>
+
+                <template #item.reference_facture="{ item }">
+                    <span class="whitespace-nowrap text-sm text-gray-700">{{ item.reference_facture || '—' }}</span>
+                </template>
+
+                <template #item.possesseur="{ item }">
+                    <span class="whitespace-nowrap text-sm text-gray-800">{{ item.possesseur || '—' }}</span>
                 </template>
 
                 <template #item.statut="{ item }">
                     <span
-                        class="inline-flex items-start gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold border max-w-[min(100%,260px)]"
+                        class="inline-flex whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-semibold border"
                         :class="statutBadgeClass(item.statut_key)"
+                        :title="statutDetail(item)"
                     >
-                        <Landmark v-if="item.statut_key === 'au_siege'" class="h-3.5 w-3.5 shrink-0 mt-px" />
-                        <Building2 v-else-if="item.statut_key === 'en_agence'" class="h-3.5 w-3.5 shrink-0 mt-px" />
-                        <ShoppingBag v-else-if="item.statut_key === 'en_vente'" class="h-3.5 w-3.5 shrink-0 mt-px" />
-                        <span class="leading-snug text-left break-words">{{ statutLabelAvecAgence(item) }}</span>
+                        {{ statutCourt(item) }}
                     </span>
                 </template>
 
                 <template #item.expiration="{ item }">
-                    <ExpirationBar :expiration="item.expiration" :date-expiration="item.date_expiration" />
+                    <div class="w-36">
+                        <ExpirationBar :expiration="item.expiration" :date-expiration="item.date_expiration" />
+                    </div>
                 </template>
 
                 <template #item.actions="{ item }">
-                    <div class="flex items-center justify-end gap-1">
-                        <button
-                            v-if="item.id"
-                            type="button"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                            title="Mouvements"
-                            @click="router.visit(`/monetique/cartes/${item.id}/mouvements`)"
-                        >
-                            <Eye class="h-4 w-4" />
-                        </button>
-                        <button
-                            v-if="isSuperAdmin && item.id"
-                            type="button"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-primary hover:bg-primary/10"
-                            title="Modifier la carte (super admin)"
-                            @click="openEditDialog(item)"
-                        >
-                            <Pencil class="h-4 w-4" />
-                        </button>
-                        <button
-                            v-if="isSuperAdmin && item.id"
-                            type="button"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-rose-600 hover:bg-rose-50 hover:text-rose-800"
-                            title="Supprimer la carte (super admin)"
-                            @click="openDeleteDialog(item)"
-                        >
-                            <Trash2 class="h-4 w-4" />
-                        </button>
+                    <div class="flex justify-end">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <button
+                                    type="button"
+                                    class="inline-flex size-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                    aria-label="Actions"
+                                >
+                                    <MoreHorizontal class="h-4 w-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-44">
+                                <DropdownMenuItem
+                                    v-if="item.id"
+                                    class="text-sm"
+                                    @click="router.visit(`/monetique/cartes/${item.id}/mouvements`)"
+                                >
+                                    <Eye class="size-4" />
+                                    Mouvements
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="isSuperAdmin && item.id"
+                                    class="text-sm"
+                                    @click="openEditDialog(item)"
+                                >
+                                    <Pencil class="size-4" />
+                                    Modifier
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="isSuperAdmin && item.id"
+                                    class="text-sm text-rose-700 focus:text-rose-700"
+                                    @click="openDeleteDialog(item)"
+                                >
+                                    <Trash2 class="size-4" />
+                                    Supprimer
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </template>
             </DataTable>

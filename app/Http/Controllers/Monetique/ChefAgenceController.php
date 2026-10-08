@@ -55,11 +55,13 @@ class ChefAgenceController extends Controller
             ->where('agence_id', $user->agence_id)
             ->where('assigned_to_user_id', $user->id)
             ->orderBy('numero_carte')
-            ->get(['id', 'numero_carte', 'reference_facture'])
+            ->get(['id', 'numero_carte', 'reference_facture', 'date_expiration'])
             ->map(fn (CoficarteCard $c) => [
                 'id' => $c->id,
                 'numero_carte' => $c->numero_carte,
                 'reference_facture' => $c->reference_facture,
+                'expiration' => $c->date_expiration?->format('d/m/Y'),
+                'date_expiration' => $c->date_expiration?->toDateString(),
             ]);
 
         return Inertia::render('monetique/Cc/DelesterVersChef', [
@@ -131,12 +133,15 @@ class ChefAgenceController extends Controller
                 'reference_facture',
                 'assigned_to_user_id',
                 'possesseur',
+                'date_expiration',
             ])
             ->map(fn (CoficarteCard $c) => [
                 'id' => $c->id,
                 'numero_carte' => $c->numero_carte,
                 'reference_facture' => $c->reference_facture,
                 'en_poche_cc' => $c->assigned_to_user_id !== null,
+                'expiration' => $c->date_expiration?->format('d/m/Y'),
+                'date_expiration' => $c->date_expiration?->toDateString(),
             ]);
 
         return Inertia::render('monetique/Agence/RetourCartes', [
@@ -204,7 +209,15 @@ class ChefAgenceController extends Controller
             ->where('agence_id', $user->agence_id)
             ->whereNull('assigned_to_user_id')
             ->orderBy('numero_carte')
-            ->get(['id', 'numero_carte', 'reference_facture', 'prix_vente']);
+            ->get(['id', 'numero_carte', 'reference_facture', 'prix_vente', 'date_expiration'])
+            ->map(fn (CoficarteCard $c) => [
+                'id' => $c->id,
+                'numero_carte' => $c->numero_carte,
+                'reference_facture' => $c->reference_facture,
+                'prix_vente' => $c->prix_vente,
+                'expiration' => $c->date_expiration?->format('d/m/Y'),
+                'date_expiration' => $c->date_expiration?->toDateString(),
+            ]);
 
         return Inertia::render('monetique/Agence/ApprovisionnementCc', [
             'chargeClientele' => $cibles,

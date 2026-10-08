@@ -8,7 +8,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCardNumberDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
-import { ArrowRightLeft, Eraser, FileText, Save, Trash2 } from 'lucide-vue-next';
+import { ArrowRightLeft, Eraser, Save, Trash2 } from 'lucide-vue-next';
 import { computed, ref, watch } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -290,17 +290,20 @@ const submit = () => {
     <Head title="Monétique - Transferts - Nouveau" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-6 p-6">
-            <div class="flex items-center gap-3">
-                <div class="p-3 bg-violet-100 text-violet-700 rounded-xl">
-                    <ArrowRightLeft class="h-6 w-6" />
+        <div class="flex w-full flex-col gap-5 p-6">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div class="flex items-start gap-3">
+                    <div class="rounded-xl bg-violet-100 p-2.5 text-violet-700">
+                        <ArrowRightLeft class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">Transférer des cartes</h1>
+                        <p class="mt-0.5 text-sm text-gray-600">
+                            Cochez les cartes d’une facture. Vous pouvez changer de facture : la sélection se cumule.
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900">Transférer des cartes</h1>
-                    <p class="text-sm text-gray-500 mt-1">
-                        Choisissez une facture, cochez les cartes, puis une autre facture si besoin — la sélection se cumule.
-                    </p>
-                </div>
+                <p class="text-sm text-gray-500">{{ selectedCount }} carte{{ selectedCount > 1 ? 's' : '' }} sélectionnée{{ selectedCount > 1 ? 's' : '' }}</p>
             </div>
 
             <div
@@ -356,47 +359,45 @@ const submit = () => {
                 <InputError :message="form.errors.supply_request_completion" />
             </div>
 
-            <form @submit.prevent="submit" class="space-y-6">
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-5">
-                    <div class="flex items-start gap-2">
-                        <FileText class="h-5 w-5 text-violet-600 mt-0.5 shrink-0" />
+            <form @submit.prevent="submit" class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+                <div class="min-w-0 space-y-5">
+                <div class="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                    <div class="flex flex-wrap items-end justify-between gap-3">
                         <div>
-                            <p class="text-sm font-semibold text-gray-800">Étape 1 — Par facture et lot</p>
-                            <p class="text-xs text-gray-500 mt-0.5">
-                                Choisissez une facture, puis un lot pour afficher les cartes disponibles au siège (hors transfert en attente).
-                            </p>
+                            <p class="text-sm font-semibold text-gray-900">Cartes au siège</p>
+                            <p class="mt-0.5 text-xs text-gray-500">Hors transfert déjà en attente.</p>
                         </div>
                     </div>
 
-                    <div v-if="references.length === 0" class="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+                    <div v-if="references.length === 0" class="rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800">
                         Aucune carte éligible avec une référence de facture.
                     </div>
 
-                    <div v-else class="grid grid-cols-1 gap-4 max-w-3xl sm:grid-cols-2">
-                        <div class="space-y-2">
-                            <Label for="reference_facture" class="text-xs font-medium text-gray-600">Référence facture</Label>
+                    <div v-else class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div class="space-y-1.5">
+                            <Label for="reference_facture" class="text-xs font-medium text-gray-600">Facture</Label>
                             <select
                                 id="reference_facture"
                                 v-model="referenceSelection"
-                                class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                                class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                                 @change="onFactureChange"
                             >
-                                <option value="">— Choisir une facture —</option>
+                                <option value="">— Choisir —</option>
                                 <option v-for="r in references" :key="r.reference_facture" :value="r.reference_facture">
-                                    {{ r.reference_facture }} ({{ r.cards_count }} carte(s) éligible(s))
+                                    {{ r.reference_facture }} ({{ r.cards_count }})
                                 </option>
                             </select>
                         </div>
-                        <div class="space-y-2">
-                            <Label for="numero_lot" class="text-xs font-medium text-gray-600">Numéro de lot</Label>
+                        <div class="space-y-1.5">
+                            <Label for="numero_lot" class="text-xs font-medium text-gray-600">Lot</Label>
                             <select
                                 id="numero_lot"
                                 v-model="lotSelection"
-                                class="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:bg-gray-50 disabled:text-gray-400"
+                                class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900 disabled:bg-gray-50 disabled:text-gray-400"
                                 :disabled="!referenceCourante || lots.length === 0"
                                 @change="onLotChange"
                             >
-                                <option value="">— Tous les lots —</option>
+                                <option value="">— Tous —</option>
                                 <option v-for="l in lots" :key="l.value" :value="l.value">
                                     {{ l.label }} ({{ l.cards_count }})
                                 </option>
@@ -404,75 +405,78 @@ const submit = () => {
                         </div>
                     </div>
 
-                    <div v-if="referenceCourante && cartesLot.length" class="space-y-2">
-                        <div class="flex flex-wrap items-center gap-3 border-b border-gray-100 pb-2">
-                            <label class="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                                <input
-                                    v-model="allLotSelected"
-                                    type="checkbox"
-                                    class="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                                />
-                                {{
-                                    lotCourant
-                                        ? `Tout prendre pour ce lot (${cartesLot.length})`
-                                        : `Tout prendre pour cette facture (${cartesLot.length})`
-                                }}
-                            </label>
-                        </div>
-                        <div class="overflow-x-auto rounded-lg border border-gray-200 max-h-[320px] overflow-y-auto">
+                    <div v-if="referenceCourante && cartesLot.length" class="overflow-hidden rounded-lg border border-gray-200">
+                        <div class="max-h-[min(52vh,520px)] overflow-auto">
                             <table class="min-w-full text-sm">
-                                <thead class="sticky top-0 bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold uppercase text-gray-600">
-                                    <tr>
-                                        <th class="w-10 px-3 py-2"></th>
-                                        <th class="px-3 py-2">Numéro</th>
-                                        <th class="px-3 py-2">Lot</th>
-                                        <th class="px-3 py-2 text-right">Prix</th>
-                                        <th class="px-3 py-2 min-w-[190px]">Expiration</th>
+                                <thead class="sticky top-0 z-10 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                                    <tr class="border-b border-gray-200">
+                                        <th class="w-14 px-4 py-2.5">
+                                            <input
+                                                v-model="allLotSelected"
+                                                type="checkbox"
+                                                class="size-5 accent-violet-600"
+                                                :aria-label="lotCourant ? 'Tout prendre pour ce lot' : 'Tout prendre pour cette facture'"
+                                            />
+                                        </th>
+                                        <th class="px-3 py-2.5">N° carte</th>
+                                        <th class="px-3 py-2.5">Lot</th>
+                                        <th class="px-3 py-2.5 text-right">Prix</th>
+                                        <th class="px-3 py-2.5">Expire</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="c in cartesLot" :key="c.id" class="border-b border-gray-100 hover:bg-gray-50/80">
-                                        <td class="px-3 py-2">
+                                    <tr
+                                        v-for="c in cartesLot"
+                                        :key="c.id"
+                                        class="cursor-pointer border-b border-gray-100 last:border-0"
+                                        :class="selection.has(c.id) ? 'bg-violet-100' : 'hover:bg-gray-50'"
+                                        @click="toggleLotCard(c, !selection.has(c.id))"
+                                    >
+                                        <td
+                                            class="border-l-4 px-4 py-2.5"
+                                            :class="selection.has(c.id) ? 'border-l-violet-600' : 'border-l-transparent'"
+                                            @click.stop
+                                        >
                                             <input
                                                 type="checkbox"
-                                                class="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                                                class="size-5 accent-violet-600"
                                                 :checked="selection.has(c.id)"
+                                                :aria-label="`Sélectionner la carte ${c.numero_carte}`"
                                                 @change="toggleLotCard(c, ($event.target as HTMLInputElement).checked)"
                                             />
                                         </td>
-                                        <td class="px-3 py-2 font-mono tabular-nums text-gray-900">
+                                        <td class="whitespace-nowrap px-3 py-2.5 font-mono font-medium tabular-nums text-gray-900">
                                             {{ formatCardNumberDisplay(c.numero_carte) }}
                                         </td>
-                                        <td class="px-3 py-2 text-xs text-gray-600">
+                                        <td class="whitespace-nowrap px-3 py-2.5 text-gray-600">
                                             {{ c.numero_lot || '—' }}
                                         </td>
-                                        <td class="px-3 py-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
+                                        <td class="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-gray-700">
                                             {{ formatCfa(c.prix_vente) }}
                                         </td>
-                                        <td class="px-3 py-2">
-                                            <ExpirationBar
-                                                :expiration="c.expiration ?? '—'"
-                                                :date-expiration="c.date_expiration ?? ''"
-                                            />
+                                        <td class="px-3 py-2.5">
+                                            <div class="w-40">
+                                                <ExpirationBar
+                                                    :expiration="c.expiration ?? '—'"
+                                                    :date-expiration="c.date_expiration ?? ''"
+                                                />
+                                            </div>
                                         </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <p class="text-xs text-gray-500">
-                            Changez de facture ou de lot ci-dessus pour ajouter d’autres cartes à la sélection.
-                        </p>
                     </div>
 
                     <div
                         v-else-if="referenceCourante && cartesLot.length === 0"
-                        class="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-4 py-3"
+                        class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600"
                     >
                         Aucune carte éligible pour cette référence.
                     </div>
                 </div>
 
-                <div class="bg-white rounded-xl border border-violet-200/80 shadow-sm p-6 space-y-3">
+                <div class="space-y-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
                     <div class="flex items-center justify-between gap-2">
                         <p class="text-sm font-semibold text-gray-800">Sélection du transfert</p>
                         <span class="text-xs font-medium text-violet-700 bg-violet-50 border border-violet-100 rounded-full px-2.5 py-0.5">
@@ -481,9 +485,9 @@ const submit = () => {
                     </div>
                     <p
                         v-if="canResponsableMonetique && selectedCount > 0"
-                        class="text-xs text-gray-600 bg-violet-50/80 border border-violet-100 rounded-md px-3 py-2"
+                        class="text-xs text-gray-600"
                     >
-                        Responsable monétique : le « prix actuel » est celui à la sélection ; la colonne « modifier le prix » est appliquée à l’enregistrement du transfert.
+                        Le prix saisi dans « Nouveau prix » est celui enregistré sur le transfert.
                     </p>
                     <div v-if="selectedCount === 0" class="text-sm text-gray-500 italic py-2">
                         Aucune carte sélectionnée pour l’instant.
@@ -494,10 +498,10 @@ const submit = () => {
                                 <tr>
                                     <th class="px-3 py-2">Facture</th>
                                     <th class="px-3 py-2">Numéro</th>
-                                    <th class="px-3 py-2 min-w-[200px]">Expiration</th>
-                                    <th class="px-3 py-2 text-right whitespace-nowrap">Prix actuel</th>
+                                    <th class="px-3 py-2">Expire</th>
+                                    <th class="px-3 py-2 text-right whitespace-nowrap">Prix</th>
                                     <th v-if="canResponsableMonetique" class="px-3 py-2 text-right whitespace-nowrap">
-                                        Modifier le prix
+                                        Nouveau prix
                                     </th>
                                     <th class="px-3 py-2 w-10"></th>
                                 </tr>
@@ -507,10 +511,12 @@ const submit = () => {
                                     <td class="px-3 py-2 font-mono text-xs text-gray-800">{{ c.reference_facture }}</td>
                                     <td class="px-3 py-2 font-mono tabular-nums">{{ formatCardNumberDisplay(c.numero_carte) }}</td>
                                     <td class="px-3 py-2">
-                                        <ExpirationBar
-                                            :expiration="c.expiration ?? '—'"
-                                            :date-expiration="c.date_expiration ?? ''"
-                                        />
+                                        <div class="w-40">
+                                            <ExpirationBar
+                                                :expiration="c.expiration ?? '—'"
+                                                :date-expiration="c.date_expiration ?? ''"
+                                            />
+                                        </div>
                                     </td>
                                     <td class="px-3 py-2 text-right tabular-nums text-gray-700 whitespace-nowrap">
                                         {{ formatCfa(c.prix_actuel) }}
@@ -542,60 +548,69 @@ const submit = () => {
                     <InputError :message="form.errors.card_ids" />
                     <InputError :message="form.errors.prix_par_carte" />
                 </div>
+                </div>
 
-                <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                    <div class="space-y-5">
-                        <div class="space-y-2">
-                            <Label for="receveur_user_id" class="text-xs font-medium text-gray-600">
-                                Chef d'agence receveur
-                            </Label>
-                            <select
-                                id="receveur_user_id"
-                                v-model="form.receveur_user_id"
-                                class="mt-1.5 flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                                :class="form.errors.receveur_user_id ? 'border-rose-500 ring-1 ring-rose-500' : ''"
-                            >
-                                <option value="">-- Sélectionner --</option>
-                                <option v-for="c in chefsReceveurs" :key="c.user_id" :value="c.user_id">
-                                    {{ c.chef_nom }} — {{ c.agence_nom }} ({{ c.agence_code }})
-                                </option>
-                            </select>
-                            <p
-                                v-if="chefsReceveurs.length === 0"
-                                class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2"
-                            >
-                                Aucun chef d'agence désigné. Paramétrez les entités (Configuration) en assignant un chef d'agence à chaque
-                                agence concernée.
-                            </p>
-                            <InputError :message="form.errors.receveur_user_id" />
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="commentaire" class="text-xs font-medium text-gray-600">Commentaire</Label>
-                            <textarea
-                                id="commentaire"
-                                v-model="form.commentaire"
-                                rows="5"
-                                class="mt-1.5 w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus-visible:border-gray-400 focus-visible:ring-1 focus-visible:ring-gray-400"
-                            />
-                        </div>
+                <aside class="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4">
+                    <div>
+                        <h2 class="text-sm font-semibold text-gray-900">Destinataire</h2>
+                        <p class="mt-0.5 text-xs text-gray-500">Chef d’agence qui réceptionne le transfert.</p>
                     </div>
-                </div>
-
-                <div class="flex items-center justify-end gap-2 pt-2">
-                    <Button type="button" variant="outline" @click="reset">
-                        <Eraser class="h-4 w-4 mr-2" />
-                        Effacer
-                    </Button>
-                    <Button
-                        type="submit"
-                        class="bg-violet-600 hover:bg-violet-700"
-                        :disabled="form.processing || chefsReceveurs.length === 0 || selectedCount === 0"
+                    <div class="space-y-1.5">
+                        <Label for="receveur_user_id" class="text-xs font-medium text-gray-600">Chef d’agence</Label>
+                        <select
+                            id="receveur_user_id"
+                            v-model="form.receveur_user_id"
+                            class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                            :class="form.errors.receveur_user_id ? 'border-rose-500 ring-1 ring-rose-500' : ''"
+                        >
+                            <option value="">— Sélectionner —</option>
+                            <option v-for="c in chefsReceveurs" :key="c.user_id" :value="c.user_id">
+                                {{ c.chef_nom }} — {{ c.agence_nom }} ({{ c.agence_code }})
+                            </option>
+                        </select>
+                        <p
+                            v-if="chefsReceveurs.length === 0"
+                            class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                        >
+                            Aucun chef d’agence désigné.
+                        </p>
+                        <InputError :message="form.errors.receveur_user_id" />
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="commentaire" class="text-xs font-medium text-gray-600">Commentaire</Label>
+                        <textarea
+                            id="commentaire"
+                            v-model="form.commentaire"
+                            rows="4"
+                            class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        />
+                    </div>
+                    <div
+                        class="rounded-lg border px-3 py-2.5"
+                        :class="selectedCount ? 'border-violet-200 bg-violet-50' : 'border-gray-200 bg-gray-50'"
                     >
-                        <Save class="h-4 w-4 mr-2" />
-                        Enregistrer le transfert
-                    </Button>
-                </div>
+                        <p class="text-xs font-medium uppercase tracking-wide" :class="selectedCount ? 'text-violet-800' : 'text-gray-500'">
+                            Sélection
+                        </p>
+                        <p class="mt-0.5 text-sm font-semibold tabular-nums" :class="selectedCount ? 'text-violet-950' : 'text-gray-700'">
+                            {{ selectedCount }} carte{{ selectedCount > 1 ? 's' : '' }}
+                        </p>
+                    </div>
+                    <div class="flex flex-col gap-2">
+                        <Button
+                            type="submit"
+                            class="w-full bg-violet-600 hover:bg-violet-700"
+                            :disabled="form.processing || chefsReceveurs.length === 0 || selectedCount === 0"
+                        >
+                            <Save class="mr-2 h-4 w-4" />
+                            Enregistrer
+                        </Button>
+                        <Button type="button" variant="outline" class="w-full bg-white" @click="reset">
+                            <Eraser class="mr-2 h-4 w-4" />
+                            Effacer
+                        </Button>
+                    </div>
+                </aside>
             </form>
         </div>
     </AppLayout>

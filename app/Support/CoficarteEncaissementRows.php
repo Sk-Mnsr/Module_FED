@@ -39,6 +39,9 @@ final class CoficarteEncaissementRows
             'numero_transaction' => '2'.str_pad((string) $s->id, 13, '0', STR_PAD_LEFT),
             'encaissement_code' => $s->encaissement_code,
             'date_encaisse_confirme' => $s->activated_at?->format('d-m-Y H:i:s'),
+            'fiche_enrolement_url' => filled($s->fiche_enrolement_path)
+                ? route('monetique.ventes.fiche-enrolement', $s)
+                : null,
         ];
     }
 

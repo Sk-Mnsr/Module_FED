@@ -38,6 +38,7 @@ const props = defineProps<{
     tauxTafDefaut: number;
     statuts: string[];
     modesFrais: string[];
+    initiateurs?: Array<{ slug: string; nom: string }>;
 }>();
 
 const breadcrumbs = [
@@ -131,9 +132,9 @@ const totalLabel = computed(() => `${props.produits.total} produit(s)`);
                         class="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
                     >
                         <option value="">Tous</option>
-                        <option value="CC">CC</option>
-                        <option value="OPS">OPS</option>
-                        <option value="FINANCE">FINANCE</option>
+                        <option v-for="role in initiateurs || []" :key="role.slug" :value="role.slug">
+                            {{ role.nom }}
+                        </option>
                     </select>
                 </div>
                 <Button type="button" @click="applyFilters">Filtrer</Button>

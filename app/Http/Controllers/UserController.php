@@ -25,46 +25,95 @@ class UserController extends Controller
      */
     public function index(Request $request)
     {
-        $perPage = (int) $request->get('per_page', 5);
+        $perPage = (int) $request->get('per_page', 25);
+        if (! in_array($perPage, [10, 25, 50, 100], true)) {
+            $perPage = 25;
+        }
 
-        $query = User::with(['roles', 'agence', 'department', 'nPlus1']);
+        $like = User::query()->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
 
-        // Filtre par recherche (nom, email, et autres champs pertinents)
-        if ($request->has('search') && $request->search) {
-            $search = $request->search;
-            $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%")
-                    ->orWhere('matricule', 'like', "%{$search}%")
-                    ->orWhereHas('agence', function ($subQ) use ($search) {
-                        $subQ->where('nom', 'like', "%{$search}%")
-                            ->orWhere('code', 'like', "%{$search}%");
-                    })
-                    ->orWhere('fonction', 'like', "%{$search}%");
+        $query = User::query()->with([
+            'roles:id,nom,slug',
+            'agence:id,code,nom',
+        ]);
+
+        if ($request->filled('search')) {
+            $search = '%'.trim((string) $request->search).'%';
+            $query->where(function ($q) use ($search, $like) {
+                $q->where('name', $like, $search)
+                    ->orWhere('email', $like, $search)
+                    ->orWhere('matricule', $like, $search)
+                    ->orWhere('fonction', $like, $search)
+                    ->orWhereHas('agence', function ($subQ) use ($search, $like) {
+                        $subQ->where('nom', $like, $search)
+                            ->orWhere('code', $like, $search);
+                    });
             });
         }
 
-        // Filtre par activation
-        if ($request->has('activation') && $request->activation !== '') {
-            $query->where('activated', (bool) $request->activation);
-        }
-
-        // Filtre par rôle
-        if ($request->has('role') && $request->role) {
+        if ($request->filled('role')) {
             $query->whereHas('roles', function ($q) use ($request) {
                 $q->where('roles.id', $request->role);
             });
         }
 
-        $users = $query->orderBy('name')->paginate($perPage);
+        $actifs = (clone $query)->where('activated', true)->count();
+        $inactifs = (clone $query)->where('activated', false)->count();
 
-        // Récupérer les données pour les filtres
+        if ($request->filled('activation') && in_array((string) $request->activation, ['0', '1'], true)) {
+            $query->where('activated', $request->activation === '1');
+        }
+
+        $sortable = [
+            'name' => 'name',
+            'email' => 'email',
+            'idflex' => 'matricule',
+            'fonction' => 'fonction',
+        ];
+        $sort = $sortable[$request->string('sort')->toString()] ?? 'name';
+        $direction = $request->string('direction')->toString() === 'desc' ? 'desc' : 'asc';
+
+        $users = $query
+            ->orderBy($sort, $direction)
+            ->orderBy('id')
+            ->paginate($perPage)
+            ->withQueryString()
+            ->through(fn (User $user) => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'fonction' => $user->fonction,
+                'matricule' => $user->matricule,
+                'activated' => (bool) $user->activated,
+                'agence' => $user->agence ? [
+                    'id' => $user->agence->id,
+                    'code' => $user->agence->code,
+                    'nom' => $user->agence->nom,
+                ] : null,
+                'roles' => $user->roles->map(fn (Role $role) => [
+                    'id' => $role->id,
+                    'nom' => $role->nom,
+                    'slug' => $role->slug,
+                ])->values(),
+            ]);
+
         $roles = Role::where('actif', true)->orderBy('module')->orderBy('nom')->get(['id', 'nom', 'module']);
 
         return Inertia::render('users/Index', [
             'users' => $users,
             'roles' => $roles,
-            'modules' => ModuleAccess::moduleOptions(),
+            'stats' => [
+                'total' => $actifs + $inactifs,
+                'actifs' => $actifs,
+                'inactifs' => $inactifs,
+            ],
+            'filters' => [
+                'search' => (string) $request->input('search', ''),
+                'role' => (string) $request->input('role', ''),
+                'activation' => (string) $request->input('activation', ''),
+                'sort' => array_search($sort, $sortable, true) ?: 'name',
+                'direction' => $direction,
+            ],
         ]);
     }
 
@@ -326,23 +375,6 @@ class UserController extends Controller
             throw ValidationException::withMessages([
                 'role_ids' => 'Un ou plusieurs rôles sélectionnés sont invalides.',
             ]);
-        }
-
-        $claimedModules = [];
-        foreach ($roles as $role) {
-            $moduleKeys = ModuleAccess::inferredModuleKeysForSlug($role->slug);
-            if ($moduleKeys === [] && filled($role->module)) {
-                $moduleKeys = [$role->module];
-            }
-
-            foreach ($moduleKeys as $moduleKey) {
-                if (isset($claimedModules[$moduleKey])) {
-                    throw ValidationException::withMessages([
-                        'role_ids' => 'Un seul rôle par module est autorisé.',
-                    ]);
-                }
-                $claimedModules[$moduleKey] = $role->id;
-            }
         }
 
         return $roleIds;

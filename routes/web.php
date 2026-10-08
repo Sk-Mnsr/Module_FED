@@ -436,6 +436,7 @@ Route::middleware(['auth'])->group(function () {
             Route::get('nouveau', [VenteController::class, 'create'])->name('monetique.ventes.nouveau');
             Route::post('/', [VenteController::class, 'store'])->name('monetique.ventes.store');
             Route::get('historique', [VenteController::class, 'historique'])->name('monetique.ventes.historique');
+            Route::get('{coficarte_sale}/fiche-enrolement', [VenteController::class, 'ficheEnrolement'])->name('monetique.ventes.fiche-enrolement');
         });
 
         Route::prefix('recharges')->group(function () {
@@ -449,7 +450,9 @@ Route::middleware(['auth'])->group(function () {
             Route::get('encaissements/ventes', fn () => redirect()->route('monetique.encaissements'))->name('monetique.encaissements.ventes');
             Route::get('encaissements/recharges', fn () => redirect()->route('monetique.encaissements'))->name('monetique.encaissements.recharges');
             Route::post('encaissements/ventes/{coficarte_sale}/confirmer', [EncaissementController::class, 'confirmerVente'])->name('monetique.encaissements.ventes.confirmer');
+            Route::post('encaissements/ventes/{coficarte_sale}/rejeter', [EncaissementController::class, 'rejeterVente'])->name('monetique.encaissements.ventes.rejeter');
             Route::post('encaissements/recharges/{coficarte_recharge}/confirmer', [EncaissementController::class, 'confirmerRecharge'])->name('monetique.encaissements.recharges.confirmer');
+            Route::post('encaissements/recharges/{coficarte_recharge}/rejeter', [EncaissementController::class, 'rejeterRecharge'])->name('monetique.encaissements.recharges.rejeter');
         });
     });
 

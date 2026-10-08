@@ -1,11 +1,15 @@
 <script setup lang="ts">
+import ExpirationBar from '@/components/ExpirationBar.vue';
+import InputError from '@/components/InputError.vue';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { formatCardNumberDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router, useForm } from '@inertiajs/vue3';
-import { Building2, PackageMinus, UserSquare } from 'lucide-vue-next';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Building2, Inbox, PackageMinus, Search, UserSquare } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -13,13 +17,25 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Retour au siège', href: '/monetique/agence/retour-cartes' },
 ];
 
-type Carte = { id: number; numero_carte: string; reference_facture: string; en_poche_cc: boolean };
+type Carte = {
+    id: number;
+    numero_carte: string;
+    reference_facture: string;
+    en_poche_cc: boolean;
+    expiration?: string | null;
+    date_expiration?: string | null;
+};
 
 const props = withDefaults(defineProps<{ cartes?: Carte[] }>(), {
     cartes: () => [],
 });
 
+const page = usePage();
+const flash = computed(() => page.props.flash as { success?: string; error?: string } | undefined);
+
 const selected = ref<number[]>([]);
+const recherche = ref('');
+const confirmerOuvert = ref(false);
 
 const toggle = (id: number) => {
     const i = selected.value.indexOf(id);
@@ -30,162 +46,249 @@ const toggle = (id: number) => {
     }
 };
 
-const allIds = computed(() => props.cartes.map((c) => c.id));
+const cartesFiltrees = computed(() => {
+    const q = recherche.value.trim().toLowerCase();
+    if (!q) return props.cartes;
+    const qCompact = q.replace(/\s/g, '');
+    return props.cartes.filter((c) => {
+        const numero = c.numero_carte.replace(/\s/g, '').toLowerCase();
+        const facture = (c.reference_facture ?? '').toLowerCase();
+        return numero.includes(qCompact) || facture.includes(q);
+    });
+});
+
 const allSelected = computed(
-    () => props.cartes.length > 0 && selected.value.length === props.cartes.length,
+    () => cartesFiltrees.value.length > 0 && cartesFiltrees.value.every((c) => selected.value.includes(c.id)),
 );
 
 const toggleAll = () => {
-    selected.value = allSelected.value ? [] : [...allIds.value];
+    const ids = cartesFiltrees.value.map((c) => c.id);
+    if (allSelected.value) {
+        selected.value = selected.value.filter((id) => !ids.includes(id));
+        return;
+    }
+    selected.value = [...new Set([...selected.value, ...ids])];
 };
+
+const chezCcCount = computed(() => props.cartes.filter((c) => c.en_poche_cc).length);
 
 const form = useForm({
     coficarte_card_ids: [] as number[],
 });
 
-const submit = () => {
-    form.coficarte_card_ids = [...selected.value];
-    if (form.coficarte_card_ids.length === 0) {
-        return;
-    }
-    if (!confirm('Confirmer le retour de ces cartes vers le stock siège (monétique centrale) ?')) {
-        return;
-    }
-    form.post('/monetique/agence/retour-cartes', { preserveScroll: true });
+const demanderConfirmation = () => {
+    if (selected.value.length === 0) return;
+    confirmerOuvert.value = true;
 };
 
-const chezCcCount = computed(() => props.cartes.filter((c) => c.en_poche_cc).length);
+const submit = () => {
+    form.coficarte_card_ids = [...selected.value];
+    if (form.coficarte_card_ids.length === 0) return;
+    form.post('/monetique/agence/retour-cartes', {
+        preserveScroll: true,
+        onSuccess: () => {
+            selected.value = [];
+            confirmerOuvert.value = false;
+        },
+        onFinish: () => {
+            if (!form.processing) confirmerOuvert.value = false;
+        },
+    });
+};
 </script>
 
 <template>
     <Head title="Retour cartes — chef d'agence" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-8 p-6 max-w-5xl mx-auto w-full pb-24">
-            <button
-                type="button"
-                class="inline-flex items-center gap-2 text-sm font-medium text-violet-700 hover:text-violet-900 w-fit -ml-1"
-                @click="router.visit('/monetique/coficarte')"
-            >
-                <span class="inline-flex items-center gap-1">
-                    ← <span>Coficarte</span>
-                </span>
-            </button>
-
-            <div class="flex items-start gap-4">
-                <div class="p-3.5 bg-amber-100 text-amber-950 rounded-2xl shadow-sm shrink-0">
-                    <PackageMinus class="h-7 w-7" />
-                </div>
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Retour de cartes au siège</h1>
-                    <p class="text-sm text-gray-600 mt-1 max-w-2xl leading-relaxed">
-                        Restitution du stock de votre agence vers la <strong class="font-medium text-gray-800">monétique centrale</strong>.
-                        Seules les cartes encore en statut stock agence sont listées.
-                    </p>
-                    <p v-if="cartes.length" class="text-xs text-gray-500 mt-2">
-                        <Building2 class="inline h-3.5 w-3.5 -mt-0.5 mr-1" />
-                        {{ cartes.length }} carte(s) éligible(s)
-                        <span v-if="chezCcCount"> — dont {{ chezCcCount }} chez un chargé de clientèle</span>
-                    </p>
-                </div>
-            </div>
-
-            <div class="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div class="px-5 py-4 bg-gradient-to-r from-amber-50/90 to-white border-b border-amber-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex flex-col gap-5 p-6 w-full">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div class="flex items-start gap-3">
+                    <div class="rounded-xl bg-amber-100 p-2.5 text-amber-950">
+                        <PackageMinus class="h-5 w-5" />
+                    </div>
                     <div>
-                        <p class="text-sm font-semibold text-gray-900">
-                            {{ selected.length }} sélectionnée(s)
-                            <span class="font-normal text-gray-500">/ {{ cartes.length }} au total</span>
+                        <h1 class="text-xl font-bold text-gray-900">Retour de cartes au siège</h1>
+                        <p class="mt-0.5 text-sm text-gray-600">
+                            Restituez des cartes de l’agence vers la monétique centrale. Seul le stock agence est listé.
                         </p>
-                        <p class="text-xs text-gray-500 mt-0.5">Cochez les cartes à renvoyer au siège.</p>
-                    </div>
-                    <div class="flex flex-wrap gap-2">
-                        <Button type="button" variant="outline" size="sm" class="bg-white" @click="toggleAll">
-                            {{ allSelected ? 'Tout désélectionner' : 'Tout sélectionner' }}
-                        </Button>
-                        <Button
-                            type="button"
-                            class="bg-amber-700 hover:bg-amber-800"
-                            size="sm"
-                            :disabled="selected.length === 0 || form.processing"
-                            @click="submit"
-                        >
-                            Enregistrer le retour
-                        </Button>
                     </div>
                 </div>
-
-                <div v-if="!cartes.length" class="px-6 py-16 text-center text-sm text-gray-500">
-                    Aucune carte en stock dans votre agence.
-                </div>
-
-                <div v-else class="overflow-x-auto max-h-[min(60vh,560px)] overflow-y-auto">
-                    <table class="w-full text-sm">
-                        <thead class="sticky top-0 z-10 bg-gray-100/95 backdrop-blur border-b border-gray-200">
-                            <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                <th class="w-12 px-4 py-3"></th>
-                                <th class="px-4 py-3">Numéro</th>
-                                <th class="px-4 py-3">Réf. facture</th>
-                                <th class="px-4 py-3">Emplacement</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <tr
-                                v-for="c in cartes"
-                                :key="c.id"
-                                class="hover:bg-amber-50/30 transition-colors"
-                                :class="selected.includes(c.id) ? 'bg-amber-50/50' : ''"
-                            >
-                                <td class="px-4 py-3 align-middle">
-                                    <Checkbox
-                                        :checked="selected.includes(c.id)"
-                                        class="cursor-pointer"
-                                        @update:checked="() => toggle(c.id)"
-                                    />
-                                </td>
-                                <td class="px-4 py-3">
-                                    <span class="font-mono font-semibold text-gray-900 tabular-nums">
-                                        {{ formatCardNumberDisplay(c.numero_carte) }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 text-gray-600">{{ c.reference_facture }}</td>
-                                <td class="px-4 py-3">
-                                    <span
-                                        v-if="c.en_poche_cc"
-                                        class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-900"
-                                    >
-                                        <UserSquare class="h-3 w-3" />
-                                        Chez un CC
-                                    </span>
-                                    <span
-                                        v-else
-                                        class="inline-flex items-center gap-1 rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-xs font-medium text-gray-700"
-                                    >
-                                        <Building2 class="h-3 w-3" />
-                                        Pool agence
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+                <p class="text-sm text-gray-500">
+                    {{ cartes.length }} carte(s) éligible(s)
+                    <span v-if="chezCcCount"> · {{ chezCcCount }} chez un CC</span>
+                </p>
             </div>
 
-            <!-- Barre action mobile (petits écrans) -->
             <div
-                class="sm:hidden fixed bottom-0 left-0 right-0 z-20 border-t border-gray-200 bg-white/95 backdrop-blur px-4 py-3 flex gap-2 justify-between items-center safe-area-pb"
+                v-if="flash?.success"
+                class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
             >
-                <span class="text-xs text-gray-600">{{ selected.length }} cochée(s)</span>
-                <Button
-                    type="button"
-                    size="sm"
-                    class="bg-amber-700"
-                    :disabled="selected.length === 0 || form.processing"
-                    @click="submit"
-                >
-                    Retour
-                </Button>
+                {{ flash.success }}
             </div>
+            <div
+                v-if="flash?.error"
+                class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+            >
+                {{ flash.error }}
+            </div>
+
+            <div class="grid items-start gap-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
+                <form
+                    class="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4"
+                    @submit.prevent="demanderConfirmation"
+                >
+                    <div>
+                        <h2 class="text-sm font-semibold text-gray-900">Retour au siège</h2>
+                        <p class="mt-0.5 text-xs text-gray-500">Les cartes cochées quittent le stock agence.</p>
+                    </div>
+                    <div
+                        class="rounded-lg border px-3 py-2.5"
+                        :class="selected.length ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'"
+                    >
+                        <p class="text-xs font-medium uppercase tracking-wide" :class="selected.length ? 'text-amber-800' : 'text-gray-500'">
+                            Sélection
+                        </p>
+                        <p class="mt-0.5 text-sm font-semibold tabular-nums" :class="selected.length ? 'text-amber-950' : 'text-gray-700'">
+                            {{ selected.length }} carte{{ selected.length > 1 ? 's' : '' }}
+                        </p>
+                        <p class="mt-1 text-xs leading-snug" :class="selected.length ? 'text-amber-800' : 'text-gray-500'">
+                            {{
+                                selected.length
+                                    ? 'Ces cartes seront renvoyées au stock siège.'
+                                    : 'Cochez les cartes dans le tableau.'
+                            }}
+                        </p>
+                    </div>
+                    <InputError :message="form.errors.coficarte_card_ids" />
+                    <Button
+                        type="submit"
+                        class="w-full bg-amber-700 hover:bg-amber-800"
+                        :disabled="selected.length === 0 || form.processing"
+                    >
+                        {{ selected.length ? `Renvoyer ${selected.length} carte${selected.length > 1 ? 's' : ''}` : 'Renvoyer' }}
+                    </Button>
+                </form>
+
+                <section class="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+                        <h2 class="text-sm font-semibold text-gray-900">Stock agence</h2>
+                        <div class="flex items-center gap-2">
+                            <div v-if="cartes.length" class="relative">
+                                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                                <Input
+                                    v-model="recherche"
+                                    placeholder="N° carte, facture…"
+                                    class="h-8 w-44 border-gray-300 pl-8 text-sm"
+                                />
+                            </div>
+                            <Button
+                                v-if="cartesFiltrees.length"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                class="bg-white"
+                                @click="toggleAll"
+                            >
+                                {{ allSelected ? 'Tout retirer' : 'Tout sélectionner' }}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div v-if="!cartes.length" class="px-6 py-16 text-center">
+                        <Inbox class="mx-auto mb-3 h-10 w-10 text-gray-300" />
+                        <p class="text-sm text-gray-600">Aucune carte en stock dans votre agence.</p>
+                    </div>
+                    <div v-else-if="!cartesFiltrees.length" class="px-6 py-12 text-center text-sm text-gray-500">
+                        Aucune carte ne correspond à la recherche.
+                    </div>
+                    <div v-else class="max-h-[min(70vh,720px)] overflow-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="sticky top-0 z-10 bg-gray-50">
+                                <tr class="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                                    <th class="w-14 px-4 py-2.5">
+                                        <Checkbox
+                                            :checked="allSelected"
+                                            :indeterminate="selected.length > 0 && !allSelected"
+                                            class="size-5 cursor-pointer border-2 border-gray-400 bg-white data-[state=checked]:border-amber-600 data-[state=checked]:bg-amber-600 data-[state=indeterminate]:border-amber-600 data-[state=indeterminate]:bg-amber-600"
+                                            aria-label="Tout sélectionner"
+                                            @update:checked="toggleAll"
+                                        />
+                                    </th>
+                                    <th class="px-4 py-2.5">N° carte</th>
+                                    <th class="px-4 py-2.5">Facture</th>
+                                    <th class="px-4 py-2.5">Emplacement</th>
+                                    <th class="px-4 py-2.5">Expire</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="c in cartesFiltrees"
+                                    :key="c.id"
+                                    class="cursor-pointer border-b border-gray-100 last:border-0"
+                                    :class="selected.includes(c.id) ? 'bg-amber-100' : 'hover:bg-gray-50'"
+                                    @click="toggle(c.id)"
+                                >
+                                    <td
+                                        class="border-l-4 px-4 py-3"
+                                        :class="selected.includes(c.id) ? 'border-l-amber-600' : 'border-l-transparent'"
+                                        @click.stop
+                                    >
+                                        <Checkbox
+                                            :checked="selected.includes(c.id)"
+                                            class="size-5 cursor-pointer border-2 border-gray-400 bg-white data-[state=checked]:border-amber-600 data-[state=checked]:bg-amber-600"
+                                            :aria-label="`Sélectionner la carte ${c.numero_carte}`"
+                                            @update:checked="() => toggle(c.id)"
+                                        />
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 font-mono font-medium tabular-nums text-gray-900">
+                                        {{ formatCardNumberDisplay(c.numero_carte) }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-gray-700">
+                                        {{ c.reference_facture || '—' }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-2.5">
+                                        <span
+                                            v-if="c.en_poche_cc"
+                                            class="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-900"
+                                        >
+                                            <UserSquare class="h-3 w-3" />
+                                            Chez un CC
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs font-medium text-gray-700"
+                                        >
+                                            <Building2 class="h-3 w-3" />
+                                            Pool agence
+                                        </span>
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="w-40">
+                                            <ExpirationBar
+                                                :expiration="c.expiration || '—'"
+                                                :date-expiration="c.date_expiration || ''"
+                                            />
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+
+            <OdConfirmDialog
+                :open="confirmerOuvert"
+                title="Renvoyer ces cartes au siège ?"
+                :description="`${selected.length} carte${selected.length > 1 ? 's' : ''} quitteront le stock agence et rejoindront la monétique centrale.`"
+                confirm-label="Enregistrer le retour"
+                cancel-label="Retour"
+                variant="warning"
+                :loading="form.processing"
+                @update:open="(v) => { if (!form.processing) confirmerOuvert = v }"
+                @confirm="submit"
+            />
         </div>
     </AppLayout>
 </template>

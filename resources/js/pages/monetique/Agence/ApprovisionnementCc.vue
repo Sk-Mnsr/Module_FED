@@ -1,12 +1,15 @@
 <script setup lang="ts">
+import ExpirationBar from '@/components/ExpirationBar.vue';
+import InputError from '@/components/InputError.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCardNumberDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
-import { Head, router, useForm } from '@inertiajs/vue3';
-import { Banknote, FileText, Package, Users } from 'lucide-vue-next';
+import { Head, useForm, usePage } from '@inertiajs/vue3';
+import { Inbox, Package, Search, Users } from 'lucide-vue-next';
 import { computed, ref } from 'vue';
 
 const breadcrumbs: BreadcrumbItem[] = [
@@ -15,7 +18,14 @@ const breadcrumbs: BreadcrumbItem[] = [
 ];
 
 type CC = { id: number; name: string; email: string | null };
-type Carte = { id: number; numero_carte: string; reference_facture: string; prix_vente: number };
+type Carte = {
+    id: number;
+    numero_carte: string;
+    reference_facture: string;
+    prix_vente: number;
+    expiration?: string | null;
+    date_expiration?: string | null;
+};
 
 const props = withDefaults(
     defineProps<{
@@ -28,8 +38,12 @@ const props = withDefaults(
     },
 );
 
+const page = usePage();
+const flash = computed(() => page.props.flash as { success?: string; error?: string } | undefined);
+
 const assignToUserId = ref<number | ''>('');
 const selected = ref<number[]>([]);
+const recherche = ref('');
 
 const toggle = (id: number) => {
     const i = selected.value.indexOf(id);
@@ -40,14 +54,31 @@ const toggle = (id: number) => {
     }
 };
 
+const cartesFiltrees = computed(() => {
+    const q = recherche.value.trim().toLowerCase();
+    if (!q) return props.cartes;
+    const qCompact = q.replace(/\s/g, '');
+    return props.cartes.filter((c) => {
+        const numero = c.numero_carte.replace(/\s/g, '').toLowerCase();
+        const facture = (c.reference_facture ?? '').toLowerCase();
+        return numero.includes(qCompact) || facture.includes(q);
+    });
+});
+
 const allSelected = computed(
-    () => props.cartes.length > 0 && selected.value.length === props.cartes.length,
+    () => cartesFiltrees.value.length > 0 && cartesFiltrees.value.every((c) => selected.value.includes(c.id)),
 );
 
 const toggleAll = () => {
-    const ids = props.cartes.map((c) => c.id);
-    selected.value = allSelected.value ? [] : [...ids];
+    const ids = cartesFiltrees.value.map((c) => c.id);
+    if (allSelected.value) {
+        selected.value = selected.value.filter((id) => !ids.includes(id));
+        return;
+    }
+    selected.value = [...new Set([...selected.value, ...ids])];
 };
+
+const ccChoisi = computed(() => props.chargeClientele.find((u) => u.id === Number(assignToUserId.value)) ?? null);
 
 const form = useForm({
     assign_to_user_id: null as number | null,
@@ -63,138 +94,208 @@ const submit = () => {
     if (form.coficarte_card_ids.length === 0) {
         return;
     }
-    form.post('/monetique/agence/approvisionnement-cc', { preserveScroll: true });
+    form.post('/monetique/agence/approvisionnement-cc', {
+        preserveScroll: true,
+        onSuccess: () => {
+            selected.value = [];
+            assignToUserId.value = '';
+        },
+    });
 };
 
 const formatCfa = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
-
-const selectClass =
-    'mt-1.5 flex h-11 w-full max-w-xl rounded-md border border-gray-300 bg-white px-3 text-sm shadow-sm ' +
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2';
 </script>
 
 <template>
     <Head title="Approvisionnement CC - Chef d'agence" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-8 p-6 max-w-5xl mx-auto w-full pb-28">
-            <button
-                type="button"
-                class="inline-flex items-center gap-2 text-sm font-medium text-violet-700 hover:text-violet-900 w-fit -ml-1"
-                @click="router.visit('/monetique/coficarte')"
-            >
-                ← Coficarte
-            </button>
-
-            <div class="flex items-start gap-4">
-                <div class="p-3.5 bg-emerald-100 text-emerald-900 rounded-2xl shadow-sm shrink-0">
-                    <Users class="h-7 w-7" />
+        <div class="flex flex-col gap-5 p-6 w-full">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div class="flex items-start gap-3">
+                    <div class="rounded-xl bg-emerald-100 p-2.5 text-emerald-900">
+                        <Users class="h-5 w-5" />
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-gray-900">Approvisionnement des chargés de clientèle</h1>
+                        <p class="mt-0.5 text-sm text-gray-600">
+                            Choisissez un chargé de clientèle, puis les cartes du pool agence à lui attribuer.
+                        </p>
+                    </div>
                 </div>
-                <div>
-                    <h1 class="text-2xl font-bold text-gray-900 tracking-tight">Approvisionnement des chargés de clientèle</h1>
-                    <p class="text-sm text-gray-600 mt-1 max-w-2xl leading-relaxed">
-                        Sélectionnez un <strong class="font-medium text-gray-800">chargé de clientèle</strong>, puis les cartes du
-                        <strong class="font-medium text-gray-800">pool agence</strong> (non encore affectées) à lui attribuer.
-                    </p>
-                </div>
-            </div>
-
-            <div class="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-2">
-                <Label for="cc" class="text-sm font-semibold text-gray-800">Chargé de clientèle destinataire</Label>
-                <select id="cc" v-model="assignToUserId" :class="selectClass">
-                    <option value="">— Sélectionner —</option>
-                    <option v-for="u in chargeClientele" :key="u.id" :value="u.id">
-                        {{ u.name }}{{ u.email ? ` — ${u.email}` : '' }}
-                    </option>
-                </select>
-                <p v-if="chargeClientele.length === 0" class="text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mt-2">
-                    Aucun utilisateur « Chargé de clientèle » sur votre agence. Paramétrez les comptes dans la configuration.
+                <p class="text-sm text-gray-500">
+                    {{ cartes.length }} carte(s) disponible(s)
+                    <span v-if="selected.length"> · {{ selected.length }} sélectionnée(s)</span>
                 </p>
             </div>
 
-            <div class="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-                <div class="px-5 py-4 bg-gradient-to-r from-emerald-50/90 to-white border-b border-emerald-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div class="flex items-start gap-3">
-                        <div class="p-2 rounded-lg bg-white border border-emerald-100 text-emerald-700 shrink-0">
-                            <Package class="h-5 w-5" />
-                        </div>
-                        <div>
-                            <p class="text-sm font-semibold text-gray-900">
-                                Pool agence — <span class="tabular-nums text-emerald-800">{{ cartes.length }}</span> carte(s)
-                                disponible(s)
-                            </p>
-                            <p class="text-xs text-gray-500 mt-0.5">
-                                <span class="tabular-nums font-medium text-gray-700">{{ selected.length }}</span> sélectionnée(s)
-                            </p>
-                        </div>
-                    </div>
-                    <Button v-if="cartes.length" type="button" variant="outline" size="sm" class="bg-white shrink-0" @click="toggleAll">
-                        {{ allSelected ? 'Tout désélectionner' : 'Tout sélectionner' }}
-                    </Button>
-                </div>
-
-                <div v-if="!cartes.length" class="px-6 py-14 text-center text-sm text-gray-500">
-                    Aucune carte dans le pool agence (non affectée à un CC).
-                </div>
-
-                <div v-else class="overflow-x-auto max-h-[min(52vh,480px)] overflow-y-auto">
-                    <table class="w-full text-sm">
-                        <thead class="sticky top-0 z-10 bg-gray-100/95 backdrop-blur border-b border-gray-200">
-                            <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                <th class="w-12 px-4 py-3"></th>
-                                <th class="px-4 py-3">Carte</th>
-                                <th class="px-4 py-3">Facture</th>
-                                <th class="px-4 py-3 text-right">Prix affiché</th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-gray-100">
-                            <tr
-                                v-for="c in cartes"
-                                :key="c.id"
-                                class="hover:bg-emerald-50/25 transition-colors"
-                                :class="selected.includes(c.id) ? 'bg-emerald-50/40' : ''"
-                            >
-                                <td class="px-4 py-3 align-middle">
-                                    <Checkbox
-                                        :checked="selected.includes(c.id)"
-                                        class="cursor-pointer"
-                                        @update:checked="() => toggle(c.id)"
-                                    />
-                                </td>
-                                <td class="px-4 py-3 font-mono font-semibold text-gray-900 tabular-nums">
-                                    {{ formatCardNumberDisplay(c.numero_carte) }}
-                                </td>
-                                <td class="px-4 py-3 text-gray-600">
-                                    <span class="inline-flex items-center gap-1">
-                                        <FileText class="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                                        {{ c.reference_facture }}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-3 text-right font-medium text-emerald-800 tabular-nums">
-                                    <span class="inline-flex items-center justify-end gap-1">
-                                        <Banknote class="h-3.5 w-3.5 opacity-70" />
-                                        {{ formatCfa(c.prix_vente) }}
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+            <div
+                v-if="flash?.success"
+                class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+            >
+                {{ flash.success }}
+            </div>
+            <div
+                v-if="flash?.error"
+                class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+            >
+                {{ flash.error }}
             </div>
 
-            <div
-                class="sticky bottom-0 z-10 -mx-2 px-2 py-4 bg-white/95 backdrop-blur border-t border-gray-200 sm:border-0 sm:bg-transparent sm:static sm:px-0 flex flex-col sm:flex-row sm:justify-end gap-2"
-            >
-                <Button
-                    class="bg-emerald-700 hover:bg-emerald-800 w-full sm:w-auto min-w-[220px]"
-                    :disabled="
-                        assignToUserId === '' || selected.length === 0 || chargeClientele.length === 0 || form.processing
-                    "
-                    @click="submit"
+            <div class="grid items-start gap-5 xl:grid-cols-[20rem_minmax(0,1fr)]">
+                <form
+                    class="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm xl:sticky xl:top-4"
+                    @submit.prevent="submit"
                 >
-                    Valider l’approvisionnement
-                    <span v-if="selected.length" class="ml-1 tabular-nums opacity-90">({{ selected.length }})</span>
-                </Button>
+                    <div>
+                        <h2 class="text-sm font-semibold text-gray-900">Destinataire</h2>
+                        <p class="mt-0.5 text-xs text-gray-500">Chargé de clientèle de l’agence.</p>
+                    </div>
+                    <div class="space-y-1.5">
+                        <Label for="cc" class="text-xs font-medium text-gray-600">Chargé de clientèle</Label>
+                        <select
+                            id="cc"
+                            v-model="assignToUserId"
+                            class="flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        >
+                            <option value="">— Sélectionner —</option>
+                            <option v-for="u in chargeClientele" :key="u.id" :value="u.id">
+                                {{ u.name }}
+                            </option>
+                        </select>
+                        <p v-if="ccChoisi?.email" class="text-xs text-gray-500">{{ ccChoisi.email }}</p>
+                        <p
+                            v-if="chargeClientele.length === 0"
+                            class="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                        >
+                            Aucun chargé de clientèle sur cette agence.
+                        </p>
+                        <InputError :message="form.errors.assign_to_user_id" />
+                        <InputError :message="form.errors.coficarte_card_ids" />
+                    </div>
+                    <div
+                        class="rounded-lg border px-3 py-2.5"
+                        :class="selected.length ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200 bg-gray-50'"
+                    >
+                        <p class="text-xs font-medium uppercase tracking-wide" :class="selected.length ? 'text-emerald-800' : 'text-gray-500'">
+                            Sélection
+                        </p>
+                        <p class="mt-0.5 text-sm font-semibold tabular-nums" :class="selected.length ? 'text-emerald-950' : 'text-gray-700'">
+                            {{ selected.length }} carte{{ selected.length > 1 ? 's' : '' }}
+                        </p>
+                        <p class="mt-1 text-xs leading-snug" :class="selected.length ? 'text-emerald-800' : 'text-gray-500'">
+                            {{
+                                selected.length
+                                    ? 'Ces cartes seront attribuées au destinataire.'
+                                    : 'Cochez les cartes dans le tableau.'
+                            }}
+                        </p>
+                    </div>
+                    <Button
+                        type="submit"
+                        class="w-full bg-emerald-700 hover:bg-emerald-800"
+                        :disabled="assignToUserId === '' || selected.length === 0 || chargeClientele.length === 0 || form.processing"
+                    >
+                        {{ selected.length ? `Attribuer ${selected.length} carte${selected.length > 1 ? 's' : ''}` : 'Attribuer' }}
+                    </Button>
+                </form>
+
+                <section class="min-w-0 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+                    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-4 py-3">
+                        <div class="flex items-center gap-2">
+                            <Package class="h-4 w-4 text-emerald-700" />
+                            <h2 class="text-sm font-semibold text-gray-900">Pool agence</h2>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div v-if="cartes.length" class="relative">
+                                <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                                <Input
+                                    v-model="recherche"
+                                    placeholder="N° carte, facture…"
+                                    class="h-8 w-44 border-gray-300 pl-8 text-sm"
+                                />
+                            </div>
+                            <Button
+                                v-if="cartesFiltrees.length"
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                class="bg-white"
+                                @click="toggleAll"
+                            >
+                                {{ allSelected ? 'Tout retirer' : 'Tout sélectionner' }}
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div v-if="!cartes.length" class="px-6 py-16 text-center">
+                        <Inbox class="mx-auto mb-3 h-10 w-10 text-gray-300" />
+                        <p class="text-sm text-gray-600">Aucune carte dans le pool agence.</p>
+                    </div>
+                    <div v-else-if="!cartesFiltrees.length" class="px-6 py-12 text-center text-sm text-gray-500">
+                        Aucune carte ne correspond à la recherche.
+                    </div>
+                    <div v-else class="max-h-[min(70vh,720px)] overflow-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="sticky top-0 z-10 bg-gray-50">
+                                <tr class="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-600">
+                                    <th class="w-14 px-4 py-2.5">
+                                        <Checkbox
+                                            :checked="allSelected"
+                                            :indeterminate="selected.length > 0 && !allSelected"
+                                            class="size-5 cursor-pointer border-2 border-gray-400 bg-white data-[state=checked]:border-emerald-600 data-[state=checked]:bg-emerald-600 data-[state=indeterminate]:border-emerald-600 data-[state=indeterminate]:bg-emerald-600"
+                                            aria-label="Tout sélectionner"
+                                            @update:checked="toggleAll"
+                                        />
+                                    </th>
+                                    <th class="px-4 py-2.5">N° carte</th>
+                                    <th class="px-4 py-2.5">Facture</th>
+                                    <th class="px-4 py-2.5 text-right">Prix</th>
+                                    <th class="px-4 py-2.5">Expire</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="c in cartesFiltrees"
+                                    :key="c.id"
+                                    class="cursor-pointer border-b border-gray-100 last:border-0"
+                                    :class="selected.includes(c.id) ? 'bg-emerald-100' : 'hover:bg-gray-50'"
+                                    @click="toggle(c.id)"
+                                >
+                                    <td
+                                        class="border-l-4 px-4 py-3"
+                                        :class="selected.includes(c.id) ? 'border-l-emerald-600' : 'border-l-transparent'"
+                                        @click.stop
+                                    >
+                                        <Checkbox
+                                            :checked="selected.includes(c.id)"
+                                            class="size-5 cursor-pointer border-2 border-gray-400 bg-white data-[state=checked]:border-emerald-600 data-[state=checked]:bg-emerald-600"
+                                            :aria-label="`Sélectionner la carte ${c.numero_carte}`"
+                                            @update:checked="() => toggle(c.id)"
+                                        />
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 font-mono font-medium tabular-nums text-gray-900">
+                                        {{ formatCardNumberDisplay(c.numero_carte) }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-gray-700">
+                                        {{ c.reference_facture || '—' }}
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-2.5 text-right tabular-nums text-gray-800">
+                                        {{ formatCfa(c.prix_vente) }}
+                                    </td>
+                                    <td class="px-4 py-2.5">
+                                        <div class="w-40">
+                                            <ExpirationBar
+                                                :expiration="c.expiration || '—'"
+                                                :date-expiration="c.date_expiration || ''"
+                                            />
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
             </div>
         </div>
     </AppLayout>

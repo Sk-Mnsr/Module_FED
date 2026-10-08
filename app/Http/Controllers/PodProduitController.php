@@ -11,6 +11,7 @@ use App\Models\PodProduitConstante;
 use App\Models\PodProduitEcran;
 use App\Models\PodProduitScript;
 use App\Models\PodTrancheFrais;
+use App\Models\Role;
 use App\Support\PodFicheParametrageImport;
 use App\Support\PodProduitAuditor;
 use App\Support\PodProduitWorkflow;
@@ -81,6 +82,7 @@ class PodProduitController extends Controller
                 PodProduit::MODE_MANUEL,
                 PodProduit::MODE_GRATUIT,
             ],
+            'initiateurs' => $this->roleOptions(),
         ]);
     }
 
@@ -809,6 +811,24 @@ class PodProduitController extends Controller
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @return list<array{slug: string, nom: string}>
+     */
+    private function roleOptions(): array
+    {
+        return Role::query()
+            ->where('actif', true)
+            ->orderBy('nom')
+            ->get(['slug', 'nom', 'label'])
+            ->map(fn (Role $role) => [
+                'slug' => (string) $role->slug,
+                'nom' => (string) ($role->nom ?: $role->label ?: $role->slug),
+            ])
+            ->filter(fn (array $role) => $role['slug'] !== '')
+            ->values()
+            ->all();
+    }
+
     private function formMeta(): array
     {
         return [
@@ -827,7 +847,7 @@ class PodProduitController extends Controller
             ],
             'naturesCompte' => ['client', 'produit', 'taf', 'contrepartie', 'autre'],
             'typesMontant' => ['frais_ht', 'taf', 'frais_plus_taf', 'montant_operation', 'fixe', 'pourcentage'],
-            'initiateurs' => ['CC', 'OPS', 'FINANCE'],
+            'initiateurs' => $this->roleOptions(),
             'typesChamp' => PodProduitChamp::TYPES,
             'profilsEcran' => PodProduitEcran::profilOptions(),
             'ecranTemplates' => PodProduitEcran::TEMPLATES,

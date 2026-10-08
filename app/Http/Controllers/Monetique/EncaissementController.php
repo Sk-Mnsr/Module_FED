@@ -320,4 +320,97 @@ class EncaissementController extends Controller
 
         return redirect()->route('monetique.encaissements', ['onglet' => 'encaissement'])->with('success', 'Encaissement recharge confirmé.');
     }
+
+    public function rejeterVente(Request $request, CoficarteSale $coficarteSale)
+    {
+        $this->ensureCaissierOuMonetique($request);
+        $user = $request->user();
+
+        $avis = $request->validate([
+            'avis' => 'required|string|min:3|max:1000',
+        ], [
+            'avis.required' => 'L’avis est obligatoire pour rejeter.',
+            'avis.min' => 'L’avis doit contenir au moins 3 caractères.',
+        ])['avis'];
+
+        if ($coficarteSale->payment_status !== CoficarteSale::PAYMENT_EN_ATTENTE) {
+            return redirect()->route('monetique.encaissements')->with('error', 'Cette vente n’est pas en attente d’encaissement.');
+        }
+
+        DB::transaction(function () use ($coficarteSale, $user, $avis) {
+            $sale = CoficarteSale::query()->whereKey($coficarteSale->id)->lockForUpdate()->firstOrFail();
+            if ($sale->payment_status !== CoficarteSale::PAYMENT_EN_ATTENTE) {
+                throw ValidationException::withMessages([
+                    'vente' => ['Statut déjà modifié.'],
+                ]);
+            }
+
+            $card = CoficarteCard::query()->whereKey($sale->coficarte_card_id)->lockForUpdate()->firstOrFail();
+
+            if (! CoficarteAgenceAccess::canViewAll($user)) {
+                if ((int) $card->agence_id !== (int) $user->agence_id) {
+                    abort(403);
+                }
+            }
+
+            $sale->update([
+                'payment_status' => CoficarteSale::PAYMENT_REJETE,
+                'rejet_avis' => trim($avis),
+            ]);
+
+            if ($card->status === CoficarteCard::STATUS_EN_ATTENTE_ENCAISSEMENT) {
+                $card->update(['status' => CoficarteCard::STATUS_EN_STOCK]);
+            }
+
+            CoficarteMovementLogger::log($card, 'vente_rejetee_caisse', [
+                'sale_id' => $sale->id,
+            ], $user->id);
+        });
+
+        return redirect()->route('monetique.encaissements', ['onglet' => 'encaissement'])->with('success', 'Vente rejetée. La carte est de nouveau disponible.');
+    }
+
+    public function rejeterRecharge(Request $request, CoficarteRecharge $coficarteRecharge)
+    {
+        $this->ensureCaissierOuMonetique($request);
+        $user = $request->user();
+
+        $avis = $request->validate([
+            'avis' => 'required|string|min:3|max:1000',
+        ], [
+            'avis.required' => 'L’avis est obligatoire pour rejeter.',
+            'avis.min' => 'L’avis doit contenir au moins 3 caractères.',
+        ])['avis'];
+
+        if ($coficarteRecharge->payment_status !== CoficarteRecharge::PAYMENT_EN_ATTENTE) {
+            return redirect()->route('monetique.encaissements')->with('error', 'Cette recharge n’est pas en attente d’encaissement.');
+        }
+
+        DB::transaction(function () use ($coficarteRecharge, $user, $avis) {
+            $recharge = CoficarteRecharge::query()->whereKey($coficarteRecharge->id)->lockForUpdate()->firstOrFail();
+            if ($recharge->payment_status !== CoficarteRecharge::PAYMENT_EN_ATTENTE) {
+                throw ValidationException::withMessages([
+                    'recharge' => ['Statut déjà modifié.'],
+                ]);
+            }
+
+            if (! CoficarteAgenceAccess::canViewAll($user)) {
+                $agenceCarte = $recharge->coficarte_card_id
+                    ? (int) CoficarteCard::query()->whereKey($recharge->coficarte_card_id)->value('agence_id')
+                    : (int) ($recharge->agence_enregistrement_id ?? 0);
+                if ($user->agence_id === null || $agenceCarte !== (int) $user->agence_id) {
+                    abort(403);
+                }
+            }
+
+            $recharge->update([
+                'payment_status' => CoficarteRecharge::PAYMENT_REJETE,
+                'rejet_avis' => trim($avis),
+                'confirmed_by_user_id' => $user->id,
+                'confirmed_at' => now(),
+            ]);
+        });
+
+        return redirect()->route('monetique.encaissements', ['onglet' => 'encaissement'])->with('success', 'Recharge rejetée.');
+    }
 }

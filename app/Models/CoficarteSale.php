@@ -11,6 +11,8 @@ class CoficarteSale extends Model
 
     public const PAYMENT_ENCAISSE = 'encaisse';
 
+    public const PAYMENT_REJETE = 'rejete';
+
     public const COMPTE_PACK_IN = 'in_pack';
 
     public const COMPTE_PACK_HORS = 'hors_pack';
@@ -34,6 +36,7 @@ class CoficarteSale extends Model
         'gpt_id',
         'locked',
         'payment_status',
+        'rejet_avis',
         'encaissement_code',
         'bordereau_caisse_path',
         'coficarte_apporteur_id',

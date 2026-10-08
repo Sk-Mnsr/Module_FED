@@ -11,6 +11,8 @@ class CoficarteRecharge extends Model
 
     public const PAYMENT_ENCAISSE = 'encaisse';
 
+    public const PAYMENT_REJETE = 'rejete';
+
     protected $table = 'coficarte_recharges';
 
     protected $fillable = [
@@ -23,6 +25,7 @@ class CoficarteRecharge extends Model
         'email_titulaire',
         'honoraire_chargement',
         'payment_status',
+        'rejet_avis',
         'encaissement_code',
         'bordereau_caisse_path',
         'confirmed_by_user_id',

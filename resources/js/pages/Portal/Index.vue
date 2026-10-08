@@ -45,7 +45,12 @@ defineProps<{
 }>();
 
 const page = usePage();
-const userName = computed(() => (page.props.auth as { user?: { name?: string } })?.user?.name ?? '');
+const authUser = computed(
+    () =>
+        (page.props.auth as { user?: { name?: string; fonction?: string | null } })?.user ?? null,
+);
+const userName = computed(() => authUser.value?.name ?? '');
+const userFonction = computed(() => authUser.value?.fonction?.trim() ?? '');
 
 const iconMap: Record<string, Component> = {
     'layout-grid': LayoutGrid,
@@ -174,6 +179,9 @@ function adminIcon(label: string) {
                         <div class="min-w-0">
                             <p class="text-[11px] text-muted-foreground">Connecté en tant que</p>
                             <p class="truncate font-semibold text-foreground">{{ userName }}</p>
+                            <p v-if="userFonction" class="truncate text-xs text-muted-foreground">
+                                {{ userFonction }}
+                            </p>
                         </div>
                     </div>
                 </header>

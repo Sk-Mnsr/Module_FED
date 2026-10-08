@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import DataTable from '@/components/DataTable.vue';
 import { Button } from '@/components/ui/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { formatCardNumberDisplay } from '@/lib/utils';
 import { type BreadcrumbItem } from '@/types';
 import { Head, router, usePage } from '@inertiajs/vue3';
-import { Banknote, CreditCard, ExternalLink, FileText, History, Plus, RotateCcw } from 'lucide-vue-next';
+import { CreditCard, ExternalLink, FileText, History, MoreHorizontal, Plus, RotateCcw } from 'lucide-vue-next';
 import { computed, ref, watch, onMounted } from 'vue';
 import EncaissementBordereauDialog, {
     type BordereauEntite,
@@ -92,15 +98,29 @@ const formatCfa = (n: number) => `${n.toLocaleString('fr-FR')} F CFA`;
 const columns = [
     { key: 'numero_carte', title: 'Carte' },
     { key: 'titulaire_carte', title: 'Titulaire' },
-    { key: 'montant', title: 'Montants' },
+    { key: 'montant', title: 'Montant' },
     { key: 'paiement', title: 'Paiement' },
     { key: 'demandeur', title: 'Demandeur' },
     { key: 'caissier', title: 'Caissier' },
     { key: 'campagne', title: 'Campagne' },
-    { key: 'created_at', title: 'Créée le' },
-    { key: 'confirmed_at', title: 'Confirmée le' },
-    { key: 'bordereaux', title: 'Bordereaux' },
+    { key: 'created_at', title: 'Créée' },
+    { key: 'confirmed_at', title: 'Confirmée' },
+    { key: 'actions', title: '' },
 ];
+
+function paiementCourt(status: string): string {
+    if (status === 'en_attente') return 'Attente';
+    if (status === 'rejete') return 'Rejetée';
+    return 'Encaissé';
+}
+
+function detailMontant(item: Row): string {
+    const parts = [`Recharge ${formatCfa(item.montant)}`];
+    if ((item.honoraire_chargement ?? 0) > 0) {
+        parts.push(`Honoraires ${formatCfa(item.honoraire_chargement ?? 0)}`);
+    }
+    return parts.join(' · ');
+}
 
 const rows = computed(() => props.recharges?.data ?? []);
 
@@ -144,6 +164,11 @@ function ouvrirBordereauCcDepuisLigne(payload: EncaissementBordereauPayload | un
     if (!payload || (payload.kind !== 'vente' && payload.kind !== 'recharge')) return;
     bordereauCcPayload.value = payload;
     bordereauCcOpen.value = true;
+}
+
+function ouvrirBordereauCaisse(url: string | null | undefined) {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener');
 }
 
 watch(
@@ -242,73 +267,59 @@ watch(
                 :on-items-per-page-change="onItemsPerPageChange"
             >
                 <template #item.numero_carte="{ item }">
-                    <div class="flex min-w-[9rem] flex-col gap-1">
-                        <div class="flex items-center gap-3">
-                            <div
-                                class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400"
-                            >
-                                <CreditCard class="h-4 w-4" />
-                            </div>
-                            <span class="font-mono text-sm font-medium tabular-nums text-gray-900 dark:text-neutral-100">
-                                {{ formatCardNumberDisplay(item.numero_carte) }}
-                            </span>
+                    <div class="flex items-center gap-2 whitespace-nowrap">
+                        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-600">
+                            <CreditCard class="h-4 w-4" />
                         </div>
+                        <span class="font-mono text-sm font-medium tabular-nums text-gray-900">
+                            {{ formatCardNumberDisplay(item.numero_carte) }}
+                        </span>
                         <span
                             v-if="item.carte_interne === false"
-                            class="inline-flex w-fit rounded-md border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900"
+                            class="rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-900"
+                            title="Hors stock Coficarte"
                         >
-                            Hors stock Coficarte
+                            Hors stock
                         </span>
                     </div>
                 </template>
 
                 <template #item.titulaire_carte="{ item }">
-                    <div class="text-sm text-gray-800 min-w-[120px]">
-                        <span class="font-medium">{{ item.titulaire_carte?.trim() || '—' }}</span>
-                        <p v-if="item.email_titulaire?.trim()" class="text-xs text-gray-500 truncate max-w-[200px]">
-                            {{ item.email_titulaire.trim() }}
-                        </p>
-                    </div>
+                    <span class="whitespace-nowrap text-sm font-medium text-gray-800" :title="item.email_titulaire?.trim() || undefined">
+                        {{ item.titulaire_carte?.trim() || '—' }}
+                    </span>
                 </template>
 
                 <template #item.montant="{ item }">
-                    <div class="text-sm">
-                        <span class="inline-flex items-center gap-1.5 font-semibold text-red-700 dark:text-red-400">
-                            <Banknote class="h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-500" />
-                            {{ formatCfa(item.montant_total_affichage ?? item.montant) }}
-                        </span>
-                        <p class="mt-0.5 text-xs text-gray-500 dark:text-neutral-500">
-                            Recharge {{ formatCfa(item.montant) }}
-                            <span v-if="(item.honoraire_chargement ?? 0) > 0">
-                                · Honoraires {{ formatCfa(item.honoraire_chargement ?? 0) }}
-                            </span>
-                        </p>
-                    </div>
+                    <span class="whitespace-nowrap text-sm font-semibold tabular-nums text-red-700" :title="detailMontant(item)">
+                        {{ formatCfa(item.montant_total_affichage ?? item.montant) }}
+                    </span>
                 </template>
 
                 <template #item.paiement="{ item }">
                     <span
-                        :class="[
-                            'inline-flex rounded-md border px-2 py-1 text-xs font-semibold',
-                            item.payment_status === 'en_attente'
-                                ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200'
-                                : 'border-red-200 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200',
-                        ]"
+                        class="inline-flex whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold"
+                        :class="item.payment_status === 'en_attente'
+                            ? 'border-amber-200 bg-amber-50 text-amber-900'
+                            : item.payment_status === 'rejete'
+                                ? 'border-rose-200 bg-rose-50 text-rose-800'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-900'"
+                        :title="item.paiement"
                     >
-                        {{ item.paiement }}
+                        {{ paiementCourt(item.payment_status) }}
                     </span>
                 </template>
 
                 <template #item.demandeur="{ item }">
-                    <span class="text-sm text-gray-700">{{ item.demandeur }}</span>
+                    <span class="whitespace-nowrap text-sm text-gray-700">{{ item.demandeur }}</span>
                 </template>
 
                 <template #item.caissier="{ item }">
-                    <span class="text-sm text-gray-600">{{ item.caissier !== '—' ? item.caissier : '—' }}</span>
+                    <span class="whitespace-nowrap text-sm text-gray-600">{{ item.caissier !== '—' ? item.caissier : '—' }}</span>
                 </template>
 
                 <template #item.campagne="{ item }">
-                    <span class="text-sm text-gray-600">{{ item.campagne ?? '—' }}</span>
+                    <span class="whitespace-nowrap text-sm text-gray-600">{{ item.campagne ?? '—' }}</span>
                 </template>
 
                 <template #item.created_at="{ item }">
@@ -321,33 +332,33 @@ watch(
                     }}</span>
                 </template>
 
-                <template #item.bordereaux="{ item }">
-                    <div class="flex items-center justify-end gap-1 flex-wrap">
-                        <button
-                            type="button"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                            title="Bordereau commercial (aperçu / impression)"
-                            @click="ouvrirBordereauCcDepuisLigne(item.bordereau_cc_payload)"
-                        >
-                            <FileText class="h-4 w-4" />
-                        </button>
-                        <a
-                            v-if="item.bordereau_caisse_url"
-                            :href="item.bordereau_caisse_url"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            class="inline-flex items-center justify-center rounded-md p-2 text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                            title="Bordereau caisse (pièce jointe)"
-                        >
-                            <ExternalLink class="h-4 w-4" />
-                        </a>
-                        <span
-                            v-else
-                            class="inline-flex items-center justify-center rounded-md p-2 text-gray-300 cursor-not-allowed"
-                            title="Pas encore de bordereau caisse (ex. en attente caisse)"
-                        >
-                            <ExternalLink class="h-4 w-4" />
-                        </span>
+                <template #item.actions="{ item }">
+                    <div class="flex justify-end">
+                        <DropdownMenu>
+                            <DropdownMenuTrigger as-child>
+                                <button
+                                    type="button"
+                                    class="inline-flex size-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                    aria-label="Actions"
+                                >
+                                    <MoreHorizontal class="h-4 w-4" />
+                                </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" class="w-52">
+                                <DropdownMenuItem class="text-sm" @click="ouvrirBordereauCcDepuisLigne(item.bordereau_cc_payload)">
+                                    <FileText class="size-4" />
+                                    Bordereau commercial
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    v-if="item.bordereau_caisse_url"
+                                    class="text-sm"
+                                    @click="ouvrirBordereauCaisse(item.bordereau_caisse_url)"
+                                >
+                                    <ExternalLink class="size-4" />
+                                    Bordereau caisse
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </template>
             </DataTable>

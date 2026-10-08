@@ -37,6 +37,7 @@ class SupplyRequestController extends Controller
                     'commentaire' => $d->commentaire,
                     'status' => $d->status,
                     'reponse_monetique' => $d->reponse_monetique,
+                    'created_at' => $d->created_at?->format('d/m/Y H:i'),
                     'traite_le' => $d->traite_le?->format('d/m/Y H:i'),
                     'bon_numero' => $pending?->bon_numero ?? $last?->bon_numero,
                     'transfer_statut' => $pending?->status ?? $last?->status,

@@ -120,7 +120,7 @@ const props = defineProps<{
     modesFrais: string[];
     naturesCompte: string[];
     typesMontant: string[];
-    initiateurs: string[];
+    initiateurs: Array<{ slug: string; nom: string }>;
     typesChamp: string[];
     tablesSources: TableSource[];
     profilsEcran: ProfilOption[];
@@ -235,7 +235,7 @@ const form = useForm({
     compte_produit: props.produit?.compte_produit ?? '',
     compte_taf: props.produit?.compte_taf ?? '331431012',
     compte_client_mask: props.produit?.compte_client_mask ?? '251XXXXXX',
-    initiateur: props.produit?.initiateur ?? 'CC',
+    initiateur: props.produit?.initiateur ?? '',
     validateur: props.produit?.validateur ?? '',
     mode_frais: props.produit?.mode_frais ?? 'fixe',
     frais_fixe: props.produit?.frais_fixe ?? '',
@@ -684,7 +684,16 @@ if (showTauxFrais.value) {
                     <div :class="fieldClass">
                         <Label>Initiateur</Label>
                         <select v-model="form.initiateur" :class="selectClass">
-                            <option v-for="i in initiateurs" :key="i" :value="i">{{ i }}</option>
+                            <option value="">— Choisir un rôle —</option>
+                            <option
+                                v-if="form.initiateur && !initiateurs.some((r) => r.slug === form.initiateur)"
+                                :value="form.initiateur"
+                            >
+                                {{ form.initiateur }}
+                            </option>
+                            <option v-for="role in initiateurs" :key="role.slug" :value="role.slug">
+                                {{ role.nom }}
+                            </option>
                         </select>
                     </div>
                     <div :class="fieldClass">

@@ -53,6 +53,8 @@ const props = withDefaults(
 
 const typesAcheteur = ['Particulier', 'Entreprise'];
 
+const typesPiece = ['CNI', 'Passeport', 'Permis de conduire', 'Carte de séjour', 'Carte consulaire'];
+
 const optionsCompteClient = [
     { value: 'in_pack', label: 'In Pack' },
     { value: 'hors_pack', label: 'Hors Pack' },
@@ -60,9 +62,16 @@ const optionsCompteClient = [
 
 const ficheInputKey = ref(0);
 
+function todayIso(): string {
+    const d = new Date();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${d.getFullYear()}-${m}-${day}`;
+}
+
 const form = useForm({
     coficarte_card_id: '' as number | '',
-    date_vente: '',
+    date_vente: todayIso(),
     derniers_4: '',
     type_acheteur: '',
     nom_client: '',
@@ -121,7 +130,7 @@ function expirationPlasticMmYy(iso: string | null | undefined): string | null {
 
 const reset = () => {
     form.coficarte_card_id = '';
-    form.date_vente = '';
+    form.date_vente = todayIso();
     form.derniers_4 = '';
     form.type_acheteur = '';
     form.nom_client = '';
@@ -199,7 +208,7 @@ const submit = () => {
     <Head title="Monétique - Ventes - Nouveau" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex flex-col gap-8 p-6 max-w-6xl mx-auto w-full">
+        <div class="flex min-h-[calc(100vh-4.5rem)] w-full flex-col gap-6 p-4 sm:p-6">
             <div class="flex flex-col sm:flex-row sm:items-center gap-4 sm:justify-between">
                 <div class="flex items-center gap-3">
                     <div class="p-3 bg-violet-100 text-violet-700 rounded-xl shrink-0">
@@ -217,11 +226,11 @@ const submit = () => {
                 </Button>
             </div>
 
-            <form @submit.prevent="submit" class="space-y-8">
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            <form @submit.prevent="submit" class="flex min-h-0 flex-1 flex-col gap-6">
+                <div class="grid flex-1 grid-cols-1 items-stretch gap-6 lg:grid-cols-12">
                     <!-- Panneau carte -->
-                    <aside class="lg:col-span-4 space-y-4 lg:sticky lg:top-6">
-                        <div class="rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 via-white to-white shadow-sm overflow-hidden">
+                    <aside class="space-y-4 lg:col-span-4 lg:sticky lg:top-4 lg:self-start">
+                        <div class="h-full overflow-hidden rounded-2xl border border-violet-200/80 bg-gradient-to-br from-violet-50/90 via-white to-white shadow-sm">
                             <div class="px-5 py-4 border-b border-violet-100/80 bg-violet-50/50">
                                 <h2 class="text-sm font-semibold text-violet-950 flex items-center gap-2">
                                     <CreditCard class="h-4 w-4 shrink-0" />
@@ -300,7 +309,7 @@ const submit = () => {
                     </aside>
 
                     <!-- Formulaire client & vente -->
-                    <div class="lg:col-span-8 space-y-6">
+                    <div class="space-y-6 lg:col-span-8">
                         <section class="rounded-2xl border border-gray-200 bg-white shadow-sm p-6 space-y-5">
                             <h3 class="text-sm font-semibold text-gray-800 border-b border-gray-100 pb-2">Acheteur & contact</h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -456,7 +465,14 @@ const submit = () => {
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div class="space-y-1">
                                         <Label for="kyc_type_piece" class="text-[10px] text-gray-500">Type</Label>
-                                        <Input id="kyc_type_piece" v-model="form.kyc_type_piece" placeholder="CNI, Passeport…" class="border-gray-200" />
+                                        <select
+                                            id="kyc_type_piece"
+                                            v-model="form.kyc_type_piece"
+                                            class="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                                        >
+                                            <option value="">— Sélectionner —</option>
+                                            <option v-for="t in typesPiece" :key="t" :value="t">{{ t }}</option>
+                                        </select>
                                         <InputError :message="form.errors.kyc_type_piece" />
                                     </div>
                                     <div class="space-y-1">

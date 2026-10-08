@@ -143,7 +143,7 @@ class VenteController extends Controller
             'telephone_client' => 'required|string|max:64',
             'email_client' => 'nullable|email|max:191',
             'adresse_client' => 'required|string|max:2000',
-            'montant_premiere_recharge' => 'required|integer|min:0',
+            'montant_premiere_recharge' => 'nullable|integer|min:0',
             'coficarte_apporteur_id' => $apporteurRules,
             'coficarte_campaign_id' => 'nullable|exists:coficarte_campaigns,id',
             'kyc_type_piece' => 'required|string|max:64',
@@ -186,7 +186,7 @@ class VenteController extends Controller
                 'telephone_client' => $validated['telephone_client'],
                 'email_client' => $validated['email_client'] ?? null,
                 'adresse_client' => $validated['adresse_client'],
-                'montant_premiere_recharge' => $validated['montant_premiere_recharge'],
+                'montant_premiere_recharge' => (int) ($validated['montant_premiere_recharge'] ?? 0),
                 'fiche_enrolement_path' => $fichePath,
                 'gpt_id' => filled($validated['gpt_id'] ?? null) ? trim((string) $validated['gpt_id']) : null,
                 'locked' => true,
@@ -235,6 +235,7 @@ class VenteController extends Controller
                 $paiement = match ($sale->payment_status) {
                     CoficarteSale::PAYMENT_EN_ATTENTE => 'En attente caisse',
                     CoficarteSale::PAYMENT_ENCAISSE => 'Encaissé / activé',
+                    CoficarteSale::PAYMENT_REJETE => 'Rejetée',
                     default => $sale->payment_status,
                 };
 
@@ -264,6 +265,32 @@ class VenteController extends Controller
 
         return Inertia::render('monetique/Ventes/Historique', [
             'sales' => $sales,
+        ]);
+    }
+
+    public function ficheEnrolement(Request $request, CoficarteSale $sale)
+    {
+        $user = $request->user();
+        $sale->loadMissing('card:id,agence_id');
+
+        if (! CoficarteAgenceAccess::canViewAll($user)) {
+            $sameAgence = $user->agence_id !== null
+                && (int) $sale->card?->agence_id === (int) $user->agence_id;
+            $isSeller = (int) $sale->user_id === (int) $user->id;
+            if (! $sameAgence && ! $isSeller) {
+                abort(403);
+            }
+        }
+
+        $path = $sale->fiche_enrolement_path;
+        if (! $path || ! Storage::disk('public')->exists($path)) {
+            abort(404);
+        }
+
+        $name = basename($path);
+
+        return response()->file(Storage::disk('public')->path($path), [
+            'Content-Disposition' => 'inline; filename="'.$name.'"',
         ]);
     }
 }

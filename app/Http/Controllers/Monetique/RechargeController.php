@@ -161,6 +161,7 @@ class RechargeController extends Controller
             $paiement = match ($r->payment_status) {
                 CoficarteRecharge::PAYMENT_EN_ATTENTE => 'En attente caisse',
                 CoficarteRecharge::PAYMENT_ENCAISSE => 'Encaissé',
+                CoficarteRecharge::PAYMENT_REJETE => 'Rejetée',
                 default => $r->payment_status,
             };
 
