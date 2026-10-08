@@ -30,19 +30,21 @@ class PilotageController extends Controller
         [$from, $to, $periodeMeta] = $this->resolvePeriode($request);
         $payload = $this->buildPayload($request, $from, $to, $periodeMeta);
 
-        $filename = sprintf(
-            'pilotage_coficarte_%s_%s.csv',
-            $from->format('Ymd'),
-            $to->format('Ymd'),
-        );
+        $filename = ($periodeMeta['preset'] ?? '') === 'all'
+            ? 'pilotage_coficarte_global.csv'
+            : sprintf('pilotage_coficarte_%s_%s.csv', $from->format('Ymd'), $to->format('Ymd'));
 
         return response()->streamDownload(function () use ($payload, $periodeMeta) {
             echo "\xEF\xBB\xBF";
             $handle = fopen('php://output', 'w');
 
+            $libellePeriode = ($periodeMeta['preset'] ?? '') === 'all'
+                ? 'Toutes les périodes'
+                : $periodeMeta['debut'].' — '.$periodeMeta['fin'];
+
             fputcsv($handle, [
                 'Période',
-                $periodeMeta['debut'].' — '.$periodeMeta['fin'],
+                $libellePeriode,
                 'Preset',
                 $periodeMeta['preset'],
             ]);
@@ -53,6 +55,7 @@ class PilotageController extends Controller
                 'Objectif ventes',
                 '% ventes',
                 'Volume ventes (F CFA)',
+                'Volume achat (F CFA)',
                 'Montant recharges (F CFA)',
                 'Objectif recharges',
                 '% recharges',
@@ -66,6 +69,7 @@ class PilotageController extends Controller
                     $row['objectif_nb_ventes'],
                     $row['pct_ventes'] ?? '',
                     $row['volume_ventes'],
+                    '',
                     $row['montant_recharges'],
                     $row['objectif_montant_recharges'],
                     $row['pct_recharges'] ?? '',
@@ -80,6 +84,7 @@ class PilotageController extends Controller
                 $payload['objectifs_reseau']['nb_ventes'],
                 '',
                 $payload['totaux']['volume_ventes'],
+                $payload['totaux']['volume_achat'],
                 $payload['totaux']['montant_recharges'],
                 $payload['objectifs_reseau']['montant_recharges'],
                 '',
@@ -97,12 +102,15 @@ class PilotageController extends Controller
      */
     private function resolvePeriode(Request $request): array
     {
-        $preset = $request->string('preset', 'current_month')->toString();
-        if (! in_array($preset, ['current_month', 'previous_month', 'custom'], true)) {
-            $preset = 'current_month';
+        $preset = $request->string('preset', 'all')->toString();
+        if (! in_array($preset, ['all', 'current_month', 'previous_month', 'custom'], true)) {
+            $preset = 'all';
         }
 
-        if ($preset === 'previous_month') {
+        if ($preset === 'all') {
+            $from = now()->startOfDay();
+            $to = now()->endOfDay();
+        } elseif ($preset === 'previous_month') {
             $from = now()->subMonthNoOverflow()->startOfMonth();
             $to = now()->subMonthNoOverflow()->endOfMonth();
         } elseif ($preset === 'custom') {
@@ -127,11 +135,12 @@ class PilotageController extends Controller
             $from,
             $to,
             [
-                'debut' => $from->format('d/m/Y'),
-                'fin' => $to->format('d/m/Y'),
+                'debut' => $preset === 'all' ? '' : $from->format('d/m/Y'),
+                'fin' => $preset === 'all' ? '' : $to->format('d/m/Y'),
                 'preset' => $preset,
                 'debut_iso' => $from->toDateString(),
                 'fin_iso' => $to->toDateString(),
+                'borne' => $preset !== 'all',
             ],
         ];
     }
@@ -140,6 +149,8 @@ class PilotageController extends Controller
     {
         $user = $request->user();
         $central = CoficarteAgenceAccess::canViewAll($user);
+        $borne = (bool) ($periodeMeta['borne'] ?? true);
+        $saleDates = [$from->toDateString(), $to->toDateString()];
 
         $thresholdCentral = CoficarteStockThreshold::query()
             ->where('cible', CoficarteStockThreshold::CIBLE_CENTRAL)
@@ -154,7 +165,7 @@ class PilotageController extends Controller
         $rechargesMontantParAgence = CoficarteRecharge::query()
             ->select('agence_enregistrement_id', DB::raw('COALESCE(SUM(montant), 0) as montant'))
             ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
-            ->whereBetween('coficarte_recharges.created_at', [$from, $to])
+            ->when($borne, fn ($q) => $q->whereBetween('coficarte_recharges.created_at', [$from, $to]))
             ->whereNotNull('agence_enregistrement_id')
             ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
             ->groupBy('agence_enregistrement_id')
@@ -162,7 +173,7 @@ class PilotageController extends Controller
 
         $salesBase = CoficarteSale::query()
             ->where('payment_status', CoficarteSale::PAYMENT_ENCAISSE)
-            ->whereBetween('date_vente', [$from->toDateString(), $to->toDateString()])
+            ->when($borne, fn ($q) => $q->whereBetween('date_vente', $saleDates))
             ->whereHas('card', function ($q) use ($central, $user) {
                 if (! $central && $user && $user->agence_id) {
                     $q->where('agence_id', $user->agence_id);
@@ -172,10 +183,12 @@ class PilotageController extends Controller
         $nbVentes = (clone $salesBase)->count();
         $volumeVentes = (clone $salesBase)->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->sum('coficarte_cards.prix_vente');
+        $volumeAchat = (clone $salesBase)->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
+            ->sum('coficarte_cards.prix_achat');
 
         $rechargesBase = CoficarteRecharge::query()
             ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
-            ->whereBetween('coficarte_recharges.created_at', [$from, $to])
+            ->when($borne, fn ($q) => $q->whereBetween('coficarte_recharges.created_at', [$from, $to]))
             ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id));
 
         $nbRecharges = (clone $rechargesBase)->count();
@@ -185,7 +198,7 @@ class PilotageController extends Controller
             ->select('coficarte_cards.agence_id', DB::raw('count(*) as nb'), DB::raw('sum(coficarte_cards.prix_vente) as volume'))
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
-            ->whereBetween('coficarte_sales.date_vente', [$from->toDateString(), $to->toDateString()])
+            ->when($borne, fn ($q) => $q->whereBetween('coficarte_sales.date_vente', $saleDates))
             ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
             ->groupBy('coficarte_cards.agence_id')
             ->get();
@@ -240,7 +253,7 @@ class PilotageController extends Controller
             ->join('users', 'users.id', '=', 'coficarte_sales.user_id')
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
-            ->whereBetween('coficarte_sales.date_vente', [$from->toDateString(), $to->toDateString()])
+            ->when($borne, fn ($q) => $q->whereBetween('coficarte_sales.date_vente', $saleDates))
             ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
             ->select('users.name', DB::raw('count(*) as nb'))
             ->groupBy('coficarte_sales.user_id', 'users.name')
@@ -253,7 +266,7 @@ class PilotageController extends Controller
             ->join('coficarte_apporteurs', 'coficarte_apporteurs.id', '=', 'coficarte_sales.coficarte_apporteur_id')
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
-            ->whereBetween('coficarte_sales.date_vente', [$from->toDateString(), $to->toDateString()])
+            ->when($borne, fn ($q) => $q->whereBetween('coficarte_sales.date_vente', $saleDates))
             ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
             ->select('coficarte_apporteurs.nom', DB::raw('count(*) as nb'))
             ->groupBy('coficarte_apporteurs.id', 'coficarte_apporteurs.nom')
@@ -269,17 +282,17 @@ class PilotageController extends Controller
             }))
             ->get();
 
-        $campagnesProgress = $campagnes->map(function (CoficarteCampaign $c) use ($from, $to, $central, $user) {
+        $campagnesProgress = $campagnes->map(function (CoficarteCampaign $c) use ($from, $to, $central, $user, $borne, $saleDates) {
             $ventes = CoficarteSale::query()
                 ->where('coficarte_campaign_id', $c->id)
                 ->where('payment_status', CoficarteSale::PAYMENT_ENCAISSE)
-                ->whereBetween('date_vente', [$from->toDateString(), $to->toDateString()])
+                ->when($borne, fn ($q) => $q->whereBetween('date_vente', $saleDates))
                 ->count();
 
             $montantRec = CoficarteRecharge::query()
                 ->where('coficarte_campaign_id', $c->id)
                 ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
-                ->whereBetween('created_at', [$from, $to])
+                ->when($borne, fn ($q) => $q->whereBetween('created_at', [$from, $to]))
                 ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
                 ->sum('montant');
 
@@ -293,7 +306,7 @@ class PilotageController extends Controller
             ];
         });
 
-        $serieJournaliere = $this->buildSerieJournaliere($from, $to, $central, $user);
+        $serieJournaliere = $this->buildSerieJournaliere($from, $to, $central, $user, $borne);
 
         $ticketMoyen = $nbVentes > 0 ? (int) round(((int) $volumeVentes) / $nbVentes) : 0;
         $ratioRechargesVentes = $nbVentes > 0
@@ -305,6 +318,7 @@ class PilotageController extends Controller
             'totaux' => [
                 'nb_ventes' => $nbVentes,
                 'volume_ventes' => (int) $volumeVentes,
+                'volume_achat' => (int) $volumeAchat,
                 'nb_recharges' => $nbRecharges,
                 'montant_recharges' => (int) $montantRecharges,
                 'ticket_moyen' => $ticketMoyen,
@@ -327,8 +341,15 @@ class PilotageController extends Controller
     /**
      * @return list<array{date: string, label: string, nb_ventes: int, montant_recharges: int}>
      */
-    private function buildSerieJournaliere(Carbon $from, Carbon $to, bool $central, $user): array
+    private function buildSerieJournaliere(Carbon $from, Carbon $to, bool $central, $user, bool $borne = true): array
     {
+        if (! $borne) {
+            [$from, $to] = $this->bornesActivite($central, $user);
+            if ($from === null || $to === null) {
+                return [];
+            }
+        }
+
         $ventesParJour = CoficarteSale::query()
             ->select('coficarte_sales.date_vente', DB::raw('count(*) as nb'))
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
@@ -362,5 +383,46 @@ class PilotageController extends Controller
         }
 
         return $serie;
+    }
+
+    /**
+     * Bornes réelles de l'activité encaissée, pour le graphique en vue globale.
+     *
+     * @return array{0: ?Carbon, 1: ?Carbon}
+     */
+    private function bornesActivite(bool $central, $user): array
+    {
+        $sale = CoficarteSale::query()
+            ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
+            ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
+            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
+            ->selectRaw('min(coficarte_sales.date_vente) as dmin, max(coficarte_sales.date_vente) as dmax')
+            ->first();
+
+        $recharge = CoficarteRecharge::query()
+            ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
+            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
+            ->selectRaw('min(created_at) as dmin, max(created_at) as dmax')
+            ->first();
+
+        $dates = array_values(array_filter([
+            $sale->dmin ?? null,
+            $sale->dmax ?? null,
+            $recharge->dmin ?? null,
+            $recharge->dmax ?? null,
+        ]));
+
+        if ($dates === []) {
+            return [null, null];
+        }
+
+        $from = Carbon::parse(min($dates))->startOfDay();
+        $to = Carbon::parse(max($dates))->endOfDay();
+
+        if ($from->diffInDays($to) > 366) {
+            $from = $to->copy()->subDays(366)->startOfDay();
+        }
+
+        return [$from, $to];
     }
 }

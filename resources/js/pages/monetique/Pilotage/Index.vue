@@ -13,6 +13,7 @@ import {
     Inbox,
     Megaphone,
     RefreshCw,
+    ShoppingBag,
     ShoppingCart,
     TrendingUp,
     UserCircle,
@@ -51,6 +52,7 @@ const props = withDefaults(
         totaux: {
             nb_ventes: number;
             volume_ventes: number;
+            volume_achat: number;
             nb_recharges: number;
             montant_recharges: number;
             ticket_moyen: number;
@@ -94,7 +96,7 @@ const props = withDefaults(
     },
 );
 
-const preset = ref(props.periode.preset || 'current_month');
+const preset = ref(props.periode.preset || 'all');
 const fromIso = ref(props.periode.debut_iso);
 const toIso = ref(props.periode.fin_iso);
 
@@ -179,84 +181,49 @@ const pctBadgeClass = (pct: number | null) => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6 lg:gap-5">
             <!-- En-tête -->
-            <section
-                class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm"
-            >
-                <div
-                    class="border-b border-border/80 bg-gradient-to-r from-primary/5 via-card to-transparent px-5 py-5 sm:px-6 dark:from-primary/10"
-                >
-                    <div class="flex flex-wrap items-start justify-between gap-4">
-                        <div class="flex items-start gap-3">
-                            <div
-                                class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"
-                            >
-                                <BarChart3 class="size-5" />
-                            </div>
-                            <div>
-                                <p class="text-[11px] font-semibold uppercase tracking-wider text-primary">
-                                    Monétique
-                                </p>
-                                <h1 class="text-xl font-semibold tracking-tight text-foreground">
-                                    Pilotage
-                                </h1>
-                                <p class="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                                    <CalendarRange class="size-4 shrink-0" />
-                                    <span>
-                                        {{ periode.debut }} — {{ periode.fin }}
-                                    </span>
-                                    <span
-                                        class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/20"
-                                    >
-                                        {{ perimetre === 'reseau' ? 'Réseau' : 'Mon agence' }}
-                                    </span>
-                                </p>
-                                <p class="mt-1 max-w-3xl text-xs text-muted-foreground">
-                                    Indicateurs basés sur les ventes et recharges
-                                    <strong class="text-foreground">encaissées</strong>.
-                                </p>
-                            </div>
+            <section class="rounded-2xl border border-border/80 bg-card px-5 py-4 shadow-sm sm:px-6">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex min-w-0 items-center gap-3">
+                        <div class="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
+                            <BarChart3 class="size-5" />
                         </div>
+                        <div class="min-w-0">
+                            <h1 class="text-xl font-semibold tracking-tight text-foreground">Pilotage</h1>
+                            <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                                <CalendarRange class="size-4 shrink-0" />
+                                <span>{{ periode.preset === 'all' ? 'Toutes les périodes' : `${periode.debut} — ${periode.fin}` }}</span>
+                                <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/20">
+                                    {{ perimetre === 'reseau' ? 'Réseau' : 'Mon agence' }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap items-end gap-2">
+                        <div class="min-w-[11rem]">
+                            <label class="mb-1 block text-xs font-medium text-muted-foreground">Période</label>
+                            <select
+                                v-model="preset"
+                                class="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:outline-none dark:border-slate-600 dark:bg-card dark:text-foreground"
+                                @change="preset !== 'custom' && applyPeriode()"
+                            >
+                                <option value="all">Toutes les périodes</option>
+                                <option value="current_month">Mois en cours</option>
+                                <option value="previous_month">Mois précédent</option>
+                                <option value="custom">Personnalisée</option>
+                            </select>
+                        </div>
+                        <template v-if="preset === 'custom'">
+                            <Input v-model="fromIso" type="date" class="h-9 w-36 border-slate-300 shadow-sm" aria-label="Du" />
+                            <Input v-model="toIso" type="date" class="h-9 w-36 border-slate-300 shadow-sm" aria-label="Au" />
+                            <Button type="button" class="h-9" @click="applyPeriode">Appliquer</Button>
+                        </template>
                         <a :href="exportUrl">
-                            <Button type="button" variant="outline" class="border-slate-300">
+                            <Button type="button" variant="outline" class="h-9 border-slate-300 bg-white">
                                 <Download class="mr-2 size-4" />
-                                Exporter CSV
+                                Exporter
                             </Button>
                         </a>
                     </div>
-                </div>
-
-                <div class="flex flex-wrap items-end gap-3 px-4 py-4 sm:px-5">
-                    <div class="min-w-[160px]">
-                        <label class="mb-1.5 block text-sm font-medium text-foreground">Période</label>
-                        <select
-                            v-model="preset"
-                            class="flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground"
-                            @change="preset !== 'custom' && applyPeriode()"
-                        >
-                            <option value="current_month">Mois en cours</option>
-                            <option value="previous_month">Mois précédent</option>
-                            <option value="custom">Personnalisée</option>
-                        </select>
-                    </div>
-                    <template v-if="preset === 'custom'">
-                        <div>
-                            <label class="mb-1.5 block text-sm font-medium text-foreground">Du</label>
-                            <Input
-                                v-model="fromIso"
-                                type="date"
-                                class="h-10 border-slate-300 shadow-sm focus-visible:border-primary focus-visible:ring-primary/30"
-                            />
-                        </div>
-                        <div>
-                            <label class="mb-1.5 block text-sm font-medium text-foreground">Au</label>
-                            <Input
-                                v-model="toIso"
-                                type="date"
-                                class="h-10 border-slate-300 shadow-sm focus-visible:border-primary focus-visible:ring-primary/30"
-                            />
-                        </div>
-                        <Button type="button" @click="applyPeriode">Appliquer</Button>
-                    </template>
                 </div>
             </section>
 
@@ -283,7 +250,7 @@ const pctBadgeClass = (pct: number | null) => {
             </section>
 
             <!-- KPI -->
-            <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                 <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
                     <div class="flex items-start justify-between gap-2">
                         <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -293,7 +260,7 @@ const pctBadgeClass = (pct: number | null) => {
                             <ShoppingCart class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-foreground">
+                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-foreground">
                         {{ totaux.nb_ventes }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">Cartes vendues</p>
@@ -324,9 +291,25 @@ const pctBadgeClass = (pct: number | null) => {
                             <TrendingUp class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums text-primary sm:text-3xl">
+                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-primary">
                         {{ formatCfa(totaux.volume_ventes) }}
                     </p>
+                    <p class="mt-1 text-xs text-muted-foreground">Prix de vente encaissé</p>
+                </div>
+
+                <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
+                    <div class="flex items-start justify-between gap-2">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Volume achat
+                        </p>
+                        <div class="rounded-lg bg-violet-50 p-2 text-violet-700">
+                            <ShoppingBag class="size-4" />
+                        </div>
+                    </div>
+                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-violet-800">
+                        {{ formatCfa(totaux.volume_achat) }}
+                    </p>
+                    <p class="mt-1 text-xs text-muted-foreground">Prix d’achat des cartes vendues</p>
                 </div>
 
                 <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
@@ -338,7 +321,7 @@ const pctBadgeClass = (pct: number | null) => {
                             <RefreshCw class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-foreground">
+                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-foreground">
                         {{ totaux.nb_recharges }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">
@@ -371,13 +354,13 @@ const pctBadgeClass = (pct: number | null) => {
                             <Wallet class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums text-foreground sm:text-3xl">
+                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-foreground">
                         {{ formatCfa(totaux.ticket_moyen) }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">Volume / nb ventes</p>
                 </div>
 
-                <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:col-span-2 sm:p-5 xl:col-span-1">
+                <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
                     <div class="flex items-start justify-between gap-2">
                         <p class="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                             Ratio rech./ventes
@@ -386,7 +369,7 @@ const pctBadgeClass = (pct: number | null) => {
                             <RefreshCw class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-3xl font-bold tabular-nums text-foreground">
+                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-foreground">
                         {{ totaux.ratio_recharges_ventes ?? '—' }}
                     </p>
                     <p class="mt-1 text-xs text-muted-foreground">Recharges par vente</p>
@@ -399,7 +382,7 @@ const pctBadgeClass = (pct: number | null) => {
                     class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-5"
                 >
                     <div
-                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-5 py-4"
+                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
                     >
                         <TrendingUp class="size-5 shrink-0 text-primary" />
                         <div>
@@ -409,9 +392,9 @@ const pctBadgeClass = (pct: number | null) => {
                     </div>
                     <div
                         v-if="!hasSerieData"
-                        class="flex min-h-[14rem] flex-col items-center justify-center p-10 text-center"
+                        class="flex flex-col items-center justify-center px-6 py-8 text-center"
                     >
-                        <Inbox class="mx-auto mb-3 size-10 text-slate-300" />
+                        <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
                         <p class="text-sm text-muted-foreground">Aucune activité sur la période.</p>
                     </div>
                     <div v-else class="max-h-[min(28rem,50vh)] space-y-4 overflow-y-auto p-4">
@@ -468,7 +451,7 @@ const pctBadgeClass = (pct: number | null) => {
                     class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-7"
                 >
                     <div
-                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-5 py-4"
+                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
                     >
                         <Building2 class="size-5 shrink-0 text-primary" />
                         <div>
@@ -480,9 +463,9 @@ const pctBadgeClass = (pct: number | null) => {
                     </div>
                     <div
                         v-if="!ventes_par_agence.length"
-                        class="flex min-h-[14rem] flex-col items-center justify-center p-10 text-center"
+                        class="flex flex-col items-center justify-center px-6 py-8 text-center"
                     >
-                        <Inbox class="mx-auto mb-3 size-10 text-slate-300" />
+                        <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
                         <p class="text-sm text-muted-foreground">Aucune vente encaissée sur la période.</p>
                     </div>
                     <div v-else class="max-h-[min(28rem,50vh)] overflow-auto">
@@ -558,16 +541,16 @@ const pctBadgeClass = (pct: number | null) => {
                     class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-5"
                 >
                     <div
-                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-5 py-4"
+                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
                     >
                         <UserCircle class="size-5 shrink-0 text-primary" />
                         <h2 class="font-semibold text-foreground">Par chargé de clientèle</h2>
                     </div>
                     <div
                         v-if="!ventes_par_cc.length"
-                        class="flex min-h-[12rem] flex-col items-center justify-center p-8 text-center"
+                        class="flex flex-col items-center justify-center px-6 py-8 text-center"
                     >
-                        <Inbox class="mx-auto mb-3 size-10 text-slate-300" />
+                        <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
                         <p class="text-sm text-muted-foreground">Aucune donnée pour cette répartition.</p>
                     </div>
                     <ul
@@ -599,16 +582,16 @@ const pctBadgeClass = (pct: number | null) => {
                     class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-7"
                 >
                     <div
-                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-5 py-4"
+                        class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
                     >
                         <Users class="size-5 shrink-0 text-primary" />
                         <h2 class="font-semibold text-foreground">Par apporteur</h2>
                     </div>
                     <div
                         v-if="!ventes_par_apporteur.length"
-                        class="flex min-h-[12rem] flex-col items-center justify-center p-8 text-center"
+                        class="flex flex-col items-center justify-center px-6 py-8 text-center"
                     >
-                        <Inbox class="mx-auto mb-3 size-10 text-slate-300" />
+                        <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
                         <p class="text-sm text-muted-foreground">
                             Aucune vente associée à un apporteur sur la période.
                         </p>
@@ -644,16 +627,16 @@ const pctBadgeClass = (pct: number | null) => {
             <!-- Campagnes -->
             <section class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm">
                 <div
-                    class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-5 py-4"
+                    class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
                 >
                     <Megaphone class="size-5 shrink-0 text-primary" />
                     <h2 class="font-semibold text-foreground">Campagnes actives — avancement</h2>
                 </div>
                 <div
                     v-if="!campagnes.length"
-                    class="flex min-h-[10rem] flex-col items-center justify-center p-10 text-center"
+                    class="flex flex-col items-center justify-center px-6 py-8 text-center"
                 >
-                    <Inbox class="mx-auto mb-3 size-10 text-slate-300" />
+                    <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
                     <p class="text-sm text-muted-foreground">Aucune campagne active à la date du jour.</p>
                 </div>
                 <div
