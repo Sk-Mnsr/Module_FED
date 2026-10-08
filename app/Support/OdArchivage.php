@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\OdClasseur;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -78,17 +79,70 @@ final class OdArchivage
         return $name !== '' ? $name : 'Classeur #'.$classeur->id;
     }
 
+    public static function departmentKeyFromSlug(?string $slug): string
+    {
+        return match ($slug) {
+            OdChecker::ROLE_OPS, null, '' => self::DEPT_OPERATIONS,
+            OdChecker::ROLE_FINANCE => self::DEPT_FINANCE,
+            default => $slug,
+        };
+    }
+
     public static function departmentKey(?\App\Models\User $user): string
     {
-        if ($user !== null && $user->hasRole('ops')) {
-            return self::DEPT_OPERATIONS;
+        return self::departmentKeyFromSlug(OdChecker::poleSlug($user));
+    }
+
+    /**
+     * Un dossier par rôle de saisie du module Opérations diverses.
+     *
+     * @return list<array{key: string, label: string}>
+     */
+    public static function departments(): array
+    {
+        $items = Role::query()
+            ->where('module', 'od')
+            ->where('actif', true)
+            ->whereNotIn('slug', ['controleur', 'it', 'admin'])
+            ->orderBy('nom')
+            ->get(['slug', 'nom'])
+            ->map(fn (Role $role) => [
+                'key' => self::departmentKeyFromSlug($role->slug),
+                'label' => match ($role->slug) {
+                    OdChecker::ROLE_OPS => 'Operations',
+                    OdChecker::ROLE_FINANCE => 'Finance',
+                    default => $role->nom,
+                },
+            ])
+            ->unique('key')
+            ->values()
+            ->all();
+
+        usort($items, static function (array $a, array $b): int {
+            $rank = [self::DEPT_FINANCE => 0, self::DEPT_OPERATIONS => 1];
+
+            return ($rank[$a['key']] ?? 2) <=> ($rank[$b['key']] ?? 2)
+                ?: strcasecmp($a['label'], $b['label']);
+        });
+
+        return $items;
+    }
+
+    /**
+     * @return list<array{key: string, label: string}>
+     */
+    public static function visibleDepartments(User $viewer): array
+    {
+        $departments = self::departments();
+
+        if ($viewer->isSuperAdmin() || $viewer->hasRole('it') || $viewer->hasRole('admin') || OdControle::canViewAllArchives($viewer)) {
+            return $departments;
         }
 
-        if ($user !== null && $user->hasRole('finance')) {
-            return self::DEPT_FINANCE;
-        }
+        $key = self::departmentKey($viewer);
+        $own = array_values(array_filter($departments, fn (array $dept) => $dept['key'] === $key));
 
-        return self::DEPT_OPERATIONS;
+        return $own !== [] ? $own : $departments;
     }
 
     /**
@@ -104,17 +158,11 @@ final class OdArchivage
             return $query;
         }
 
-        if ($viewer->hasRole(OdChecker::ROLE_OPS)) {
+        $pole = OdChecker::poleSlug($viewer);
+        if ($pole !== null) {
             return $query->whereHas('user', fn (Builder $q) => $q->whereHas(
                 'roles',
-                fn (Builder $r) => $r->where('slug', OdChecker::ROLE_OPS)
-            ));
-        }
-
-        if ($viewer->hasRole(OdChecker::ROLE_FINANCE)) {
-            return $query->whereHas('user', fn (Builder $q) => $q->whereHas(
-                'roles',
-                fn (Builder $r) => $r->where('slug', OdChecker::ROLE_FINANCE)
+                fn (Builder $r) => $r->where('slug', $pole)
             ));
         }
 
@@ -152,11 +200,9 @@ final class OdArchivage
             return false;
         }
 
-        if ($viewer->hasRole(OdChecker::ROLE_OPS) && $creator->hasRole(OdChecker::ROLE_OPS)) {
-            return true;
-        }
-
-        if ($viewer->hasRole(OdChecker::ROLE_FINANCE) && $creator->hasRole(OdChecker::ROLE_FINANCE)) {
+        $viewerPole = OdChecker::poleSlug($viewer);
+        $creatorPole = OdChecker::poleSlug($creator);
+        if ($viewerPole !== null && $viewerPole === $creatorPole) {
             return true;
         }
 
@@ -169,17 +215,23 @@ final class OdArchivage
             || $viewer->hasRole('it')
             || $viewer->hasRole('admin')
             || OdControle::canViewAllArchives($viewer)
-            || $viewer->hasRole(OdChecker::ROLE_OPS)
-            || $viewer->hasRole(OdChecker::ROLE_FINANCE);
+            || OdChecker::poleSlug($viewer) !== null;
     }
 
     public static function departmentLabel(string $key): string
     {
-        return match ($key) {
+        $known = [
             self::DEPT_FINANCE => 'Finance',
             self::DEPT_OPERATIONS => 'Operations',
-            default => 'Operations',
-        };
+        ];
+
+        if (isset($known[$key])) {
+            return $known[$key];
+        }
+
+        $label = Role::query()->where('slug', $key)->value('nom');
+
+        return filled($label) ? (string) $label : $key;
     }
 
     /**

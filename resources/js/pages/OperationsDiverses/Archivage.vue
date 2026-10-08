@@ -16,6 +16,7 @@ defineProps<{
     searchResults?: SearchResultRow[];
     canViewAllAgents?: boolean;
     totalClasseurs?: number;
+    departments?: { key: string; label: string }[];
 }>();
 
 const breadcrumbs = [
@@ -37,6 +38,7 @@ const breadcrumbs = [
                 :search-results="searchResults ?? []"
                 :can-view-all-agents="canViewAllAgents"
                 :total-classeurs="totalClasseurs"
+                :departments="departments ?? []"
             />
         </div>
     </AppLayout>

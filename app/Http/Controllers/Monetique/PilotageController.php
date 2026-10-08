@@ -47,6 +47,8 @@ class PilotageController extends Controller
                 $libellePeriode,
                 'Preset',
                 $periodeMeta['preset'],
+                'Agence',
+                $payload['filtre_agence']['libelle'] ?? 'Réseau',
             ]);
             fputcsv($handle, []);
             fputcsv($handle, [
@@ -149,8 +151,25 @@ class PilotageController extends Controller
     {
         $user = $request->user();
         $central = CoficarteAgenceAccess::canViewAll($user);
+        [$agenceId, $siege, $agenceValeur] = $this->resolveAgenceScope($request, $user, $central);
         $borne = (bool) ($periodeMeta['borne'] ?? true);
         $saleDates = [$from->toDateString(), $to->toDateString()];
+        $agenceOptions = $central ? $this->agenceOptions() : [];
+        if (! $central) {
+            $libelleAgence = $agenceId
+                ? (Agence::query()->whereKey($agenceId)->value('nom') ?? 'Mon agence')
+                : 'Mon agence';
+        } elseif ($agenceValeur === 'all') {
+            $libelleAgence = 'Réseau';
+        } else {
+            $libelleAgence = $this->libelleAgence($agenceValeur, $agenceOptions);
+        }
+
+        $filtreAgence = [
+            'valeur' => $central ? $agenceValeur : 'all',
+            'peut_filtrer' => $central,
+            'libelle' => $libelleAgence,
+        ];
 
         $thresholdCentral = CoficarteStockThreshold::query()
             ->where('cible', CoficarteStockThreshold::CIBLE_CENTRAL)
@@ -167,18 +186,14 @@ class PilotageController extends Controller
             ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
             ->when($borne, fn ($q) => $q->whereBetween('coficarte_recharges.created_at', [$from, $to]))
             ->whereNotNull('agence_enregistrement_id')
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'agence_enregistrement_id', $agenceId, $siege))
             ->groupBy('agence_enregistrement_id')
             ->pluck('montant', 'agence_enregistrement_id');
 
         $salesBase = CoficarteSale::query()
             ->where('payment_status', CoficarteSale::PAYMENT_ENCAISSE)
             ->when($borne, fn ($q) => $q->whereBetween('date_vente', $saleDates))
-            ->whereHas('card', function ($q) use ($central, $user) {
-                if (! $central && $user && $user->agence_id) {
-                    $q->where('agence_id', $user->agence_id);
-                }
-            });
+            ->whereHas('card', fn ($q) => $this->applyAgenceFilter($q, 'agence_id', $agenceId, $siege));
 
         $nbVentes = (clone $salesBase)->count();
         $volumeVentes = (clone $salesBase)->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
@@ -189,7 +204,7 @@ class PilotageController extends Controller
         $rechargesBase = CoficarteRecharge::query()
             ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
             ->when($borne, fn ($q) => $q->whereBetween('coficarte_recharges.created_at', [$from, $to]))
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id));
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'agence_enregistrement_id', $agenceId, $siege));
 
         $nbRecharges = (clone $rechargesBase)->count();
         $montantRecharges = (clone $rechargesBase)->sum('coficarte_recharges.montant');
@@ -199,7 +214,7 @@ class PilotageController extends Controller
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
             ->when($borne, fn ($q) => $q->whereBetween('coficarte_sales.date_vente', $saleDates))
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'coficarte_cards.agence_id', $agenceId, $siege))
             ->groupBy('coficarte_cards.agence_id')
             ->get();
 
@@ -229,14 +244,10 @@ class PilotageController extends Controller
                 'ecart_ventes' => $objVentes > 0 ? $nbVentesAgence - $objVentes : 0,
             ];
         })
-            ->sortBy(function ($row) {
-                // Agences avec objectif d'abord, triées par % croissant (retards en tête)
-                if ($row['pct_ventes'] === null) {
-                    return 9999;
-                }
-
-                return $row['pct_ventes'];
-            })
+            ->sortBy([
+                fn ($row) => $row['pct_ventes'] === null ? 1 : 0,
+                fn ($row) => $row['pct_ventes'] ?? (100000 - $row['nb_ventes']),
+            ])
             ->values();
 
         $alertes = $ventesParAgenceFormatted
@@ -254,7 +265,7 @@ class PilotageController extends Controller
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
             ->when($borne, fn ($q) => $q->whereBetween('coficarte_sales.date_vente', $saleDates))
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'coficarte_cards.agence_id', $agenceId, $siege))
             ->select('users.name', DB::raw('count(*) as nb'))
             ->groupBy('coficarte_sales.user_id', 'users.name')
             ->orderByDesc('nb')
@@ -267,7 +278,7 @@ class PilotageController extends Controller
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
             ->when($borne, fn ($q) => $q->whereBetween('coficarte_sales.date_vente', $saleDates))
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'coficarte_cards.agence_id', $agenceId, $siege))
             ->select('coficarte_apporteurs.nom', DB::raw('count(*) as nb'))
             ->groupBy('coficarte_apporteurs.id', 'coficarte_apporteurs.nom')
             ->orderByDesc('nb')
@@ -277,23 +288,28 @@ class PilotageController extends Controller
 
         $campagnes = CoficarteCampaign::query()
             ->activeForDate()
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where(function ($w) use ($user) {
-                $w->whereNull('agence_id')->orWhere('agence_id', $user->agence_id);
+            ->when($siege, fn ($q) => $q->whereNull('agence_id'))
+            ->when($agenceId !== null, fn ($q) => $q->where(function ($w) use ($agenceId) {
+                $w->whereNull('agence_id')->orWhere('agence_id', $agenceId);
             }))
             ->get();
 
-        $campagnesProgress = $campagnes->map(function (CoficarteCampaign $c) use ($from, $to, $central, $user, $borne, $saleDates) {
+        $campagnesProgress = $campagnes->map(function (CoficarteCampaign $c) use ($from, $to, $borne, $saleDates, $agenceId, $siege) {
             $ventes = CoficarteSale::query()
                 ->where('coficarte_campaign_id', $c->id)
                 ->where('payment_status', CoficarteSale::PAYMENT_ENCAISSE)
                 ->when($borne, fn ($q) => $q->whereBetween('date_vente', $saleDates))
+                ->when($siege || $agenceId !== null, fn ($q) => $q->whereHas(
+                    'card',
+                    fn ($card) => $this->applyAgenceFilter($card, 'agence_id', $agenceId, $siege),
+                ))
                 ->count();
 
             $montantRec = CoficarteRecharge::query()
                 ->where('coficarte_campaign_id', $c->id)
                 ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
                 ->when($borne, fn ($q) => $q->whereBetween('created_at', [$from, $to]))
-                ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
+                ->tap(fn ($q) => $this->applyAgenceFilter($q, 'agence_enregistrement_id', $agenceId, $siege))
                 ->sum('montant');
 
             return [
@@ -306,7 +322,22 @@ class PilotageController extends Controller
             ];
         });
 
-        $serieJournaliere = $this->buildSerieJournaliere($from, $to, $central, $user, $borne);
+        $serieJournaliere = $this->buildSerieJournaliere($from, $to, $borne, $agenceId, $siege);
+
+        if ($agenceId !== null) {
+            $seuilAgence = $thresholdsAgence->get($agenceId);
+            $objectifsReseau = [
+                'nb_ventes' => (int) ($seuilAgence?->objectif_nb_ventes_mois ?? 0),
+                'montant_recharges' => (int) ($seuilAgence?->objectif_montant_recharges_mois ?? 0),
+            ];
+        } elseif ($siege) {
+            $objectifsReseau = ['nb_ventes' => 0, 'montant_recharges' => 0];
+        } else {
+            $objectifsReseau = [
+                'nb_ventes' => (int) ($thresholdCentral?->objectif_nb_ventes_mois ?? 0),
+                'montant_recharges' => (int) ($thresholdCentral?->objectif_montant_recharges_mois ?? 0),
+            ];
+        }
 
         $ticketMoyen = $nbVentes > 0 ? (int) round(((int) $volumeVentes) / $nbVentes) : 0;
         $ratioRechargesVentes = $nbVentes > 0
@@ -324,27 +355,27 @@ class PilotageController extends Controller
                 'ticket_moyen' => $ticketMoyen,
                 'ratio_recharges_ventes' => $ratioRechargesVentes,
             ],
-            'objectifs_reseau' => [
-                'nb_ventes' => (int) ($thresholdCentral?->objectif_nb_ventes_mois ?? 0),
-                'montant_recharges' => (int) ($thresholdCentral?->objectif_montant_recharges_mois ?? 0),
-            ],
+            'objectifs_reseau' => $objectifsReseau,
+            'filtre_agence' => $filtreAgence,
+            'agences' => $agenceOptions,
+            'inclure_siege' => $central && $this->hasActiviteSiege(),
             'ventes_par_agence' => $ventesParAgenceFormatted,
             'ventes_par_cc' => $ventesParCc,
             'ventes_par_apporteur' => $ventesParApporteur,
             'campagnes' => $campagnesProgress,
             'serie_journaliere' => $serieJournaliere,
             'alertes' => $alertes,
-            'perimetre' => $central ? 'reseau' : 'agence',
+            'perimetre' => $central && $agenceValeur === 'all' ? 'reseau' : 'agence',
         ];
     }
 
     /**
      * @return list<array{date: string, label: string, nb_ventes: int, montant_recharges: int}>
      */
-    private function buildSerieJournaliere(Carbon $from, Carbon $to, bool $central, $user, bool $borne = true): array
+    private function buildSerieJournaliere(Carbon $from, Carbon $to, bool $borne, ?int $agenceId, bool $siege): array
     {
         if (! $borne) {
-            [$from, $to] = $this->bornesActivite($central, $user);
+            [$from, $to] = $this->bornesActivite($agenceId, $siege);
             if ($from === null || $to === null) {
                 return [];
             }
@@ -355,7 +386,7 @@ class PilotageController extends Controller
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
             ->whereBetween('coficarte_sales.date_vente', [$from->toDateString(), $to->toDateString()])
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'coficarte_cards.agence_id', $agenceId, $siege))
             ->groupBy('coficarte_sales.date_vente')
             ->pluck('nb', 'date_vente');
 
@@ -363,7 +394,7 @@ class PilotageController extends Controller
             ->select(DB::raw('DATE(coficarte_recharges.created_at) as jour'), DB::raw('COALESCE(SUM(montant), 0) as montant'))
             ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
             ->whereBetween('coficarte_recharges.created_at', [$from, $to])
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'agence_enregistrement_id', $agenceId, $siege))
             ->groupBy(DB::raw('DATE(coficarte_recharges.created_at)'))
             ->pluck('montant', 'jour');
 
@@ -390,18 +421,18 @@ class PilotageController extends Controller
      *
      * @return array{0: ?Carbon, 1: ?Carbon}
      */
-    private function bornesActivite(bool $central, $user): array
+    private function bornesActivite(?int $agenceId, bool $siege): array
     {
         $sale = CoficarteSale::query()
             ->join('coficarte_cards', 'coficarte_cards.id', '=', 'coficarte_sales.coficarte_card_id')
             ->where('coficarte_sales.payment_status', CoficarteSale::PAYMENT_ENCAISSE)
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('coficarte_cards.agence_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'coficarte_cards.agence_id', $agenceId, $siege))
             ->selectRaw('min(coficarte_sales.date_vente) as dmin, max(coficarte_sales.date_vente) as dmax')
             ->first();
 
         $recharge = CoficarteRecharge::query()
             ->where('payment_status', CoficarteRecharge::PAYMENT_ENCAISSE)
-            ->when(! $central && $user && $user->agence_id, fn ($q) => $q->where('agence_enregistrement_id', $user->agence_id))
+            ->tap(fn ($q) => $this->applyAgenceFilter($q, 'agence_enregistrement_id', $agenceId, $siege))
             ->selectRaw('min(created_at) as dmin, max(created_at) as dmax')
             ->first();
 
@@ -424,5 +455,91 @@ class PilotageController extends Controller
         }
 
         return [$from, $to];
+    }
+
+    /**
+     * @return array{0: ?int, 1: bool, 2: string}
+     */
+    private function resolveAgenceScope(Request $request, $user, bool $central): array
+    {
+        if (! $central) {
+            $id = $user && $user->agence_id ? (int) $user->agence_id : null;
+
+            return [$id, false, 'all'];
+        }
+
+        $raw = (string) $request->input('agence', 'all');
+        if ($raw === 'siege') {
+            return [null, true, 'siege'];
+        }
+
+        if ($raw !== '' && $raw !== 'all' && ctype_digit($raw) && Agence::query()->whereKey((int) $raw)->exists()) {
+            return [(int) $raw, false, $raw];
+        }
+
+        return [null, false, 'all'];
+    }
+
+    private function applyAgenceFilter($query, string $column, ?int $agenceId, bool $siege): void
+    {
+        if ($siege) {
+            $query->whereNull($column);
+
+            return;
+        }
+
+        if ($agenceId !== null) {
+            $query->where($column, $agenceId);
+        }
+    }
+
+    /**
+     * @return list<array{id: int, nom: string, code: string|null}>
+     */
+    private function agenceOptions(): array
+    {
+        $ids = DB::table('coficarte_cards')->whereNotNull('agence_id')->distinct()->pluck('agence_id')
+            ->merge(DB::table('coficarte_recharges')->whereNotNull('agence_enregistrement_id')->distinct()->pluck('agence_enregistrement_id'))
+            ->unique()
+            ->filter()
+            ->values();
+
+        return Agence::query()
+            ->whereIn('id', $ids)
+            ->orderBy('nom')
+            ->get(['id', 'nom', 'code'])
+            ->map(fn (Agence $agence) => [
+                'id' => $agence->id,
+                'nom' => $agence->nom,
+                'code' => $agence->code,
+            ])
+            ->all();
+    }
+
+    private function hasActiviteSiege(): bool
+    {
+        return DB::table('coficarte_cards')->whereNull('agence_id')->exists();
+    }
+
+    /**
+     * @param  list<array{id: int, nom: string, code: string|null}>  $options
+     */
+    private function libelleAgence(string $valeur, array $options): string
+    {
+        if ($valeur === 'siege') {
+            return 'Siège';
+        }
+
+        if ($valeur === 'all') {
+            return 'Toutes les agences';
+        }
+
+        foreach ($options as $agence) {
+            if ((string) $agence['id'] === $valeur) {
+                return $agence['nom'];
+            }
+        }
+
+        return 'Toutes les agences';
     }
 }

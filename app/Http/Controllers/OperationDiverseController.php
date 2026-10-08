@@ -1155,6 +1155,7 @@ class OperationDiverseController extends Controller
                 : [],
             'canViewAllAgents' => $canViewAllAgents,
             'totalClasseurs' => $classeurs->count(),
+            'departments' => OdArchivage::visibleDepartments($user),
         ]);
     }
 

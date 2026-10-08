@@ -109,13 +109,15 @@ const abilityState = reactive<Record<string, AbilityMap>>({});
 
 const rolesByModule = (moduleKey: string): Role[] => {
     const matrix = matrixByKey.value.get(moduleKey);
-    if (matrix) {
-        return matrix.roles
-            .map((slug) => rolesBySlug.value.get(slug))
-            .filter((role): role is Role => role !== undefined && role.slug !== 'it' && role.slug !== 'admin');
-    }
+    const source = matrix
+        ? matrix.roles
+              .map((slug) => rolesBySlug.value.get(slug))
+              .filter((role): role is Role => role !== undefined)
+        : props.roles.filter((role) => role.module === moduleKey);
 
-    return props.roles.filter((role) => role.module === moduleKey && role.slug !== 'it' && role.slug !== 'admin');
+    return source.filter(
+        (role) => role.slug !== 'it' && role.slug !== 'admin' && role.module === moduleKey,
+    );
 };
 
 const accessRoleForModule = (moduleKey: string): Role | null => {
@@ -123,19 +125,6 @@ const accessRoleForModule = (moduleKey: string): Role | null => {
     return (
         roles.find((role) => role.slug === moduleKey || role.module === moduleKey) ?? roles[0] ?? null
     );
-};
-
-const modulesCoveredByRole = (role: Role): string[] => {
-    const keys: string[] = [];
-    for (const row of props.moduleMatrix) {
-        if (row.roles.includes(role.slug)) {
-            keys.push(row.key);
-        }
-    }
-    if (keys.length > 0) {
-        return keys;
-    }
-    return role.module ? [role.module] : [];
 };
 
 const selectedRoleIds = computed(() =>
@@ -238,21 +227,20 @@ const syncFromModel = () => {
             continue;
         }
 
-        for (const moduleKey of modulesCoveredByRole(role)) {
-            if (!(moduleKey in assignments)) {
-                continue;
-            }
-            if (isAccessOnly(moduleKey) && role.slug !== moduleKey && role.module !== moduleKey) {
-                continue;
-            }
-            addRole(moduleKey, roleId);
-            if (abilitiesFor(moduleKey).length > 0) {
-                ensureAbilityState(moduleKey);
-                abilityState[moduleKey] = {
-                    ...defaultAbilities(moduleKey),
-                    ...(props.moduleAbilities?.[moduleKey] ?? {}),
-                };
-            }
+        const moduleKey = role.module;
+        if (!moduleKey || !(moduleKey in assignments)) {
+            continue;
+        }
+        if (isAccessOnly(moduleKey) && role.slug !== moduleKey) {
+            continue;
+        }
+        addRole(moduleKey, roleId);
+        if (abilitiesFor(moduleKey).length > 0) {
+            ensureAbilityState(moduleKey);
+            abilityState[moduleKey] = {
+                ...defaultAbilities(moduleKey),
+                ...(props.moduleAbilities?.[moduleKey] ?? {}),
+            };
         }
     }
 };
@@ -285,22 +273,12 @@ const isRoleChecked = (moduleKey: string, roleId: number) =>
     (assignments[moduleKey] ?? []).includes(roleId);
 
 const toggleRole = (moduleKey: string, roleId: number, enabled: boolean) => {
-    const role = props.roles.find((item) => item.id === roleId);
-    const keys = role ? modulesCoveredByRole(role) : [moduleKey];
-
-    for (const key of keys) {
-        if (!(key in assignments)) {
-            continue;
-        }
-        if (role && isAccessOnly(key) && role.slug !== key && role.module !== key) {
-            continue;
-        }
-        if (enabled) {
-            addRole(key, roleId);
-        } else {
-            removeRole(key, roleId);
-        }
+    if (enabled) {
+        addRole(moduleKey, roleId);
+        return;
     }
+
+    removeRole(moduleKey, roleId);
 };
 
 const toggleAccessOnly = (moduleKey: string, enabled: boolean) => {

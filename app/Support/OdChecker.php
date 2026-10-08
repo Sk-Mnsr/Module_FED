@@ -16,19 +16,39 @@ final class OdChecker
 
     public const ROLE_FINANCE = 'finance';
 
-    public static function roleSlugForUser(User $user): string
+    /**
+     * Rôle métier OD du maker (ops, finance, ou un rôle créé pour le module).
+     * Null pour le contrôleur et les profils sans rôle de saisie.
+     */
+    public static function poleSlug(?User $user): ?string
     {
-        // Ops prioritaire si les deux rôles sont présents (agent opérations).
-        if ($user->hasRole(self::ROLE_OPS)) {
+        if ($user === null) {
+            return null;
+        }
+
+        $user->loadMissing('roles');
+
+        $slugs = $user->roles
+            ->filter(fn ($role) => $role->module === 'od'
+                && ($role->actif ?? true)
+                && ! in_array($role->slug, ['controleur', 'it', 'admin'], true))
+            ->pluck('slug')
+            ->values();
+
+        if ($slugs->contains(self::ROLE_OPS)) {
             return self::ROLE_OPS;
         }
 
-        if ($user->hasRole(self::ROLE_FINANCE)) {
+        if ($slugs->contains(self::ROLE_FINANCE)) {
             return self::ROLE_FINANCE;
         }
 
-        // IT / autres accès OD : pôle opérations par défaut.
-        return self::ROLE_OPS;
+        return $slugs->first();
+    }
+
+    public static function roleSlugForUser(User $user): string
+    {
+        return self::poleSlug($user) ?? self::ROLE_OPS;
     }
 
     public static function departmentLabelForUser(User $user): string

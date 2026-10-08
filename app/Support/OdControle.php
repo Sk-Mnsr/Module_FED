@@ -28,7 +28,7 @@ final class OdControle
             return false;
         }
 
-        if ($user->hasRole(OdChecker::ROLE_OPS) || $user->hasRole(OdChecker::ROLE_FINANCE)) {
+        if (OdChecker::poleSlug($user) !== null) {
             return false;
         }
 

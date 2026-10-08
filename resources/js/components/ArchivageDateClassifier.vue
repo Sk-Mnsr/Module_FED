@@ -134,6 +134,7 @@ const props = defineProps<{
     searchResults?: SearchResultRow[];
     canViewAllAgents?: boolean;
     totalClasseurs?: number;
+    departments?: { key: string; label: string }[];
 }>();
 
 const tree = computed<ArchiveTree>(() => normalizeTree(props.tree ?? {}));
@@ -325,34 +326,27 @@ const MONTHS_FR = [
     'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
 ] as const;
 
-const DEPT_ORDER = ['finance', 'operations'] as const;
+const FALLBACK_DEPARTMENTS = [
+    { key: 'finance', label: 'Finance' },
+    { key: 'operations', label: 'Operations' },
+];
 
-function deptLabel(key: string): string {
-    return key === 'finance' ? 'Finance' : 'Operations';
-}
-
-/** Nouveau format : finance|operations › année › … — Ancien : année directement à la racine. */
-function isDeptTreeFormat(raw: ArchiveTree): boolean {
+/** Ancien format : l'année est à la racine. Le format courant a un dossier par rôle. */
+function isLegacyYearTree(raw: ArchiveTree): boolean {
     const keys = Object.keys(raw);
-    if (keys.length === 0) {
-        return true;
-    }
 
-    return keys.every((k) => k === 'finance' || k === 'operations');
+    return keys.length > 0 && keys.every((key) => /^\d{4}$/.test(key));
 }
 
 function normalizeTree(raw: ArchiveTree): ArchiveTree {
-    if (isDeptTreeFormat(raw)) {
-        return {
-            finance: raw.finance ?? {},
-            operations: raw.operations ?? {},
-        };
+    const source = isLegacyYearTree(raw) ? { operations: raw } : { ...raw };
+    const result: ArchiveTree = { ...source };
+
+    for (const dept of props.departments?.length ? props.departments : FALLBACK_DEPARTMENTS) {
+        result[dept.key] ??= {};
     }
 
-    return {
-        finance: {},
-        operations: raw,
-    };
+    return result;
 }
 
 const searchForm = ref({
@@ -368,37 +362,50 @@ const stats = computed(() => ({
     total: props.totalClasseurs ?? 0,
 }));
 
+const departmentList = computed(() => {
+    const listed = props.departments?.length ? props.departments : [...FALLBACK_DEPARTMENTS];
+    const known = new Set(listed.map((dept) => dept.key));
+    const extra = Object.keys(tree.value)
+        .filter((key) => !known.has(key))
+        .map((key) => ({
+            key,
+            label: key === 'finance' ? 'Finance' : key === 'operations' ? 'Operations' : key,
+        }));
+
+    return [...listed, ...extra];
+});
+
 const treeRoot = computed<TreeNode>(() => {
     return {
         id: 'root',
         label: 'Dossiers Comptables',
         kind: 'root',
-        children: [...DEPT_ORDER].map((dept) => ({
-            id: `dept-${dept}`,
-            label: deptLabel(dept),
+        children: departmentList.value.map((dept) => ({
+            id: `dept-${dept.key}`,
+            label: dept.label,
             kind: 'dept' as const,
-            children: Object.keys(tree.value[dept] ?? {})
+            children: Object.keys(tree.value[dept.key] ?? {})
                 .sort((a, b) => Number(b) - Number(a))
                 .map((year) => ({
-                    id: `dept-${dept}-y-${year}`,
+                    id: `dept-${dept.key}-y-${year}`,
                     label: year,
                     kind: 'year' as const,
-                    children: Object.keys(tree.value[dept]?.[year] ?? {})
+                    children: Object.keys(tree.value[dept.key]?.[year] ?? {})
                         .sort((a, b) => Number(b) - Number(a))
                         .map((month) => ({
-                            id: `dept-${dept}-y-${year}-m-${month}`,
-                            label: monthFolderLabel(dept, year, month),
+                            id: `dept-${dept.key}-y-${year}-m-${month}`,
+                            label: monthFolderLabel(dept.key, year, month),
                             kind: 'month' as const,
-                            children: Object.keys(tree.value[dept]?.[year]?.[month] ?? {})
+                            children: Object.keys(tree.value[dept.key]?.[year]?.[month] ?? {})
                                 .sort((a, b) => Number(b) - Number(a))
                                 .map((day) => ({
-                                    id: `dept-${dept}-y-${year}-m-${month}-d-${day}`,
-                                    label: dayFolderLabel(dept, year, month, day),
+                                    id: `dept-${dept.key}-y-${year}-m-${month}-d-${day}`,
+                                    label: dayFolderLabel(dept.key, year, month, day),
                                     kind: 'day' as const,
-                                    children: Object.values(tree.value[dept]?.[year]?.[month]?.[day] ?? {})
+                                    children: Object.values(tree.value[dept.key]?.[year]?.[month]?.[day] ?? {})
                                         .sort((a, b) => a.agent.name.localeCompare(b.agent.name))
                                         .map((node) => ({
-                                            id: `dept-${dept}-y-${year}-m-${month}-d-${day}-a-${node.agent.id}`,
+                                            id: `dept-${dept.key}-y-${year}-m-${month}-d-${day}-a-${node.agent.id}`,
                                             label: node.agent.name,
                                             kind: 'agent' as const,
                                             children: node.classeurs.map((c) => ({
@@ -623,8 +630,8 @@ function isExpanded(node: FlatNode): boolean {
                                 Archivage
                             </h1>
                             <p class="mt-1 max-w-xl text-sm text-muted-foreground">
-                                Intégrations validées — OPS voit les pièces OPS ; Finance voit les
-                                pièces Finance.
+                                Intégrations validées — chaque rôle a son dossier et ne voit que ses
+                                pièces.
                             </p>
                         </div>
                     </div>
@@ -923,7 +930,7 @@ function isExpanded(node: FlatNode): boolean {
                         <p
                             class="mt-4 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-[11px] text-muted-foreground dark:border-slate-600"
                         >
-                            Finance / Operations → Année → Mois → Journée → Agent → Pièce
+                            Dossier du rôle → Année → Mois → Journée → Agent → Pièce
                         </p>
                     </div>
 

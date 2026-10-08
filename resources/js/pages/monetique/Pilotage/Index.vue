@@ -83,6 +83,9 @@ const props = withDefaults(
             objectif_nb_ventes: number;
         }[];
         perimetre: 'reseau' | 'agence';
+        filtre_agence: { valeur: string; peut_filtrer: boolean; libelle: string };
+        agences: { id: number; nom: string; code: string | null }[];
+        inclure_siege: boolean;
     }>(),
     {
         objectifs_reseau: () => ({ nb_ventes: 0, montant_recharges: 0 }),
@@ -93,12 +96,16 @@ const props = withDefaults(
         serie_journaliere: () => [],
         alertes: () => [],
         perimetre: 'reseau',
+        filtre_agence: () => ({ valeur: 'all', peut_filtrer: false, libelle: 'Réseau' }),
+        agences: () => [],
+        inclure_siege: false,
     },
 );
 
 const preset = ref(props.periode.preset || 'all');
 const fromIso = ref(props.periode.debut_iso);
 const toIso = ref(props.periode.fin_iso);
+const agence = ref(props.filtre_agence.valeur || 'all');
 
 watch(
     () => props.periode,
@@ -109,25 +116,31 @@ watch(
     },
 );
 
+watch(
+    () => props.filtre_agence.valeur,
+    (valeur) => {
+        agence.value = valeur || 'all';
+    },
+);
+
+const queryParams = () => ({
+    preset: preset.value,
+    from: preset.value === 'custom' ? fromIso.value : undefined,
+    to: preset.value === 'custom' ? toIso.value : undefined,
+    agence: props.filtre_agence.peut_filtrer && agence.value !== 'all' ? agence.value : undefined,
+});
+
 const applyPeriode = () => {
-    router.get(
-        '/monetique/pilotage',
-        {
-            preset: preset.value,
-            from: preset.value === 'custom' ? fromIso.value : undefined,
-            to: preset.value === 'custom' ? toIso.value : undefined,
-        },
-        { preserveState: true, preserveScroll: true },
-    );
+    router.get('/monetique/pilotage', queryParams(), { preserveState: true, preserveScroll: true });
 };
 
 const exportUrl = computed(() => {
     const params = new URLSearchParams();
-    params.set('preset', preset.value);
-    if (preset.value === 'custom') {
-        params.set('from', fromIso.value);
-        params.set('to', toIso.value);
-    }
+    const query = queryParams();
+    params.set('preset', query.preset);
+    if (query.from) params.set('from', query.from);
+    if (query.to) params.set('to', query.to);
+    if (query.agence) params.set('agence', query.agence);
     return `/monetique/pilotage/export?${params.toString()}`;
 });
 
@@ -147,6 +160,28 @@ const maxSerieRecharges = computed(() =>
 const hasSerieData = computed(() =>
     props.serie_journaliere.some((d) => d.nb_ventes > 0 || d.montant_recharges > 0),
 );
+
+const serieActive = computed(() =>
+    props.serie_journaliere.filter((d) => d.nb_ventes > 0 || d.montant_recharges > 0),
+);
+
+const hasRechargesSerie = computed(() =>
+    props.serie_journaliere.some((d) => d.montant_recharges > 0),
+);
+
+const hasObjectifsAgence = computed(() =>
+    props.ventes_par_agence.some(
+        (r) => r.objectif_nb_ventes > 0 || r.objectif_montant_recharges > 0,
+    ),
+);
+
+const partVentes = (nb: number) => {
+    if (props.totaux.nb_ventes <= 0) {
+        return null;
+    }
+
+    return Math.round((nb / props.totaux.nb_ventes) * 100);
+};
 
 const barPct = (value: number, max: number) =>
     `${Math.min(100, max <= 0 ? 0 : (value / max) * 100)}%`;
@@ -193,12 +228,26 @@ const pctBadgeClass = (pct: number | null) => {
                                 <CalendarRange class="size-4 shrink-0" />
                                 <span>{{ periode.preset === 'all' ? 'Toutes les périodes' : `${periode.debut} — ${periode.fin}` }}</span>
                                 <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/20">
-                                    {{ perimetre === 'reseau' ? 'Réseau' : 'Mon agence' }}
+                                    {{ filtre_agence.libelle }}
                                 </span>
                             </p>
                         </div>
                     </div>
                     <div class="flex flex-wrap items-end gap-2">
+                        <div v-if="filtre_agence.peut_filtrer" class="min-w-[14rem]">
+                            <label class="mb-1 block text-xs font-medium text-muted-foreground">Agence</label>
+                            <select
+                                v-model="agence"
+                                class="flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:outline-none dark:border-slate-600 dark:bg-card dark:text-foreground"
+                                @change="applyPeriode()"
+                            >
+                                <option value="all">Toutes les agences</option>
+                                <option v-if="inclure_siege" value="siege">Siège</option>
+                                <option v-for="a in agences" :key="a.id" :value="String(a.id)">
+                                    {{ a.nom }}{{ a.code ? ` (${a.code})` : '' }}
+                                </option>
+                            </select>
+                        </div>
                         <div class="min-w-[11rem]">
                             <label class="mb-1 block text-xs font-medium text-muted-foreground">Période</label>
                             <select
@@ -291,10 +340,10 @@ const pctBadgeClass = (pct: number | null) => {
                             <TrendingUp class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-primary">
-                        {{ formatCfa(totaux.volume_ventes) }}
+                    <p class="mt-2 text-xl font-bold tabular-nums text-primary sm:text-2xl">
+                        {{ totaux.volume_ventes.toLocaleString('fr-FR') }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Prix de vente encaissé</p>
+                    <p class="mt-1 text-xs text-muted-foreground">F CFA · prix de vente encaissé</p>
                 </div>
 
                 <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
@@ -306,10 +355,10 @@ const pctBadgeClass = (pct: number | null) => {
                             <ShoppingBag class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-violet-800">
-                        {{ formatCfa(totaux.volume_achat) }}
+                    <p class="mt-2 text-xl font-bold tabular-nums text-violet-800 sm:text-2xl">
+                        {{ totaux.volume_achat.toLocaleString('fr-FR') }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Prix d’achat des cartes vendues</p>
+                    <p class="mt-1 text-xs text-muted-foreground">F CFA · prix d’achat des cartes vendues</p>
                 </div>
 
                 <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
@@ -354,10 +403,10 @@ const pctBadgeClass = (pct: number | null) => {
                             <Wallet class="size-4" />
                         </div>
                     </div>
-                    <p class="mt-2 text-2xl font-bold tabular-nums whitespace-nowrap text-foreground">
-                        {{ formatCfa(totaux.ticket_moyen) }}
+                    <p class="mt-2 text-xl font-bold tabular-nums text-foreground sm:text-2xl">
+                        {{ totaux.ticket_moyen.toLocaleString('fr-FR') }}
                     </p>
-                    <p class="mt-1 text-xs text-muted-foreground">Volume / nb ventes</p>
+                    <p class="mt-1 text-xs text-muted-foreground">F CFA · volume / nb ventes</p>
                 </div>
 
                 <div class="rounded-2xl border border-border/80 bg-card p-4 shadow-sm sm:p-5">
@@ -386,8 +435,8 @@ const pctBadgeClass = (pct: number | null) => {
                     >
                         <TrendingUp class="size-5 shrink-0 text-primary" />
                         <div>
-                            <h2 class="font-semibold text-foreground">Tendance journalière</h2>
-                            <p class="text-xs text-muted-foreground">Ventes (nb) et recharges (F CFA)</p>
+                            <h2 class="font-semibold text-foreground">Jours d’activité</h2>
+                            <p class="text-xs text-muted-foreground">Ventes encaissées, sans les jours à zéro</p>
                         </div>
                     </div>
                     <div
@@ -397,53 +446,69 @@ const pctBadgeClass = (pct: number | null) => {
                         <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
                         <p class="text-sm text-muted-foreground">Aucune activité sur la période.</p>
                     </div>
-                    <div v-else class="max-h-[min(28rem,50vh)] space-y-4 overflow-y-auto p-4">
-                        <div>
-                            <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                Ventes / jour
-                            </p>
-                            <div class="flex h-28 items-end gap-0.5 sm:gap-1">
+                    <div v-else class="space-y-4 p-4">
+                        <p class="text-xs text-muted-foreground">
+                            {{ serieActive.length }} jour{{ serieActive.length > 1 ? 's' : '' }} avec une activité
+                            <span v-if="serie_journaliere.length">
+                                · {{ serie_journaliere[0]?.label }} — {{ serie_journaliere[serie_journaliere.length - 1]?.label }}
+                            </span>
+                        </p>
+                        <div class="overflow-x-auto">
+                            <div
+                                class="flex items-end gap-3"
+                                :class="serieActive.length <= 8 ? 'justify-start' : ''"
+                            >
                                 <div
-                                    v-for="d in serie_journaliere"
-                                    :key="'v-' + d.date"
-                                    class="group relative flex min-w-0 flex-1 flex-col items-center justify-end"
-                                    :title="`${d.label} : ${d.nb_ventes} vente(s)`"
+                                    v-for="d in serieActive"
+                                    :key="d.date"
+                                    class="flex w-14 shrink-0 flex-col items-center gap-1"
+                                    :title="`${d.label} : ${d.nb_ventes} vente(s)${d.montant_recharges > 0 ? `, ${formatCfa(d.montant_recharges)}` : ''}`"
                                 >
-                                    <div
-                                        class="w-full max-w-[14px] rounded-t bg-primary/80 transition-all group-hover:bg-primary"
-                                        :style="{
-                                            height: barPct(d.nb_ventes, maxSerieVentes),
-                                            minHeight: d.nb_ventes > 0 ? '4px' : '0',
-                                        }"
-                                    />
+                                    <span class="text-xs font-semibold tabular-nums text-foreground">
+                                        {{ d.nb_ventes }}
+                                    </span>
+                                    <div class="flex h-28 w-full items-end justify-center">
+                                        <div
+                                            class="w-8 rounded-t bg-primary transition-all"
+                                            :style="{
+                                                height: barPct(d.nb_ventes, maxSerieVentes),
+                                                minHeight: '6px',
+                                            }"
+                                        />
+                                    </div>
+                                    <span class="text-center text-[10px] leading-tight text-muted-foreground">
+                                        {{ d.label }}
+                                    </span>
                                 </div>
                             </div>
                         </div>
-                        <div>
+                        <div v-if="hasRechargesSerie" class="border-t border-border/80 pt-3">
                             <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                Montant recharges / jour
+                                Recharges encaissées
                             </p>
-                            <div class="flex h-28 items-end gap-0.5 sm:gap-1">
+                            <div class="flex items-end gap-3 overflow-x-auto">
                                 <div
-                                    v-for="d in serie_journaliere"
+                                    v-for="d in serieActive.filter((jour) => jour.montant_recharges > 0)"
                                     :key="'r-' + d.date"
-                                    class="group relative flex min-w-0 flex-1 flex-col items-center justify-end"
-                                    :title="`${d.label} : ${formatCfa(d.montant_recharges)}`"
+                                    class="flex w-16 shrink-0 flex-col items-center gap-1"
                                 >
-                                    <div
-                                        class="w-full max-w-[14px] rounded-t bg-emerald-500/80 transition-all group-hover:bg-emerald-500"
-                                        :style="{
-                                            height: barPct(d.montant_recharges, maxSerieRecharges),
-                                            minHeight: d.montant_recharges > 0 ? '4px' : '0',
-                                        }"
-                                    />
+                                    <span class="text-[10px] font-medium tabular-nums text-emerald-700">
+                                        {{ d.montant_recharges.toLocaleString('fr-FR') }}
+                                    </span>
+                                    <div class="flex h-16 w-full items-end justify-center">
+                                        <div
+                                            class="w-8 rounded-t bg-emerald-500"
+                                            :style="{
+                                                height: barPct(d.montant_recharges, maxSerieRecharges),
+                                                minHeight: '6px',
+                                            }"
+                                        />
+                                    </div>
+                                    <span class="text-[10px] text-muted-foreground">{{ d.label }}</span>
                                 </div>
                             </div>
-                            <div class="mt-1 flex justify-between text-[10px] text-muted-foreground">
-                                <span>{{ serie_journaliere[0]?.label }}</span>
-                                <span>{{ serie_journaliere[serie_journaliere.length - 1]?.label }}</span>
-                            </div>
                         </div>
+                        <p v-else class="text-xs text-muted-foreground">Aucune recharge encaissée sur la période.</p>
                     </div>
                 </section>
 
@@ -457,7 +522,11 @@ const pctBadgeClass = (pct: number | null) => {
                         <div>
                             <h2 class="font-semibold text-foreground">Agences vs objectifs</h2>
                             <p class="text-xs text-muted-foreground">
-                                Triées par atteinte (retards en tête)
+                                {{
+                                    hasObjectifsAgence
+                                        ? 'Triées par atteinte, retards en tête'
+                                        : 'Part des ventes encaissées'
+                                }}
                             </p>
                         </div>
                     </div>
@@ -469,17 +538,20 @@ const pctBadgeClass = (pct: number | null) => {
                         <p class="text-sm text-muted-foreground">Aucune vente encaissée sur la période.</p>
                     </div>
                     <div v-else class="max-h-[min(28rem,50vh)] overflow-auto">
-                        <table class="w-full min-w-[640px] text-sm">
+                        <table class="w-full min-w-[520px] text-sm">
                             <thead
                                 class="sticky top-0 z-10 bg-muted/90 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground backdrop-blur-sm"
                             >
                                 <tr>
                                     <th class="px-4 py-3">Agence</th>
                                     <th class="px-4 py-3 text-right">Ventes</th>
-                                    <th class="px-4 py-3 text-right">Atteinte</th>
-                                    <th class="px-4 py-3 text-right">Écart</th>
-                                    <th class="hidden px-4 py-3 text-right md:table-cell">Volume</th>
-                                    <th class="hidden px-4 py-3 text-right lg:table-cell">Recharges</th>
+                                    <th class="px-4 py-3 text-right">Part</th>
+                                    <template v-if="hasObjectifsAgence">
+                                        <th class="px-4 py-3 text-right">Atteinte</th>
+                                        <th class="px-4 py-3 text-right">Écart</th>
+                                    </template>
+                                    <th class="px-4 py-3 text-right">Volume</th>
+                                    <th class="px-4 py-3 text-right">Recharges</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-border">
@@ -498,28 +570,33 @@ const pctBadgeClass = (pct: number | null) => {
                                             / {{ r.objectif_nb_ventes }}
                                         </span>
                                     </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <span
-                                            class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1"
-                                            :class="pctBadgeClass(r.pct_ventes)"
+                                    <td class="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                                        {{ partVentes(r.nb_ventes) === null ? '—' : `${partVentes(r.nb_ventes)} %` }}
+                                    </td>
+                                    <template v-if="hasObjectifsAgence">
+                                        <td class="px-4 py-3 text-right">
+                                            <span
+                                                class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium ring-1"
+                                                :class="pctBadgeClass(r.pct_ventes)"
+                                            >
+                                                {{ r.pct_ventes === null ? '—' : `${r.pct_ventes} %` }}
+                                            </span>
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 text-right font-semibold tabular-nums"
+                                            :class="ecartClass(r.ecart_ventes, r.objectif_nb_ventes > 0)"
                                         >
-                                            {{ r.pct_ventes === null ? '—' : `${r.pct_ventes} %` }}
-                                        </span>
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 text-right font-semibold tabular-nums"
-                                        :class="ecartClass(r.ecart_ventes, r.objectif_nb_ventes > 0)"
-                                    >
-                                        {{
-                                            r.objectif_nb_ventes > 0
-                                                ? (r.ecart_ventes > 0 ? '+' : '') + r.ecart_ventes
-                                                : '—'
-                                        }}
-                                    </td>
-                                    <td class="hidden px-4 py-3 text-right font-medium tabular-nums text-primary md:table-cell">
+                                            {{
+                                                r.objectif_nb_ventes > 0
+                                                    ? (r.ecart_ventes > 0 ? '+' : '') + r.ecart_ventes
+                                                    : '—'
+                                            }}
+                                        </td>
+                                    </template>
+                                    <td class="px-4 py-3 text-right font-medium tabular-nums text-primary">
                                         {{ formatCfa(r.volume_ventes) }}
                                     </td>
-                                    <td class="hidden px-4 py-3 text-right tabular-nums lg:table-cell">
+                                    <td class="px-4 py-3 text-right tabular-nums">
                                         <span>{{ formatCfa(r.montant_recharges) }}</span>
                                         <span
                                             v-if="r.objectif_montant_recharges > 0"
@@ -538,7 +615,7 @@ const pctBadgeClass = (pct: number | null) => {
             <!-- CC + Apporteurs -->
             <div class="grid grid-cols-1 gap-4 xl:grid-cols-12">
                 <section
-                    class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-5"
+                    class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-6"
                 >
                     <div
                         class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
@@ -566,6 +643,12 @@ const pctBadgeClass = (pct: number | null) => {
                                 <span class="truncate text-sm font-medium text-foreground">{{ r.nom }}</span>
                                 <span class="shrink-0 text-sm font-semibold tabular-nums text-primary">
                                     {{ r.nb_ventes }}
+                                    <span
+                                        v-if="partVentes(r.nb_ventes) !== null"
+                                        class="ml-1 text-xs font-medium text-muted-foreground"
+                                    >
+                                        {{ partVentes(r.nb_ventes) }} %
+                                    </span>
                                 </span>
                             </div>
                             <div class="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -579,7 +662,7 @@ const pctBadgeClass = (pct: number | null) => {
                 </section>
 
                 <section
-                    class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-7"
+                    class="overflow-hidden rounded-2xl border border-border/80 bg-card shadow-sm xl:col-span-6"
                 >
                     <div
                         class="flex items-center gap-2 border-b border-border/80 bg-gradient-to-r from-primary/5 via-transparent to-transparent px-4 py-3"
@@ -609,8 +692,14 @@ const pctBadgeClass = (pct: number | null) => {
                                 <span class="truncate text-sm font-medium text-foreground">
                                     {{ r.apporteur }}
                                 </span>
-                                <span class="shrink-0 text-sm font-semibold tabular-nums text-primary">
+                                <span class="shrink-0 text-sm font-semibold tabular-nums text-emerald-700">
                                     {{ r.nb_ventes }}
+                                    <span
+                                        v-if="partVentes(r.nb_ventes) !== null"
+                                        class="ml-1 text-xs font-medium text-muted-foreground"
+                                    >
+                                        {{ partVentes(r.nb_ventes) }} %
+                                    </span>
                                 </span>
                             </div>
                             <div class="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -632,13 +721,9 @@ const pctBadgeClass = (pct: number | null) => {
                     <Megaphone class="size-5 shrink-0 text-primary" />
                     <h2 class="font-semibold text-foreground">Campagnes actives — avancement</h2>
                 </div>
-                <div
-                    v-if="!campagnes.length"
-                    class="flex flex-col items-center justify-center px-6 py-8 text-center"
-                >
-                    <Inbox class="mx-auto mb-2 size-6 text-slate-300" />
-                    <p class="text-sm text-muted-foreground">Aucune campagne active à la date du jour.</p>
-                </div>
+                <p v-if="!campagnes.length" class="px-4 py-3 text-sm text-muted-foreground">
+                    Aucune campagne active à la date du jour.
+                </p>
                 <div
                     v-else
                     class="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3"

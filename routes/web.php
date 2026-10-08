@@ -125,6 +125,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('zones', [ZoneController::class, 'store'])->name('zones.store');
         Route::put('zones/{zone}', [ZoneController::class, 'update'])->name('zones.update');
         Route::delete('zones/{zone}', [ZoneController::class, 'destroy'])->name('zones.destroy');
+        Route::get('apporteurs-affaires/export-template', [ApporteurAffaireController::class, 'exportTemplate'])->name('apporteurs-affaires.export-template');
+        Route::post('apporteurs-affaires/import', [ApporteurAffaireController::class, 'import'])->name('apporteurs-affaires.import');
         Route::get('apporteurs-affaires', [ApporteurAffaireController::class, 'index'])->name('apporteurs-affaires.index');
         Route::post('apporteurs-affaires', [ApporteurAffaireController::class, 'store'])->name('apporteurs-affaires.store');
         Route::put('apporteurs-affaires/{coficarteApporteur}', [ApporteurAffaireController::class, 'update'])->name('apporteurs-affaires.update');
