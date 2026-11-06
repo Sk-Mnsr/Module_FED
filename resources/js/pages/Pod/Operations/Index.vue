@@ -20,6 +20,8 @@ type Op = {
     total_client: string | number;
     devise: string;
     statut: string;
+    etape_libelle: string | null;
+    a_traiter: boolean;
     user_name: string | null;
     created_at: string | null;
     show_url: string;
@@ -34,6 +36,7 @@ const props = defineProps<{
         links: Array<{ url: string | null; label: string; active: boolean }>;
     };
     filters: Record<string, string>;
+    aTraiterCount: number;
 }>();
 
 const breadcrumbs = [
@@ -43,13 +46,19 @@ const breadcrumbs = [
 
 const q = ref(props.filters.q ?? '');
 const statut = ref(props.filters.statut ?? '');
+const vue = ref(props.filters.vue ?? '');
 
 const applyFilters = () => {
     router.get(
         '/pod/operations',
-        { q: q.value || undefined, statut: statut.value || undefined },
+        { q: q.value || undefined, statut: statut.value || undefined, vue: vue.value || undefined },
         { preserveState: true, replace: true },
     );
+};
+
+const setVue = (v: string) => {
+    vue.value = v;
+    applyFilters();
 };
 
 const fmt = (v: string | number | null | undefined) => {
@@ -65,8 +74,8 @@ const fieldClass =
     <Head title="Opérations — Produits divers" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white">
-            <div class="mx-auto flex max-w-7xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
+        <div class="flex min-h-full flex-1 flex-col bg-gradient-to-b from-slate-50 via-white to-white">
+            <div class="flex w-full flex-1 flex-col gap-6 p-4 sm:p-6">
                 <div class="flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <p class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Produits divers</p>
@@ -80,6 +89,31 @@ const fieldClass =
                             <Plus class="mr-2 h-4 w-4" /> Nouvelle opération
                         </Link>
                     </Button>
+                </div>
+
+                <div class="inline-flex w-fit gap-1 rounded-xl bg-slate-100/80 p-1">
+                    <button
+                        type="button"
+                        class="rounded-lg px-4 py-2 text-sm font-medium transition"
+                        :class="vue === '' ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800'"
+                        @click="setVue('')"
+                    >
+                        Toutes
+                    </button>
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition"
+                        :class="vue === 'a_traiter' ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:text-slate-800'"
+                        @click="setVue('a_traiter')"
+                    >
+                        À traiter
+                        <span
+                            class="rounded-full px-2 py-0.5 text-xs"
+                            :class="aTraiterCount ? 'bg-primary text-white' : 'bg-slate-200 text-slate-600'"
+                        >
+                            {{ aTraiterCount }}
+                        </span>
+                    </button>
                 </div>
 
                 <div
@@ -104,8 +138,10 @@ const fieldClass =
                             class="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm shadow-sm"
                         >
                             <option value="">Tous</option>
-                            <option value="brouillon">Brouillon</option>
+                            <option value="en_cours">En cours</option>
+                            <option value="suspendue">Suspendue</option>
                             <option value="valide">Validée</option>
+                            <option value="rejete">Rejetée</option>
                             <option value="annule">Annulée</option>
                         </select>
                     </div>
@@ -154,6 +190,10 @@ const fieldClass =
                                     >
                                         {{ labelStatutOperation(op.statut) }}
                                     </span>
+                                    <p v-if="op.statut === 'en_cours' && op.etape_libelle" class="mt-1 text-xs text-slate-500">
+                                        {{ op.etape_libelle }}
+                                        <span v-if="op.a_traiter" class="font-medium text-primary"> · à vous</span>
+                                    </p>
                                 </td>
                                 <td class="px-5 py-4 text-right">
                                     <Link
@@ -166,7 +206,9 @@ const fieldClass =
                             </tr>
                             <tr v-if="operations.data.length === 0">
                                 <td colspan="7" class="px-5 py-16 text-center">
-                                    <p class="text-slate-500">Aucune opération pour le moment.</p>
+                                    <p class="text-slate-500">
+                                        {{ vue === 'a_traiter' ? 'Aucun dossier ne vous attend.' : 'Aucune opération pour le moment.' }}
+                                    </p>
                                     <Button as-child class="mt-4">
                                         <Link href="/pod/operations/create">Créer une opération</Link>
                                     </Button>

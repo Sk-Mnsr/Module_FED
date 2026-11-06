@@ -201,11 +201,16 @@ const emptyConstante = (): ConstanteForm => ({
 const emptyScript = (): ScriptForm => ({
     code: '',
     libelle: '',
-    moteur: 'valeur_fixe',
-    parametres: { valeur: '' },
+    moteur: 'requete',
+    parametres: { requete: '' },
     description: '',
     actif: true,
 });
+
+const onScriptRequete = (script: ScriptForm, value: string) => {
+    script.parametres = { ...script.parametres, requete: value };
+    script.moteur = 'requete';
+};
 
 const normalizeChamp = (c: ChampForm): ChampForm => ({
     ...emptyChamp(),
@@ -389,7 +394,94 @@ const applyEcranTemplates = () => {
     }
 };
 
+const profilKeys = computed(() => new Set((props.profilsEcran || []).map((p) => p.key)));
+
+const ecranInitiateur = (ecran: EcranForm): string => {
+    const role = ecran.profils.find((key) => !profilKeys.value.has(key));
+    return role ?? '';
+};
+
+const setEcranInitiateur = (ecran: EcranForm, slug: string) => {
+    ecran.profils = slug ? [slug] : [];
+};
+
+const roleNom = (slug: string) => props.initiateurs.find((role) => role.slug === slug)?.nom || slug;
+
+const codesReserves = new Set([
+    'COMPTE_CLIENT',
+    'CODE_AGENCE',
+    'NOM_CLIENT',
+    'DATE_VALEUR',
+    'MONTANT_DEMANDE',
+    'FRAIS_SAISI',
+    'REFERENCE',
+    'LIBELLE',
+    'POD_PRODUIT_ID',
+]);
+
+const slugVariable = (libelle: string): string => {
+    const base = libelle
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .toUpperCase()
+        .slice(0, 80);
+    if (!base) {
+        return '';
+    }
+    let code = /^[A-Z]/.test(base) ? base : `C_${base}`.slice(0, 80);
+    if (codesReserves.has(code)) {
+        code = `C_${code}`.slice(0, 80);
+    }
+    return code;
+};
+
+const onChampLibelle = (champ: ChampForm, value: string) => {
+    const previous = slugVariable(champ.libelle);
+    champ.libelle = value;
+    const next = slugVariable(value);
+    if (!champ.code || champ.code === previous) {
+        champ.code = next;
+    }
+};
+
+const ecranInitiateurLabel = (ecran: EcranForm): string => {
+    const slug = ecranInitiateur(ecran);
+    if (slug) {
+        return roleNom(slug);
+    }
+    if (ecran.profils.length) {
+        return ecran.profils.map(profilLabel).join(', ');
+    }
+    return '—';
+};
+
 const submit = () => {
+    form.ecrans.forEach((ecran) => {
+        if (!ecran.code.trim()) {
+            ecran.code = nextEcranCode();
+        }
+    });
+    const ecranCourant = selectedEcranIndex.value === null ? null : form.ecrans[selectedEcranIndex.value];
+    if (ecranCourant?.code) {
+        form.champs.forEach((champ) => {
+            if (!champ.ecran_code) {
+                champ.ecran_code = ecranCourant.code;
+            }
+        });
+    }
+    form.lignes = form.lignes.filter((l) => l.compte.trim() !== '');
+    form.champs = form.champs.filter((c) => c.code.trim() !== '' || c.libelle.trim() !== '');
+    form.scripts = form.scripts.filter(
+        (s) => s.code.trim() !== '' || s.libelle.trim() !== '' || String(s.parametres.requete ?? '').trim() !== '',
+    );
+    form.constantes = form.constantes.filter((c) => c.code.trim() !== '' || c.libelle.trim() !== '');
+    const firstRole = form.ecrans.map(ecranInitiateur).find((slug) => slug !== '');
+    if (firstRole) {
+        form.initiateur = firstRole;
+    }
+    form.validateur = '';
     if (editing.value) {
         form.put(`/pod/produits/${props.produit!.id}`);
     } else {
@@ -417,6 +509,7 @@ const typeLabels: Record<string, string> = {
     numerique: 'Nombre',
     date: 'Date',
     table: 'Table (référentiel)',
+    fichier: 'Pièce jointe',
 };
 
 const modeConstanteLabels: Record<string, string> = {
@@ -467,12 +560,53 @@ const champsOfSelectedEcran = computed(() => {
         .filter(({ champ }) => (champ.ecran_code || '').toUpperCase() === code);
 });
 
+const nextEcranCode = () => {
+    const used = new Set(form.ecrans.map((e) => e.code.toUpperCase()).filter(Boolean));
+    let n = 1;
+    let code = 'ECR01';
+    while (used.has(code)) {
+        n += 1;
+        code = `ECR${String(n).padStart(2, '0')}`;
+    }
+    return code;
+};
+
+const addEcran = () => {
+    const ecran = emptyEcran();
+    ecran.code = nextEcranCode();
+    form.ecrans.push(ecran);
+    openEcran(form.ecrans.length - 1);
+};
+
+const onEcranCode = (index: number, value: string) => {
+    const ecran = form.ecrans[index];
+    if (!ecran) return;
+    const previous = ecran.code.toUpperCase();
+    const next = value.toUpperCase();
+    ecran.code = next;
+    if (!previous || previous === next) return;
+    for (const champ of form.champs) {
+        if ((champ.ecran_code || '').toUpperCase() === previous) {
+            champ.ecran_code = next;
+        }
+    }
+};
+
+const ecranLien = (index: number) => {
+    if (index === 0) return 'Premier écran';
+    const prev = form.ecrans[index - 1];
+    return `Suit ${prev?.code || prev?.libelle || 'l’écran précédent'}`;
+};
+
 const addChampToSelectedEcran = () => {
     const ecran = selectedEcran.value;
     if (!ecran) return;
+    if (!ecran.code.trim()) {
+        ecran.code = nextEcranCode();
+    }
     form.champs.push({
         ...emptyChamp(),
-        ecran_code: ecran.code || '',
+        ecran_code: ecran.code,
     });
 };
 
@@ -501,13 +635,13 @@ const showTauxTaf = computed(() => mode.value !== 'gratuit');
 const modeHint = computed(() => {
     switch (mode.value) {
         case 'fixe':
-            return 'Les frais HT sont un montant fixe paramétré.';
+            return 'Les frais sont le montant du champ Frais fixe. La taxe choisie s’ajoute ensuite.';
         case 'tranche':
-            return 'Les frais dépendent du montant de la demande — définissez les tranches ci-dessous.';
+            return 'Le montant de la demande choisit une tranche par son libellé. La taxe choisie s’ajoute ensuite.';
         case 'mixte':
-            return 'Frais = montant fixe + (montant demande × taux %). Aucun = 0 %, sinon 10 % ou 18 %.';
+            return 'Frais hors taxe = montant fixe + (montant de la demande × taux client). Puis TAF 10 % ou TVA 18 %.';
         case 'taux':
-            return 'Les frais HT = montant demande × taux %. Aucun = 0 %, sinon 10 % ou 18 %.';
+            return 'Frais hors taxe = montant de la demande × taux client. Puis TAF 10 % ou TVA 18 % sur ces frais.';
         case 'manuel':
             return 'Les frais sont saisis à l’opération (éventuellement bornés par min / plafond).';
         case 'gratuit':
@@ -517,29 +651,6 @@ const modeHint = computed(() => {
     }
 });
 
-const syncTauxFraisFromTaf = (taf: string | number | null | undefined) => {
-    const n = String(taf ?? '0');
-    if (n === '0' || n === '') {
-        form.taux_frais = '0';
-        return;
-    }
-    if (n === '10' || n === '18') {
-        form.taux_frais = n;
-    }
-};
-
-watch(
-    () => form.taux_taf,
-    (v) => {
-        if (showTauxFrais.value) {
-            syncTauxFraisFromTaf(v);
-        }
-    },
-);
-
-if (showTauxFrais.value) {
-    syncTauxFraisFromTaf(form.taux_taf);
-}
 </script>
 
 <template>
@@ -547,10 +658,19 @@ if (showTauxFrais.value) {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <form
-            class="relative min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white"
+            class="relative flex min-h-full flex-1 flex-col bg-gradient-to-b from-slate-50 via-white to-white"
             @submit.prevent="submit"
         >
-            <div class="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
+            <div class="flex w-full flex-1 flex-col gap-6 p-4 sm:p-6">
+            <div
+                v-if="Object.keys(form.errors).length"
+                class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            >
+                <p class="font-medium">L’enregistrement n’a pas abouti.</p>
+                <ul class="mt-1 list-disc pl-5">
+                    <li v-for="(err, key) in form.errors" :key="key">{{ err }}</li>
+                </ul>
+            </div>
             <div
                 class="sticky top-0 z-10 -mx-1 rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-4 shadow-sm ring-1 ring-slate-900/5 backdrop-blur supports-[backdrop-filter]:bg-white/80 sm:px-5"
             >
@@ -658,59 +778,43 @@ if (showTauxFrais.value) {
                 <div :class="sectionHead">
                     <div>
                         <h2 :class="sectionTitle">Informations du produit</h2>
-                        <p :class="sectionSub">Code, nom, statut et devise — visibles en permanence.</p>
+                        <p :class="sectionSub">Code, libellé, devise et statut. L’initiateur se choisit sur chaque écran.</p>
                     </div>
                 </div>
                 <div :class="sectionBody">
-                <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <div :class="fieldClass">
-                        <Label>Code produit *</Label>
-                        <Input v-model="form.code" class="h-11 font-mono" required />
-                        <p v-if="fieldError('code')" class="text-xs text-destructive">{{ fieldError('code') }}</p>
+                    <div>
+                        <p class="mb-3 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Identité</p>
+                        <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                            <div :class="fieldClass">
+                                <Label>Code produit *</Label>
+                                <Input v-model="form.code" class="h-11 font-mono" required />
+                                <p v-if="fieldError('code')" class="text-xs text-destructive">{{ fieldError('code') }}</p>
+                            </div>
+                            <div :class="[fieldClass, 'sm:col-span-2']">
+                                <Label>Libellé *</Label>
+                                <Input v-model="form.libelle" class="h-11" required />
+                                <p v-if="fieldError('libelle')" class="text-xs text-destructive">{{ fieldError('libelle') }}</p>
+                            </div>
+                            <div :class="fieldClass">
+                                <Label>Type d’opération</Label>
+                                <Input v-model="form.type_operation" class="h-11" placeholder="Ex. virement" />
+                            </div>
+                            <div :class="fieldClass">
+                                <Label>Devise</Label>
+                                <Input v-model="form.devise" class="h-11" />
+                            </div>
+                            <div :class="fieldClass">
+                                <Label>Statut</Label>
+                                <select v-model="form.statut" :class="selectClass">
+                                    <option v-for="s in statuts" :key="s" :value="s">{{ labelStatutProduit(s) }}</option>
+                                </select>
+                            </div>
+                            <label class="flex h-11 items-center gap-2 self-end rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-800">
+                                <input id="actif" v-model="form.actif" type="checkbox" class="size-4 rounded border" />
+                                Produit actif
+                            </label>
+                        </div>
                     </div>
-                    <div :class="[fieldClass, 'sm:col-span-2 xl:col-span-2']">
-                        <Label>Libellé *</Label>
-                        <Input v-model="form.libelle" class="h-11" required />
-                        <p v-if="fieldError('libelle')" class="text-xs text-destructive">{{ fieldError('libelle') }}</p>
-                    </div>
-                    <div :class="fieldClass">
-                        <Label>Type d’opération</Label>
-                        <Input v-model="form.type_operation" class="h-11" />
-                    </div>
-                    <div :class="fieldClass">
-                        <Label>Devise</Label>
-                        <Input v-model="form.devise" class="h-11" />
-                    </div>
-                    <div :class="fieldClass">
-                        <Label>Initiateur</Label>
-                        <select v-model="form.initiateur" :class="selectClass">
-                            <option value="">— Choisir un rôle —</option>
-                            <option
-                                v-if="form.initiateur && !initiateurs.some((r) => r.slug === form.initiateur)"
-                                :value="form.initiateur"
-                            >
-                                {{ form.initiateur }}
-                            </option>
-                            <option v-for="role in initiateurs" :key="role.slug" :value="role.slug">
-                                {{ role.nom }}
-                            </option>
-                        </select>
-                    </div>
-                    <div :class="fieldClass">
-                        <Label>Validateur</Label>
-                        <Input v-model="form.validateur" class="h-11" placeholder="Profil habilité" />
-                    </div>
-                    <div :class="fieldClass">
-                        <Label>Statut</Label>
-                        <select v-model="form.statut" :class="selectClass">
-                            <option v-for="s in statuts" :key="s" :value="s">{{ s }}</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center gap-2 pt-7">
-                        <input id="actif" v-model="form.actif" type="checkbox" class="size-4 rounded border" />
-                        <Label for="actif">Produit actif</Label>
-                    </div>
-                </div>
                 </div>
             </section>
 
@@ -726,14 +830,7 @@ if (showTauxFrais.value) {
                         <Button type="button" size="sm" variant="outline" class="bg-white" @click="applyEcranTemplates">
                             Modèles CDC
                         </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            @click="
-                                form.ecrans.push(emptyEcran());
-                                openEcran(form.ecrans.length - 1);
-                            "
-                        >
+                        <Button type="button" size="sm" @click="addEcran">
                             <Plus class="mr-1 h-4 w-4" /> Écran
                         </Button>
                     </div>
@@ -748,7 +845,7 @@ if (showTauxFrais.value) {
                         <span>Code</span>
                         <span>Nom</span>
                         <span>Activation</span>
-                        <span>Profils</span>
+                        <span>Initiateur</span>
                         <span>Champs</span>
                         <span class="text-right">Actions</span>
                     </div>
@@ -778,7 +875,7 @@ if (showTauxFrais.value) {
                             </span>
                         </span>
                         <span class="truncate text-xs text-slate-500">
-                            {{ e.profils.length ? e.profils.map(profilLabel).join(', ') : 'Tous profils' }}
+                            {{ ecranLien(index) }} · {{ ecranInitiateurLabel(e) }}
                         </span>
                         <span class="text-xs text-slate-500">{{ champsCountForEcran(e.code) }}</span>
                         <span class="flex justify-end gap-1">
@@ -792,30 +889,9 @@ if (showTauxFrais.value) {
                     </div>
                 </div>
 
-                <div
-                    v-else
-                    class="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 px-4 py-8 text-center"
-                >
-                    <p class="text-sm font-medium text-slate-700">Aucun écran sur ce produit</p>
-                    <p class="mt-1 text-sm text-slate-500">
-                        Les onglets Base / Constantes / Champs / Schéma s’ouvrent dans chaque écran.
-                    </p>
-                    <div class="mt-4 flex justify-center gap-2">
-                        <Button type="button" size="sm" variant="outline" class="bg-white" @click="applyEcranTemplates">
-                            Modèles CDC
-                        </Button>
-                        <Button
-                            type="button"
-                            size="sm"
-                            @click="
-                                form.ecrans.push(emptyEcran());
-                                openEcran(0);
-                            "
-                        >
-                            <Plus class="mr-1 h-4 w-4" /> Écran
-                        </Button>
-                    </div>
-                </div>
+                <p v-else class="text-sm text-slate-500">
+                    Aucun écran. Ajoutez-en un, ou chargez les modèles CDC. Chaque écran ouvre ensuite Base, Constantes, Champs et Schéma.
+                </p>
                 </div>
             </section>
             </div>
@@ -827,22 +903,52 @@ if (showTauxFrais.value) {
                 <div :class="sectionHead">
                     <div>
                         <h2 :class="sectionTitle">Informations de base de l’écran</h2>
-                        <p :class="sectionSub">Code, nom, activation et profils.</p>
+                        <p :class="sectionSub">Code, nom, activation et rôle qui saisit cet écran.</p>
                     </div>
                 </div>
                 <div :class="sectionBody">
-                    <div class="grid gap-3 lg:grid-cols-[8rem_1fr_1.2fr_auto]">
+                    <div class="grid gap-3 lg:grid-cols-[8rem_1fr_1fr_14rem_auto]">
                         <div :class="fieldClass">
                             <Label>Code *</Label>
-                            <Input v-model="selectedEcran.code" class="h-11 font-mono uppercase" placeholder="ECR01" />
+                            <Input
+                                :model-value="selectedEcran.code"
+                                class="h-11 font-mono uppercase"
+                                placeholder="ECR01"
+                                @update:model-value="(v) => onEcranCode(selectedEcranIndex ?? 0, String(v ?? ''))"
+                            />
+                            <p v-if="fieldError(`ecrans.${selectedEcranIndex}.code`)" class="text-xs text-destructive">
+                                {{ fieldError(`ecrans.${selectedEcranIndex}.code`) }}
+                            </p>
                         </div>
                         <div :class="fieldClass">
                             <Label>Nom *</Label>
                             <Input v-model="selectedEcran.libelle" class="h-11" placeholder="Informations de base" />
+                            <p v-if="fieldError(`ecrans.${selectedEcranIndex}.libelle`)" class="text-xs text-destructive">
+                                {{ fieldError(`ecrans.${selectedEcranIndex}.libelle`) }}
+                            </p>
                         </div>
                         <div :class="fieldClass">
                             <Label>Description</Label>
                             <Input v-model="selectedEcran.description" class="h-11" />
+                        </div>
+                        <div :class="fieldClass">
+                            <Label>Initiateur</Label>
+                            <select
+                                :value="ecranInitiateur(selectedEcran)"
+                                :class="selectClass"
+                                @change="setEcranInitiateur(selectedEcran, ($event.target as HTMLSelectElement).value)"
+                            >
+                                <option value="">— Choisir un rôle —</option>
+                                <option
+                                    v-if="ecranInitiateur(selectedEcran) && !initiateurs.some((r) => r.slug === ecranInitiateur(selectedEcran))"
+                                    :value="ecranInitiateur(selectedEcran)"
+                                >
+                                    {{ ecranInitiateur(selectedEcran) }}
+                                </option>
+                                <option v-for="role in initiateurs" :key="role.slug" :value="role.slug">
+                                    {{ role.nom }}
+                                </option>
+                            </select>
                         </div>
                         <div class="flex items-end pb-1">
                             <label class="flex items-center gap-2 text-sm">
@@ -851,33 +957,10 @@ if (showTauxFrais.value) {
                             </label>
                         </div>
                     </div>
-                    <div>
-                        <p class="mb-2 text-xs font-medium text-slate-500">Profils autorisés</p>
-                        <div class="flex flex-wrap gap-3">
-                            <label
-                                v-for="p in profilsEcran || []"
-                                :key="p.key"
-                                class="flex items-center gap-2 text-sm"
-                            >
-                                <input
-                                    type="checkbox"
-                                    class="size-4 rounded border"
-                                    :checked="selectedEcran.profils.includes(p.key)"
-                                    @change="
-                                        () => {
-                                            const i = selectedEcran.profils.indexOf(p.key);
-                                            if (i >= 0) selectedEcran.profils.splice(i, 1);
-                                            else selectedEcran.profils.push(p.key);
-                                        }
-                                    "
-                                />
-                                {{ p.label }}
-                            </label>
-                        </div>
-                        <p class="mt-1 text-xs text-slate-500">
-                            Vide = accessible à tous les utilisateurs du module.
-                        </p>
-                    </div>
+                    <p class="text-xs text-slate-500">
+                        {{ ecranLien(selectedEcranIndex ?? 0) }}.
+                        Sans initiateur, l’écran reste ouvert à tous les utilisateurs du module.
+                    </p>
                 </div>
             </section>
             </div>
@@ -942,8 +1025,8 @@ if (showTauxFrais.value) {
             <section :class="sectionShell">
                 <div :class="sectionHead">
                     <div>
-                        <h2 :class="sectionTitle">Scripts (whitelist)</h2>
-                        <p :class="sectionSub">Moteurs sécurisés pour alimenter les constantes.</p>
+                        <h2 :class="sectionTitle">Scripts</h2>
+                        <p :class="sectionSub">Une requête SQL par script, enregistrée avec le produit.</p>
                     </div>
                     <Button type="button" size="sm" @click="form.scripts.push(emptyScript())">
                         <Plus class="mr-1 h-4 w-4" /> Script
@@ -953,53 +1036,37 @@ if (showTauxFrais.value) {
                 <div
                     v-for="(s, index) in form.scripts"
                     :key="index"
-                    class="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/40 p-4 lg:grid-cols-[8rem_1fr_12rem_1fr_auto]"
+                    class="overflow-hidden rounded-xl border border-slate-200 bg-white"
                 >
-                    <div class="space-y-1">
-                        <Label>Code</Label>
-                        <Input v-model="s.code" class="font-mono uppercase" placeholder="SCRIPT_FRAIS" />
-                    </div>
-                    <div class="space-y-1">
-                        <Label>Libellé</Label>
-                        <Input v-model="s.libelle" />
-                    </div>
-                    <div class="space-y-1">
-                        <Label>Moteur</Label>
-                        <select v-model="s.moteur" :class="selectClass">
-                            <option v-for="m in moteursScript || []" :key="m.key" :value="m.key">
-                                {{ m.label }}
-                            </option>
-                        </select>
-                    </div>
-                    <div class="space-y-1">
-                        <Label>Paramètres</Label>
-                        <Input
-                            v-if="s.moteur === 'valeur_fixe'"
-                            v-model="s.parametres.valeur"
-                            placeholder="valeur"
-                        />
-                        <Input
-                            v-else-if="s.moteur === 'copie_champ'"
-                            v-model="s.parametres.champ"
-                            placeholder="CODE_CHAMP"
-                            class="font-mono uppercase"
-                        />
-                        <Input
-                            v-else-if="s.moteur === 'frais_taux_demande' || s.moteur === 'taf_sur_frais'"
-                            v-model="s.parametres.taux"
-                            type="number"
-                            placeholder="taux % (optionnel)"
-                        />
-                        <p v-else class="pt-2 text-xs text-muted-foreground">Aucun paramètre</p>
-                    </div>
-                    <div class="flex items-end justify-end gap-1">
-                        <label class="mr-2 flex items-center gap-2 pb-2 text-sm">
+                    <div class="flex flex-wrap items-end gap-3 border-b border-slate-100 px-4 py-3">
+                        <div class="w-44 space-y-1">
+                            <Label>Code</Label>
+                            <Input v-model="s.code" class="h-10 font-mono uppercase" placeholder="SCRIPT_FRAIS" />
+                        </div>
+                        <div class="min-w-[12rem] flex-1 space-y-1">
+                            <Label>Libellé</Label>
+                            <Input v-model="s.libelle" class="h-10" />
+                        </div>
+                        <label class="mb-2 flex items-center gap-2 text-sm">
                             <input v-model="s.actif" type="checkbox" class="size-4 rounded border" />
                             Actif
                         </label>
                         <Button type="button" variant="ghost" size="icon" @click="form.scripts.splice(index, 1)">
                             <Trash2 class="h-4 w-4 text-destructive" />
                         </Button>
+                    </div>
+                    <div class="space-y-1.5 p-4">
+                        <Label>Code SQL</Label>
+                        <textarea
+                            :value="String(s.parametres.requete ?? '')"
+                            spellcheck="false"
+                            placeholder="select colonne from table where id = :id"
+                            class="min-h-56 w-full resize-y rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 font-mono text-[13px] leading-6 text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-primary/20"
+                            @input="onScriptRequete(s, ($event.target as HTMLTextAreaElement).value)"
+                        />
+                        <p v-if="fieldError(`scripts.${index}.code`)" class="text-xs text-destructive">
+                            {{ fieldError(`scripts.${index}.code`) }}
+                        </p>
                     </div>
                 </div>
                 <p v-if="form.scripts.length === 0" class="text-sm text-slate-500">Aucun script.</p>
@@ -1053,17 +1120,19 @@ if (showTauxFrais.value) {
                         </div>
                     </div>
 
-                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                        <div class="space-y-1">
-                            <Label>Obligation</Label>
-                            <select
-                                :class="selectClass"
-                                :value="c.obligatoire ? 'obligatoire' : 'facultatif'"
-                                @change="c.obligatoire = ($event.target as HTMLSelectElement).value === 'obligatoire'"
-                            >
-                                <option value="obligatoire">Obligatoire</option>
-                                <option value="facultatif">Facultatif</option>
-                            </select>
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                        <div class="space-y-1 sm:col-span-2">
+                            <Label>Texte à afficher *</Label>
+                            <Input
+                                :model-value="c.libelle"
+                                class="h-11"
+                                placeholder="N° de compte du client"
+                                @update:model-value="(v) => onChampLibelle(c, String(v ?? ''))"
+                            />
+                            <p v-if="c.code" class="text-[11px] text-slate-400">Code interne {{ c.code }}</p>
+                            <p v-if="fieldError(`champs.${index}.code`)" class="text-xs text-destructive">
+                                {{ fieldError(`champs.${index}.code`) }}
+                            </p>
                         </div>
                         <div class="space-y-1">
                             <Label>Type</Label>
@@ -1074,86 +1143,55 @@ if (showTauxFrais.value) {
                             </select>
                         </div>
                         <div class="space-y-1">
-                            <Label>Taille</Label>
-                            <Input
-                                v-if="c.type === 'texte'"
-                                v-model="c.options.max_length"
-                                type="number"
-                                min="1"
-                                placeholder="ex. 12"
-                            />
-                            <Input
-                                v-else-if="c.type === 'numerique'"
-                                v-model="c.options.decimales"
-                                type="number"
-                                min="0"
-                                max="6"
-                                placeholder="Décimales"
-                            />
-                            <Input
-                                v-else
-                                value="—"
-                                disabled
-                                class="h-10 opacity-60"
-                            />
-                        </div>
-                        <div class="space-y-1">
-                            <Label>Variable *</Label>
-                            <Input
-                                v-model="c.code"
-                                placeholder="customer_account_number"
-                                class="font-mono text-sm"
-                            />
-                            <p v-if="fieldError(`champs.${index}.code`)" class="text-xs text-destructive">
-                                {{ fieldError(`champs.${index}.code`) }}
-                            </p>
-                        </div>
-                        <div class="space-y-1">
-                            <Label>Texte à afficher *</Label>
-                            <Input v-model="c.libelle" placeholder="N° de compte du client" />
-                        </div>
-                    </div>
-
-                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                        <div class="space-y-1">
-                            <Label>Écran</Label>
-                            <Input :model-value="selectedEcran?.code || ''" class="h-11 font-mono" disabled />
-                        </div>
-                        <div class="space-y-1">
-                            <Label>Valeur par défaut</Label>
-                            <Input v-model="c.valeur_defaut" />
+                            <Label>Obligation</Label>
+                            <select
+                                :class="selectClass"
+                                :value="c.obligatoire ? 'obligatoire' : 'facultatif'"
+                                @change="c.obligatoire = ($event.target as HTMLSelectElement).value === 'obligatoire'"
+                            >
+                                <option value="facultatif">Facultatif</option>
+                                <option value="obligatoire">Obligatoire</option>
+                            </select>
                         </div>
                         <div class="space-y-1">
                             <Label>Affichage</Label>
                             <select
                                 :class="selectClass"
-                                :value="c.visible === false ? 'masque' : c.gris ? 'lecture' : 'saisie'"
+                                :value="c.gris ? 'grise' : 'saisie'"
                                 @change="
                                     () => {
                                         const v = ($event.target as HTMLSelectElement).value;
-                                        c.visible = v !== 'masque';
-                                        c.gris = v === 'lecture';
+                                        c.visible = true;
+                                        c.gris = v === 'grise';
                                     }
                                 "
                             >
                                 <option value="saisie">Saisie</option>
-                                <option value="lecture">Lecture seule</option>
-                                <option value="masque">Masqué</option>
+                                <option value="grise">Grisé</option>
                             </select>
                         </div>
-                        <div
-                            v-if="c.type === 'numerique'"
-                            class="grid grid-cols-2 gap-2"
-                        >
-                            <div class="space-y-1">
-                                <Label>Min</Label>
-                                <Input v-model="c.options.min" type="number" />
-                            </div>
-                            <div class="space-y-1">
-                                <Label>Max</Label>
-                                <Input v-model="c.options.max" type="number" />
-                            </div>
+                        <div v-if="c.type !== 'fichier'" class="space-y-1">
+                            <Label>Valeur par défaut</Label>
+                            <Input v-model="c.valeur_defaut" class="h-11" />
                         </div>
+                        <div v-if="c.type === 'texte'" class="space-y-1">
+                            <Label>Taille max.</Label>
+                            <Input v-model="c.options.max_length" class="h-11" type="number" min="1" placeholder="255" />
+                        </div>
+                        <div v-else-if="c.type === 'numerique'" class="space-y-1">
+                            <Label>Décimales</Label>
+                            <Input v-model="c.options.decimales" class="h-11" type="number" min="0" max="6" />
+                        </div>
+                        <template v-if="c.type === 'numerique'">
+                            <div class="space-y-1">
+                                <Label>Minimum</Label>
+                                <Input v-model="c.options.min" class="h-11" type="number" />
+                            </div>
+                            <div class="space-y-1">
+                                <Label>Maximum</Label>
+                                <Input v-model="c.options.max" class="h-11" type="number" />
+                            </div>
+                        </template>
                     </div>
 
                     <div v-if="c.type === 'liste'" class="space-y-2 rounded-lg border border-dashed border-border p-3">
@@ -1252,10 +1290,10 @@ if (showTauxFrais.value) {
 
                 <div
                     v-if="champsOfSelectedEcran.some(({ champ: c }) => c.visible !== false && c.libelle)"
-                    class="rounded-xl border border-primary/15 bg-primary/5 p-4"
+                    class="rounded-xl border border-slate-200 bg-white p-4"
                 >
-                    <p class="mb-3 text-[11px] font-semibold tracking-[0.14em] text-primary uppercase">
-                        Aperçu de l’écran
+                    <p class="mb-3 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                        Aperçu pour l’agent
                     </p>
                     <div class="grid gap-3 sm:grid-cols-2">
                         <DynamicFieldInput
@@ -1298,21 +1336,18 @@ if (showTauxFrais.value) {
                             <Input v-model="form.frais_fixe" class="h-11" type="number" step="0.01" min="0" />
                         </div>
                         <div v-if="showTauxFrais" :class="fieldClass">
-                            <Label>Taux frais (%)</Label>
+                            <Label>Taux client (%)</Label>
                             <Input v-model="form.taux_frais" class="h-11" type="number" step="0.01" min="0" />
-                            <p class="text-[11px] text-slate-500">Aligné sur TAF / taxe : Aucun = 0, sinon 10 ou 18.</p>
+                            <p class="text-[11px] text-slate-500">Appliqué au montant de la demande pour obtenir les frais hors taxe.</p>
                         </div>
                         <div v-if="showTauxTaf" :class="fieldClass">
-                            <Label>Taux TAF / taxe</Label>
-                            <select
-                                v-model="form.taux_taf"
-                                :class="selectClass"
-                                @change="syncTauxFraisFromTaf(form.taux_taf)"
-                            >
-                                <option value="0">Aucun</option>
+                            <Label>Taxe sur les frais</Label>
+                            <select v-model="form.taux_taf" :class="selectClass">
+                                <option value="0">Aucune</option>
                                 <option value="10">TAF 10 %</option>
-                                <option value="18">Taxe 18 %</option>
+                                <option value="18">TVA 18 %</option>
                             </select>
+                            <p class="text-[11px] text-slate-500">Calculée sur les frais hors taxe, à part du taux client.</p>
                         </div>
                         <div v-if="showMinMax" :class="fieldClass">
                             <Label>Minimum frais</Label>
@@ -1350,7 +1385,7 @@ if (showTauxFrais.value) {
                 <div :class="sectionHead">
                     <div>
                         <h2 :class="sectionTitle">Tranches de montant</h2>
-                        <p :class="sectionSub">Intervalle de montant demande → frais associés.</p>
+                        <p :class="sectionSub">Chaque tranche a un libellé. Le montant de la demande choisit la tranche.</p>
                     </div>
                     <Button type="button" size="sm" @click="form.tranches.push(emptyTranche())">
                         <Plus class="mr-1 h-4 w-4" /> Ajouter

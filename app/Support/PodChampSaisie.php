@@ -6,6 +6,8 @@ use App\Models\PodProduit;
 use App\Models\PodProduitChamp;
 use App\Models\User;
 use App\Support\PodEcranAccess;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
@@ -77,6 +79,76 @@ class PodChampSaisie
     }
 
     /**
+     * Valide les champs d’une étape du circuit (écran courant).
+     *
+     * @param  Collection<int, PodProduitChamp>  $champs
+     * @param  array<string, mixed>  $saisies
+     * @param  array<string, list<UploadedFile>>  $fichiers
+     * @param  array<string, list<string>>  $existants  noms des pièces déjà jointes, par code champ
+     * @return array<string, mixed>
+     *
+     * @throws ValidationException
+     */
+    public static function validateChamps(Collection $champs, array $saisies, array $fichiers = [], array $existants = []): array
+    {
+        $normalized = [];
+        $errors = [];
+
+        foreach ($champs as $champ) {
+            $code = $champ->code;
+
+            if ($champ->type === PodProduitChamp::TYPE_FICHIER) {
+                $nouveaux = array_values(array_filter(
+                    (array) ($fichiers[$code] ?? []),
+                    fn ($f) => $f instanceof UploadedFile,
+                ));
+                $noms = [
+                    ...($existants[$code] ?? []),
+                    ...array_map(fn (UploadedFile $f) => $f->getClientOriginalName(), $nouveaux),
+                ];
+                if ($noms === [] && $champ->obligatoire) {
+                    $errors["champs_saisis.{$code}"] = "Joignez au moins un fichier pour « {$champ->libelle} ».";
+                    continue;
+                }
+                $normalized[$code] = $noms === [] ? null : implode(', ', $noms);
+                continue;
+            }
+
+            $raw = array_key_exists($code, $saisies) ? $saisies[$code] : null;
+            if ($raw === null || $raw === '') {
+                $raw = $champ->valeur_defaut;
+            }
+
+            if ($champ->gris) {
+                $normalized[$code] = self::castValue($champ, $champ->valeur_defaut);
+                continue;
+            }
+
+            if (($raw === null || $raw === '') && $champ->obligatoire) {
+                $errors["champs_saisis.{$code}"] = "Le champ « {$champ->libelle} » est obligatoire.";
+                continue;
+            }
+
+            if ($raw === null || $raw === '') {
+                $normalized[$code] = null;
+                continue;
+            }
+
+            try {
+                $normalized[$code] = self::castValue($champ, $raw);
+            } catch (\InvalidArgumentException $e) {
+                $errors["champs_saisis.{$code}"] = $e->getMessage();
+            }
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        return $normalized;
+    }
+
+    /**
      * @throws \InvalidArgumentException
      */
     private static function castValue(PodProduitChamp $champ, mixed $raw): mixed
@@ -93,6 +165,7 @@ class PodChampSaisie
             PodProduitChamp::TYPE_TABLE => self::castTable($champ, (string) $raw),
             PodProduitChamp::TYPE_NUMERIQUE => self::castNumerique($champ, $raw, $options),
             PodProduitChamp::TYPE_DATE => self::castDate($champ, (string) $raw),
+            PodProduitChamp::TYPE_FICHIER => (string) $raw,
             default => throw new \InvalidArgumentException("Type de champ inconnu pour « {$champ->libelle} »."),
         };
     }

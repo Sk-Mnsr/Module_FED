@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -29,6 +29,7 @@ export type ChampDef = {
         colonnes_desactivees?: string[];
     };
     valeurs?: Array<{ code: string; libelle: string }>;
+    pieces_existantes?: string[];
 };
 
 const props = withDefaults(
@@ -46,7 +47,16 @@ const props = withDefaults(
 
 const emit = defineEmits<{
     'update:modelValue': [value: string | number | null];
+    files: [files: File[]];
 }>();
+
+const fichiersChoisis = ref<string[]>([]);
+
+const onFiles = (e: Event) => {
+    const files = Array.from((e.target as HTMLInputElement).files ?? []);
+    fichiersChoisis.value = files.map((f) => f.name);
+    emit('files', files);
+};
 
 const isSelect = computed(() => props.champ.type === 'liste' || props.champ.type === 'table');
 
@@ -107,6 +117,22 @@ const onInput = (e: Event) => {
             :class="inputClass"
             @update:model-value="(v) => emit('update:modelValue', v === '' ? null : v)"
         />
+
+        <div v-else-if="champ.type === 'fichier'" class="space-y-1">
+            <input
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                :disabled="champ.gris"
+                class="block w-full rounded-md border border-dashed border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-slate-700"
+                @change="onFiles"
+            />
+            <p v-if="champ.pieces_existantes?.length" class="text-xs text-emerald-700">
+                Déjà joint : {{ champ.pieces_existantes.join(', ') }}
+            </p>
+            <p v-if="fichiersChoisis.length" class="text-xs text-slate-500">{{ fichiersChoisis.join(', ') }}</p>
+            <p v-else class="text-xs text-slate-400">PDF, image, Word ou Excel, 10 Mo maximum par fichier.</p>
+        </div>
 
         <Input
             v-else-if="champ.type === 'date'"

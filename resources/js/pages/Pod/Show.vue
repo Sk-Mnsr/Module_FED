@@ -3,7 +3,7 @@ import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2 } from 'lucide-vue-next';
-import { labelStatutProduit, statutProduitClass } from '@/lib/podLabels';
+import { labelModeFrais, labelStatutProduit, modeConstanteLabels, statutProduitClass } from '@/lib/podLabels';
 
 type Produit = {
     id: number;
@@ -88,6 +88,8 @@ type Produit = {
 const props = defineProps<{
     produit: Produit;
     tauxTafDefaut: number;
+    profilsEcran?: Array<{ key: string; label: string }>;
+    initiateurs?: Array<{ slug: string; nom: string }>;
     audits?: Array<{
         id: number;
         action: string;
@@ -119,14 +121,45 @@ const fmt = (v: string | number | null | undefined) => {
     if (v === null || v === undefined || v === '') return '—';
     return Number(v).toLocaleString('fr-FR');
 };
+
+const roleNom = (slug: string | null | undefined) => {
+    if (!slug) return '—';
+    return (
+        props.initiateurs?.find((role) => role.slug === slug)?.nom
+        || props.profilsEcran?.find((profil) => profil.key === slug)?.label
+        || slug
+    );
+};
+
+const taxeLabel = (taux: string | number | null | undefined) => {
+    const n = Number(taux ?? 0);
+    if (n === 10) return 'TAF 10 %';
+    if (n === 18) return 'TVA 18 %';
+    if (!n) return 'Aucune';
+    return `${n} %`;
+};
+
+const typeChampLabels: Record<string, string> = {
+    texte: 'Texte',
+    liste: 'Liste de valeurs',
+    numerique: 'Numérique',
+    date: 'Date',
+    table: 'Table',
+    fichier: 'Pièce jointe',
+};
+
+const sectionShell = 'overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5';
+const sectionHead = 'border-b border-slate-100 bg-slate-50 px-5 py-3 text-[11px] font-semibold tracking-wide text-slate-500 uppercase';
+const selectClass = 'h-11 min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm';
 </script>
 
 <template>
     <Head :title="`Produit ${produit.code}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-            <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="flex min-h-full flex-1 flex-col bg-gradient-to-b from-slate-50 via-white to-white">
+            <div class="flex w-full min-w-0 flex-1 flex-col gap-4 p-4">
+            <div class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm ring-1 ring-slate-900/5">
                 <div>
                     <p class="text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">
                         Produits divers
@@ -156,37 +189,33 @@ const fmt = (v: string | number | null | undefined) => {
                             {{ produit.actif ? 'Actif' : 'Inactif' }}
                         </span>
                     </div>
-                    <p class="mt-2 text-sm text-muted-foreground">
-                        {{ produit.type_operation || 'Opération diverse' }}
-                        · Initiateur {{ produit.initiateur || '—' }}
-                        · {{ produit.ecrans?.length || 0 }} écran{{ (produit.ecrans?.length || 0) > 1 ? 's' : '' }}
+                    <p class="mt-2 text-sm text-slate-500">
+                        {{ produit.ecrans?.length || 0 }} écran{{ (produit.ecrans?.length || 0) > 1 ? 's' : '' }}
+                        · {{ produit.champs?.length || 0 }} champ{{ (produit.champs?.length || 0) > 1 ? 's' : '' }}
                     </p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <Button as-child variant="outline">
+                    <Button as-child variant="outline" class="h-11 bg-white">
                         <Link :href="`/pod/produits/${produit.id}/edit`">
                             <Pencil class="mr-2 h-4 w-4" /> Modifier
                         </Link>
                     </Button>
-                    <Button variant="destructive" @click="destroy">
+                    <Button variant="destructive" class="h-11" @click="destroy">
                         <Trash2 class="mr-2 h-4 w-4" /> Supprimer
                     </Button>
                 </div>
             </div>
 
-            <div class="grid gap-4 md:grid-cols-3">
-                <div class="rounded-xl border border-border bg-card p-4">
-                    <p class="text-xs uppercase text-muted-foreground">Statut</p>
-                    <form class="mt-2 flex gap-2" @submit.prevent="changeStatut">
-                        <select
-                            v-model="statutForm.statut"
-                            class="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
-                        >
+            <div class="grid gap-4 lg:grid-cols-3">
+                <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+                    <p class="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Statut</p>
+                    <form class="mt-3 flex gap-2" @submit.prevent="changeStatut">
+                        <select v-model="statutForm.statut" :class="selectClass">
                             <option value="brouillon">Brouillon</option>
                             <option value="valide">Validé</option>
                             <option value="production">Production</option>
                         </select>
-                        <Button size="sm" type="submit" :disabled="statutForm.processing">OK</Button>
+                        <Button class="h-11" type="submit" :disabled="statutForm.processing">Enregistrer</Button>
                     </form>
                     <p
                         v-for="(err, key) in statutForm.errors"
@@ -196,65 +225,63 @@ const fmt = (v: string | number | null | undefined) => {
                         {{ err }}
                     </p>
                 </div>
-                <div class="rounded-xl border border-border bg-card p-4">
-                    <p class="text-xs uppercase text-muted-foreground">Mode frais</p>
-                    <p class="mt-2 text-lg font-semibold">{{ produit.mode_frais }}</p>
-                    <p class="text-sm text-muted-foreground">
-                        Fixe {{ fmt(produit.frais_fixe) }} · Taux {{ fmt(produit.taux_frais) }} %
+                <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+                    <p class="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Frais</p>
+                    <p class="mt-3 text-lg font-semibold text-slate-900">{{ labelModeFrais(produit.mode_frais) }}</p>
+                    <p class="mt-1 text-sm text-slate-500">
+                        Frais fixe {{ fmt(produit.frais_fixe) }} · Taux client {{ fmt(produit.taux_frais) }} %
                     </p>
                 </div>
-                <div class="rounded-xl border border-border bg-card p-4">
-                    <p class="text-xs uppercase text-muted-foreground">TAF</p>
-                    <p class="mt-2 text-lg font-semibold">{{ produit.taux_taf_effectif }} %</p>
-                    <p class="text-sm text-muted-foreground">
-                        Défaut appli {{ tauxTafDefaut }} % · produit
-                        {{ produit.taux_taf != null ? produit.taux_taf + ' %' : 'non défini' }}
+                <div class="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
+                    <p class="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Taxe</p>
+                    <p class="mt-3 text-lg font-semibold text-slate-900">{{ taxeLabel(produit.taux_taf_effectif) }}</p>
+                    <p class="mt-1 text-sm text-slate-500">
+                        {{ produit.taux_taf != null ? 'Choisie sur le produit.' : `Taux par défaut du module (${tauxTafDefaut} %).` }}
                     </p>
                 </div>
             </div>
 
-            <section class="rounded-xl border border-border bg-card p-5">
-                <h2 class="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                    Comptes
-                </h2>
-                <dl class="grid gap-3 text-sm md:grid-cols-2">
+            <section :class="sectionShell">
+                <h2 :class="sectionHead">Comptes et libellés</h2>
+                <dl class="grid gap-4 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
                     <div>
-                        <dt class="text-muted-foreground">Compte produit</dt>
-                        <dd class="font-medium">{{ produit.compte_produit || '—' }}</dd>
+                        <dt class="text-slate-500">Compte produit</dt>
+                        <dd class="mt-0.5 font-mono font-medium text-slate-900">{{ produit.compte_produit || '—' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-muted-foreground">Compte TAF</dt>
-                        <dd class="font-medium">{{ produit.compte_taf || '—' }}</dd>
+                        <dt class="text-slate-500">Compte TAF</dt>
+                        <dd class="mt-0.5 font-mono font-medium text-slate-900">{{ produit.compte_taf || '—' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-muted-foreground">Masque client</dt>
-                        <dd class="font-medium">{{ produit.compte_client_mask || '—' }}</dd>
+                        <dt class="text-slate-500">Masque compte client</dt>
+                        <dd class="mt-0.5 font-mono font-medium text-slate-900">{{ produit.compte_client_mask || '—' }}</dd>
                     </div>
                     <div>
-                        <dt class="text-muted-foreground">Validateur</dt>
-                        <dd class="font-medium">{{ produit.validateur || '—' }}</dd>
+                        <dt class="text-slate-500">Libellé écriture produit</dt>
+                        <dd class="mt-0.5 font-medium text-slate-900">{{ produit.libelle_ecriture_produit || '—' }}</dd>
                     </div>
-                    <div class="md:col-span-2">
-                        <dt class="text-muted-foreground">Libellé écriture produit</dt>
-                        <dd class="font-medium">{{ produit.libelle_ecriture_produit || '—' }}</dd>
+                    <div>
+                        <dt class="text-slate-500">Libellé écriture TAF</dt>
+                        <dd class="mt-0.5 font-medium text-slate-900">{{ produit.libelle_ecriture_taf || '—' }}</dd>
                     </div>
-                    <div class="md:col-span-2">
-                        <dt class="text-muted-foreground">Libellé écriture TAF</dt>
-                        <dd class="font-medium">{{ produit.libelle_ecriture_taf || '—' }}</dd>
+                    <div v-if="produit.code_taf">
+                        <dt class="text-slate-500">Code TAF</dt>
+                        <dd class="mt-0.5 font-mono font-medium text-slate-900">{{ produit.code_taf }}</dd>
                     </div>
-                    <div v-if="produit.base_calcul" class="md:col-span-2">
-                        <dt class="text-muted-foreground">Base de calcul</dt>
-                        <dd class="font-medium">{{ produit.base_calcul }}</dd>
+                    <div v-if="produit.base_calcul" class="sm:col-span-2 lg:col-span-3">
+                        <dt class="text-slate-500">Base de calcul</dt>
+                        <dd class="mt-0.5 font-medium text-slate-900">{{ produit.base_calcul }}</dd>
                     </div>
-                    <div v-if="produit.notes" class="md:col-span-2">
-                        <dt class="text-muted-foreground">Notes</dt>
-                        <dd class="font-medium">{{ produit.notes }}</dd>
+                    <div v-if="produit.notes" class="sm:col-span-2 lg:col-span-3">
+                        <dt class="text-slate-500">Notes</dt>
+                        <dd class="mt-0.5 font-medium text-slate-900">{{ produit.notes }}</dd>
                     </div>
                 </dl>
             </section>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <div class="grid w-full min-w-0 gap-4 xl:grid-cols-2">
+            <section :class="sectionShell">
+                <div :class="sectionHead">
                     Écrans ({{ produit.ecrans?.length || 0 }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -262,7 +289,7 @@ const fmt = (v: string | number | null | undefined) => {
                         <tr>
                             <th class="px-4 py-2">Code</th>
                             <th class="px-4 py-2">Nom</th>
-                            <th class="px-4 py-2">Profils</th>
+                            <th class="px-4 py-2">Initiateur</th>
                             <th class="px-4 py-2">Champs</th>
                         </tr>
                     </thead>
@@ -273,8 +300,8 @@ const fmt = (v: string | number | null | undefined) => {
                                 <p class="font-medium">{{ e.libelle }}</p>
                                 <p v-if="e.description" class="text-xs text-muted-foreground">{{ e.description }}</p>
                             </td>
-                            <td class="px-4 py-2 text-muted-foreground">
-                                {{ e.profils?.length ? e.profils.join(', ') : 'Tous' }}
+                            <td class="px-4 py-2 text-slate-600">
+                                {{ e.profils?.length ? e.profils.map(roleNom).join(', ') : 'Tous les utilisateurs' }}
                             </td>
                             <td class="px-4 py-2 tabular-nums">
                                 {{ (produit.champs || []).filter((c) => c.ecran_code === e.code).length }}
@@ -289,8 +316,8 @@ const fmt = (v: string | number | null | undefined) => {
                 </table>
             </section>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <section :class="sectionShell">
+                <div :class="sectionHead">
                     Champs dynamiques ({{ produit.champs?.length || 0 }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -310,7 +337,7 @@ const fmt = (v: string | number | null | undefined) => {
                             <td class="px-4 py-2 font-mono text-xs">{{ c.code }}</td>
                             <td class="px-4 py-2">{{ c.libelle }}</td>
                             <td class="px-4 py-2 font-mono text-xs">{{ c.ecran_code || '—' }}</td>
-                            <td class="px-4 py-2">{{ c.type }}</td>
+                            <td class="px-4 py-2">{{ typeChampLabels[c.type] || c.type }}</td>
                             <td class="px-4 py-2 text-muted-foreground">
                                 <template v-if="c.type === 'table' && c.options?.table_code">
                                     {{ c.options.table_code }}
@@ -336,8 +363,8 @@ const fmt = (v: string | number | null | undefined) => {
                 </table>
             </section>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <section :class="sectionShell">
+                <div :class="sectionHead">
                     Tranches ({{ produit.tranches.length }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -365,8 +392,8 @@ const fmt = (v: string | number | null | undefined) => {
                 </table>
             </section>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <section :class="sectionShell">
+                <div :class="sectionHead">
                     Schéma comptable ({{ produit.lignes.length }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -394,8 +421,8 @@ const fmt = (v: string | number | null | undefined) => {
                 </table>
             </section>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <section :class="sectionShell">
+                <div :class="sectionHead">
                     Scripts ({{ produit.scripts?.length || 0 }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -403,7 +430,7 @@ const fmt = (v: string | number | null | undefined) => {
                         <tr>
                             <th class="px-4 py-2">Code</th>
                             <th class="px-4 py-2">Libellé</th>
-                            <th class="px-4 py-2">Moteur</th>
+                            <th class="px-4 py-2">Requête</th>
                             <th class="px-4 py-2">Statut</th>
                         </tr>
                     </thead>
@@ -411,7 +438,9 @@ const fmt = (v: string | number | null | undefined) => {
                         <tr v-for="s in produit.scripts || []" :key="s.code" class="border-t border-border">
                             <td class="px-4 py-2 font-mono text-xs">{{ s.code }}</td>
                             <td class="px-4 py-2">{{ s.libelle }}</td>
-                            <td class="px-4 py-2 font-mono text-xs">{{ s.moteur }}</td>
+                            <td class="px-4 py-2 font-mono text-xs whitespace-pre-wrap">
+                                {{ s.moteur === 'requete' ? (s.parametres?.requete || '—') : s.moteur }}
+                            </td>
                             <td class="px-4 py-2">{{ s.actif ? 'actif' : 'inactif' }}</td>
                         </tr>
                         <tr v-if="!(produit.scripts?.length)">
@@ -421,8 +450,8 @@ const fmt = (v: string | number | null | undefined) => {
                 </table>
             </section>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <section :class="sectionShell">
+                <div :class="sectionHead">
                     Constantes ({{ produit.constantes?.length || 0 }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -440,7 +469,7 @@ const fmt = (v: string | number | null | undefined) => {
                             <td class="px-4 py-2 font-mono text-xs">{{ c.code }}</td>
                             <td class="px-4 py-2">{{ c.libelle }}</td>
                             <td class="px-4 py-2">{{ c.type }}</td>
-                            <td class="px-4 py-2">{{ c.mode }}</td>
+                            <td class="px-4 py-2">{{ modeConstanteLabels[c.mode] || c.mode }}</td>
                             <td class="px-4 py-2 font-mono text-xs">{{ c.valeur_reference || '—' }}</td>
                         </tr>
                         <tr v-if="!(produit.constantes?.length)">
@@ -449,9 +478,10 @@ const fmt = (v: string | number | null | undefined) => {
                     </tbody>
                 </table>
             </section>
+            </div>
 
-            <section class="overflow-hidden rounded-xl border border-border bg-card">
-                <div class="border-b border-border px-5 py-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            <section :class="[sectionShell, 'w-full']">
+                <div :class="sectionHead">
                     Historique paramétrage ({{ audits?.length || 0 }})
                 </div>
                 <table class="min-w-full text-sm">
@@ -480,6 +510,7 @@ const fmt = (v: string | number | null | undefined) => {
                     </tbody>
                 </table>
             </section>
+            </div>
         </div>
     </AppLayout>
 </template>

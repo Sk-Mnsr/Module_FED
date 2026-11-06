@@ -21,7 +21,7 @@ final class PodConstanteResolver
      * }  $context
      * @return array<string, array{code: string, libelle: string, type: string, mode: string, valeur: mixed, erreur: string|null}>
      */
-    public static function resolveAll(PodProduit $produit, array $context = []): array
+    public static function resolveAll(PodProduit $produit, array $context = [], bool $strict = true): array
     {
         $produit->loadMissing(['constantes', 'scripts', 'lignesComptables']);
         $out = [];
@@ -33,7 +33,7 @@ final class PodConstanteResolver
                 $valeur = self::resolveOne($produit, $constante, $context);
             } catch (InvalidArgumentException $e) {
                 $erreur = $e->getMessage();
-                if ($constante->obligatoire) {
+                if ($strict && $constante->obligatoire) {
                     throw $e;
                 }
             }

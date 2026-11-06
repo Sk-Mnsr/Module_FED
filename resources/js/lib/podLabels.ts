@@ -1,9 +1,9 @@
 /** Libellés et styles partagés — module Produits divers */
 
 export const modeFraisLabels: Record<string, string> = {
-    fixe: 'Frais fixe',
-    tranche: 'Par tranche',
-    taux: 'Au pourcentage',
+    fixe: 'Montant fixe',
+    tranche: 'Tranche',
+    taux: 'Taux client',
     mixte: 'Fixe + taux',
     manuel: 'Saisie manuelle',
     gratuit: 'Gratuit',
@@ -17,8 +17,20 @@ export const statutProduitLabels: Record<string, string> = {
 
 export const statutOperationLabels: Record<string, string> = {
     brouillon: 'Brouillon',
+    en_cours: 'En cours',
+    suspendue: 'Suspendue',
+    rejete: 'Rejetée',
     valide: 'Validée',
     annule: 'Annulée',
+};
+
+export const actionEtapeLabels: Record<string, string> = {
+    soumise: 'Soumise',
+    validee: 'Étape validée',
+    suspendue: 'Suspendue',
+    reprise: 'Reprise',
+    rejetee: 'Rejetée',
+    annulee: 'Annulée',
 };
 
 export const modeConstanteLabels: Record<string, string> = {
@@ -37,6 +49,8 @@ export function statutProduitClass(s: string): string {
 export function statutOperationClass(s: string): string {
     if (s === 'valide') return 'bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200';
     if (s === 'annule') return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200';
+    if (s === 'rejete') return 'bg-rose-100 text-rose-800 ring-1 ring-rose-200';
+    if (s === 'en_cours') return 'bg-sky-100 text-sky-800 ring-1 ring-sky-200';
     return 'bg-amber-100 text-amber-900 ring-1 ring-amber-200';
 }
 

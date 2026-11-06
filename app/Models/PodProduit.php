@@ -102,6 +102,11 @@ class PodProduit extends Model
         return $this->hasMany(PodProduitAudit::class, 'pod_produit_id')->orderByDesc('created_at');
     }
 
+    public function operations(): HasMany
+    {
+        return $this->hasMany(PodOperation::class, 'pod_produit_id');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by_user_id');

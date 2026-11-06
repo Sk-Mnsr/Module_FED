@@ -3,36 +3,55 @@
 namespace App\Http\Controllers;
 
 use App\Models\PodOperation;
+use App\Models\PodOperationEtape;
 use App\Models\PodOperationLigne;
+use App\Models\PodOperationPiece;
 use App\Models\PodProduit;
+use App\Models\PodProduitChamp;
 use App\Models\User;
+use App\Support\ModuleAccess;
 use App\Support\PodChampSaisie;
 use App\Support\PodConstanteResolver;
-use App\Support\PodEcranAccess;
 use App\Support\PodFraisCalculator;
+use App\Support\PodOperationCircuit;
 use App\Support\PodProduitWorkflow;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response as InertiaResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PodOperationController extends Controller
 {
+    private const FICHIER_RULES = ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,csv,txt'];
+
     public function index(Request $request): InertiaResponse
     {
         $filters = array_filter([
             'q' => $request->input('q'),
             'statut' => $request->input('statut'),
+            'vue' => $request->input('vue'),
         ], static fn ($v) => $v !== null && $v !== '');
+
+        $user = $request->user();
+        $aTraiterIds = $this->operationIdsATraiter($user);
 
         $query = PodOperation::query()
             ->with(['produit:id,code,libelle', 'user:id,name'])
             ->orderByDesc('created_at');
+
+        if (($filters['vue'] ?? null) === 'a_traiter') {
+            $query->whereIn('id', $aTraiterIds === [] ? [0] : $aTraiterIds);
+        }
 
         if (! empty($filters['q'])) {
             $term = '%'.trim((string) $filters['q']).'%';
@@ -60,6 +79,8 @@ class PodOperationController extends Controller
             'total_client' => $op->total_client,
             'devise' => $op->devise,
             'statut' => $op->statut,
+            'etape_libelle' => $op->etape_libelle,
+            'a_traiter' => in_array($op->id, $aTraiterIds, true),
             'user_name' => $op->user?->name,
             'created_at' => optional($op->created_at)->toIso8601String(),
             'show_url' => route('pod.operations.show', $op),
@@ -68,16 +89,22 @@ class PodOperationController extends Controller
         return Inertia::render('Pod/Operations/Index', [
             'operations' => $operations,
             'filters' => $filters,
+            'aTraiterCount' => count($aTraiterIds),
         ]);
     }
 
     public function create(Request $request): InertiaResponse
     {
+        $user = $request->user();
+
         $produits = PodProduit::query()
+            ->with('ecrans')
             ->where('actif', true)
             ->whereIn('statut', [PodProduit::STATUT_VALIDE, PodProduit::STATUT_PRODUCTION])
             ->orderBy('code')
-            ->get(['id', 'code', 'libelle', 'mode_frais', 'frais_fixe', 'initiateur', 'statut', 'base_calcul', 'devise']);
+            ->get()
+            ->filter(fn (PodProduit $p) => PodOperationCircuit::userCanActOnStep($user, PodOperationCircuit::steps($p)[0]))
+            ->values();
 
         $selectedId = $request->integer('produit_id') ?: null;
         $selected = null;
@@ -99,7 +126,7 @@ class PodOperationController extends Controller
                 'base_calcul' => $p->base_calcul,
                 'devise' => $p->devise,
             ]),
-            'produit' => $selected ? $this->produitPayload($selected, auth()->user()) : null,
+            'produit' => $selected ? $this->produitPayload($selected, $user) : null,
         ]);
     }
 
@@ -127,7 +154,7 @@ class PodOperationController extends Controller
     {
         $validated = $request->validate([
             'pod_produit_id' => ['required', 'integer', 'exists:pod_produits,id'],
-            'compte_client' => ['required', 'string', 'max:50'],
+            'compte_client' => ['nullable', 'string', 'max:50'],
             'code_agence' => ['nullable', 'string', 'max:20'],
             'nom_client' => ['nullable', 'string', 'max:255'],
             'date_valeur' => ['nullable', 'date'],
@@ -136,10 +163,14 @@ class PodOperationController extends Controller
             'reference' => ['nullable', 'string', 'max:100'],
             'libelle' => ['nullable', 'string', 'max:1000'],
             'champs_saisis' => ['nullable', 'array'],
+            'fichiers' => ['nullable', 'array'],
+            'fichiers.*' => ['array'],
+            'fichiers.*.*' => self::FICHIER_RULES,
         ]);
 
+        $user = $request->user();
         $produit = PodProduit::query()
-            ->with(['champs.ecran', 'constantes', 'scripts', 'lignesComptables'])
+            ->with(['ecrans', 'champs.ecran', 'constantes', 'scripts', 'lignesComptables', 'tranches'])
             ->findOrFail((int) $validated['pod_produit_id']);
 
         try {
@@ -148,11 +179,26 @@ class PodOperationController extends Controller
             return redirect()->back()->withInput()->withErrors($e->errors());
         }
 
+        if (trim((string) ($validated['compte_client'] ?? '')) === '' && $produit->mode_frais !== PodProduit::MODE_GRATUIT) {
+            return redirect()->back()->withInput()->withErrors(['compte_client' => 'Le compte client est obligatoire.']);
+        }
+
+        $steps = PodOperationCircuit::steps($produit);
+        $premiere = $steps[0];
+        if (! PodOperationCircuit::userCanActOnStep($user, $premiere)) {
+            return redirect()->back()->withInput()->with(
+                'error',
+                'Seul le rôle « '.PodOperationCircuit::roleLabel($premiere['ecran']).' » peut initier ce produit.',
+            );
+        }
+
+        $fichiers = $this->fichiersParCode($request);
+
         try {
-            $champsSaisis = PodChampSaisie::validateAndNormalize(
-                $produit,
+            $champsSaisis = PodChampSaisie::validateChamps(
+                PodOperationCircuit::champsForStep($produit, $premiere),
                 $validated['champs_saisis'] ?? [],
-                auth()->user(),
+                $fichiers,
             );
         } catch (ValidationException $e) {
             return redirect()->back()->withInput()->withErrors($e->errors());
@@ -164,29 +210,25 @@ class PodOperationController extends Controller
             return redirect()->back()->withInput()->withErrors(['calcul' => $e->getMessage()]);
         }
 
-        try {
-            $constantes = PodConstanteResolver::resolveAll($produit, [
-                'montant_demande' => $validated['montant_demande'] ?? null,
-                'frais_ht' => $calc['frais_ht'],
-                'taux_taf' => $calc['taux_taf'],
-                'champs_saisis' => $champsSaisis,
-            ]);
-        } catch (\InvalidArgumentException $e) {
-            return redirect()->back()->withInput()->withErrors(['constantes' => $e->getMessage()]);
-        }
-
         if (! $calc['equilibre']) {
             return redirect()->back()->withInput()->withErrors([
                 'calcul' => 'Schéma déséquilibré (débit '.$calc['total_debit'].' ≠ crédit '.$calc['total_credit'].').',
             ]);
         }
 
-        $operation = DB::transaction(function () use ($validated, $produit, $calc, $champsSaisis, $constantes) {
-            $operation = PodOperation::create([
+        $constantes = PodConstanteResolver::resolveAll($produit, [
+            'montant_demande' => $validated['montant_demande'] ?? null,
+            'frais_ht' => $calc['frais_ht'],
+            'taux_taf' => $calc['taux_taf'],
+            'champs_saisis' => $champsSaisis,
+        ], false);
+
+        $operation = DB::transaction(function () use ($validated, $produit, $calc, $champsSaisis, $constantes, $steps, $premiere, $fichiers, $user) {
+            $operation = new PodOperation([
                 'pod_produit_id' => $produit->id,
-                'user_id' => auth()->id(),
+                'user_id' => $user->id,
                 'reference' => $validated['reference'] ?? null,
-                'compte_client' => $validated['compte_client'],
+                'compte_client' => $validated['compte_client'] ?? null,
                 'code_agence' => $validated['code_agence'] ?? null,
                 'nom_client' => $validated['nom_client'] ?? null,
                 'date_valeur' => $validated['date_valeur'] ?? now()->toDateString(),
@@ -205,8 +247,10 @@ class PodOperationController extends Controller
                     'constantes' => $constantes,
                 ],
                 'champs_saisis' => $champsSaisis,
-                'statut' => PodOperation::STATUT_BROUILLON,
+                'statut' => PodOperation::STATUT_EN_COURS,
             ]);
+            PodOperationCircuit::moveTo($operation, $steps, 1);
+            $operation->save();
 
             foreach ($calc['lignes'] as $order => $ligne) {
                 PodOperationLigne::create([
@@ -216,17 +260,82 @@ class PodOperationController extends Controller
                 ]);
             }
 
+            $this->storePieces($operation, $premiere['index'], $fichiers, $user);
+            PodOperationCircuit::log($operation, PodOperationEtape::ACTION_SOUMISE, $premiere, $user);
+
             return $operation;
         });
 
         return redirect()
             ->route('pod.operations.show', $operation)
-            ->with('success', 'Opération enregistrée (brouillon).');
+            ->with('success', 'Demande soumise : en attente de « '.$operation->etape_libelle.' ».');
     }
 
-    public function show(PodOperation $operation): InertiaResponse
+    public function show(Request $request, PodOperation $operation): InertiaResponse
     {
-        $operation->load(['produit.champs', 'user:id,name', 'validatedBy:id,name', 'lignes']);
+        $operation->load([
+            'produit.ecrans',
+            'produit.champs.ecran',
+            'user:id,name',
+            'validatedBy:id,name',
+            'lignes',
+            'etapes.user:id,name',
+            'pieces.user:id,name',
+        ]);
+
+        $user = $request->user();
+        $produit = $operation->produit;
+        $steps = $produit ? PodOperationCircuit::steps($produit) : [];
+        $courant = $steps !== [] ? PodOperationCircuit::currentIndex($operation, $steps) : 0;
+        $blockReason = $steps !== [] ? PodOperationCircuit::blockReason($user, $operation, $steps) : 'Produit introuvable.';
+        $saisies = $operation->champs_saisis ?? [];
+
+        $piecesParChamp = $operation->pieces->groupBy('champ_code');
+
+        $circuit = collect($steps)->map(function (array $step) use ($operation, $courant, $produit, $saisies, $piecesParChamp) {
+            $derniere = $operation->etapes
+                ->where('etape_index', $step['index'])
+                ->whereIn('action', [PodOperationEtape::ACTION_SOUMISE, PodOperationEtape::ACTION_VALIDEE])
+                ->last();
+
+            $etat = match (true) {
+                $operation->statut === PodOperation::STATUT_VALIDE => 'fait',
+                $step['index'] < $courant => 'fait',
+                $step['index'] > $courant => 'a_venir',
+                $operation->statut === PodOperation::STATUT_SUSPENDUE => 'suspendu',
+                $operation->statut === PodOperation::STATUT_REJETE => 'rejete',
+                $operation->statut === PodOperation::STATUT_ANNULE => 'annule',
+                default => 'courant',
+            };
+
+            $champs = $produit
+                ? PodOperationCircuit::champsForStep($produit, $step)->map(fn (PodProduitChamp $c) => [
+                    'code' => $c->code,
+                    'libelle' => $c->libelle,
+                    'type' => $c->type,
+                    'valeur' => $this->valeurAffichee($c, $saisies[$c->code] ?? null),
+                    'pieces' => $c->type === PodProduitChamp::TYPE_FICHIER
+                        ? $this->piecesPayload($operation, $piecesParChamp->get($c->code, collect()))
+                        : [],
+                ])->values()
+                : collect();
+
+            return [
+                'index' => $step['index'],
+                'code' => $step['code'],
+                'libelle' => $step['libelle'],
+                'role' => PodOperationCircuit::roleLabel($step['ecran']),
+                'etat' => $etat,
+                'acteur' => $derniere?->user?->name,
+                'date' => optional($derniere?->created_at)->toIso8601String(),
+                'champs' => $etat === 'fait' || $step['index'] === 0 ? $champs : [],
+            ];
+        })->values();
+
+        $peutAgir = $blockReason === null;
+        $estCreateur = $user && (int) $operation->user_id === (int) $user->id;
+        $peutReprendre = $operation->statut === PodOperation::STATUT_SUSPENDUE
+            && ($estCreateur || ModuleAccess::isAdminUser($user));
 
         return Inertia::render('Pod/Operations/Show', [
             'operation' => [
@@ -244,25 +353,20 @@ class PodOperationController extends Controller
                 'devise' => $operation->devise,
                 'libelle' => $operation->libelle,
                 'statut' => $operation->statut,
+                'etape_libelle' => $operation->etape_libelle,
                 'motif_annulation' => $operation->motif_annulation,
+                'motif_decision' => $operation->motif_decision,
                 'validated_at' => optional($operation->validated_at)->toIso8601String(),
                 'validated_by_name' => $operation->validatedBy?->name,
                 'calcul_detail' => $operation->calcul_detail,
-                'champs_saisis' => $operation->champs_saisis ?? [],
-                'champs_labels' => collect($operation->produit?->champs ?? [])
-                    ->mapWithKeys(fn ($c) => [$c->code => [
-                        'libelle' => $c->libelle,
-                        'type' => $c->type,
-                    ]])
-                    ->all(),
                 'user_name' => $operation->user?->name,
                 'created_at' => optional($operation->created_at)->toIso8601String(),
                 'pdf_url' => route('pod.operations.pdf', $operation),
                 'produit' => [
-                    'id' => $operation->produit?->id,
-                    'code' => $operation->produit?->code,
-                    'libelle' => $operation->produit?->libelle,
-                    'mode_frais' => $operation->produit?->mode_frais,
+                    'id' => $produit?->id,
+                    'code' => $produit?->code,
+                    'libelle' => $produit?->libelle,
+                    'mode_frais' => $produit?->mode_frais,
                 ],
                 'lignes' => $operation->lignes->map(fn (PodOperationLigne $l) => [
                     'sens' => $l->sens,
@@ -273,48 +377,249 @@ class PodOperationController extends Controller
                     'montant' => $l->montant,
                 ])->values(),
             ],
+            'circuit' => $circuit,
+            'historique' => $operation->etapes->map(fn (PodOperationEtape $e) => [
+                'id' => $e->id,
+                'action' => $e->action,
+                'ecran_libelle' => $e->ecran_libelle,
+                'user_name' => $e->user?->name,
+                'commentaire' => $e->commentaire,
+                'created_at' => optional($e->created_at)->toIso8601String(),
+            ])->values(),
+            'action' => [
+                'peut_agir' => $peutAgir,
+                'motif_blocage' => $operation->statut === PodOperation::STATUT_EN_COURS ? $blockReason : null,
+                'etape' => $steps[$courant]['libelle'] ?? null,
+                'dernier' => $courant === count($steps) - 1,
+                'champs' => $peutAgir && $produit
+                    ? $this->champsPayload(PodOperationCircuit::champsForStep($produit, $steps[$courant]), $saisies, $this->nomsPiecesExistantes($operation))
+                    : [],
+            ],
+            'reprise' => [
+                'peut_reprendre' => $peutReprendre,
+                'champs' => $peutReprendre && $produit
+                    ? $this->champsPayload(PodOperationCircuit::champsForStep($produit, $steps[0]), $saisies, $this->nomsPiecesExistantes($operation))
+                    : [],
+            ],
+            'peut_annuler' => in_array($operation->statut, [PodOperation::STATUT_EN_COURS, PodOperation::STATUT_SUSPENDUE], true)
+                && ($estCreateur || ModuleAccess::isAdminUser($user)),
         ]);
     }
 
-    public function valider(PodOperation $operation): RedirectResponse
+    public function valider(Request $request, PodOperation $operation): RedirectResponse
     {
-        if ($operation->statut !== PodOperation::STATUT_BROUILLON) {
-            return redirect()->back()->with('error', 'Seuls les brouillons peuvent être validés.');
-        }
-
-        $hasPlaceholder = $operation->lignes()->get()->contains(
-            fn ($l) => (bool) preg_match('/X{3,}/i', (string) $l->compte)
-        );
-        if ($hasPlaceholder) {
-            return redirect()->back()->with('error', 'Impossible de valider : compte placeholder dans les écritures.');
-        }
-
-        $operation->update([
-            'statut' => PodOperation::STATUT_VALIDE,
-            'validated_by_user_id' => auth()->id(),
-            'validated_at' => now(),
-            'motif_annulation' => null,
+        $validated = $request->validate([
+            'commentaire' => ['nullable', 'string', 'max:2000'],
+            'champs_saisis' => ['nullable', 'array'],
+            'fichiers' => ['nullable', 'array'],
+            'fichiers.*' => ['array'],
+            'fichiers.*.*' => self::FICHIER_RULES,
         ]);
 
-        return redirect()->back()->with('success', 'Opération validée.');
+        $user = $request->user();
+        $operation->load(['produit.ecrans', 'produit.champs.ecran', 'produit.constantes', 'produit.scripts', 'produit.lignesComptables', 'etapes', 'pieces', 'lignes']);
+        $produit = $operation->produit;
+        $steps = PodOperationCircuit::steps($produit);
+
+        if ($reason = PodOperationCircuit::blockReason($user, $operation, $steps)) {
+            return redirect()->back()->with('error', $reason);
+        }
+
+        $index = PodOperationCircuit::currentIndex($operation, $steps);
+        $step = $steps[$index];
+        $dernier = $index === count($steps) - 1;
+        $fichiers = $this->fichiersParCode($request);
+
+        try {
+            $nouveaux = PodChampSaisie::validateChamps(
+                PodOperationCircuit::champsForStep($produit, $step),
+                $validated['champs_saisis'] ?? [],
+                $fichiers,
+                $this->nomsPiecesExistantes($operation),
+            );
+        } catch (ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors());
+        }
+
+        $champsSaisis = array_merge($operation->champs_saisis ?? [], $nouveaux);
+        $detail = $operation->calcul_detail ?? [];
+
+        if ($dernier) {
+            $placeholder = $operation->lignes->contains(fn ($l) => (bool) preg_match('/X{3,}/i', (string) $l->compte));
+            if ($placeholder) {
+                return redirect()->back()->with('error', 'Validation finale impossible : compte placeholder dans les écritures.');
+            }
+
+            try {
+                $detail['constantes'] = PodConstanteResolver::resolveAll($produit, [
+                    'montant_demande' => $operation->montant_demande !== null ? (float) $operation->montant_demande : null,
+                    'frais_ht' => (float) $operation->frais_ht,
+                    'taux_taf' => (float) $operation->taux_taf,
+                    'champs_saisis' => $champsSaisis,
+                ]);
+            } catch (\InvalidArgumentException $e) {
+                return redirect()->back()->with('error', $e->getMessage());
+            }
+        }
+
+        DB::transaction(function () use ($operation, $steps, $step, $index, $dernier, $champsSaisis, $detail, $fichiers, $user, $validated) {
+            $this->storePieces($operation, $index, $fichiers, $user);
+            PodOperationCircuit::log($operation, PodOperationEtape::ACTION_VALIDEE, $step, $user, $validated['commentaire'] ?? null);
+
+            $operation->champs_saisis = $champsSaisis;
+            $operation->calcul_detail = $detail;
+            $operation->motif_decision = null;
+
+            if ($dernier) {
+                $operation->statut = PodOperation::STATUT_VALIDE;
+                $operation->validated_by_user_id = $user->id;
+                $operation->validated_at = now();
+                $operation->etape_libelle = null;
+            } else {
+                PodOperationCircuit::moveTo($operation, $steps, $index + 1);
+            }
+
+            $operation->save();
+        });
+
+        return redirect()->back()->with(
+            'success',
+            $dernier ? 'Dossier validé : circuit terminé.' : 'Étape validée : en attente de « '.$operation->etape_libelle.' ».',
+        );
+    }
+
+    public function suspendre(Request $request, PodOperation $operation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'motif' => ['required', 'string', 'max:2000'],
+        ], ['motif.required' => 'Le motif de suspension est obligatoire.']);
+
+        $user = $request->user();
+        $operation->load(['produit.ecrans', 'etapes']);
+        $steps = PodOperationCircuit::steps($operation->produit);
+
+        if ($reason = PodOperationCircuit::blockReason($user, $operation, $steps)) {
+            return redirect()->back()->with('error', $reason);
+        }
+
+        $step = $steps[PodOperationCircuit::currentIndex($operation, $steps)];
+
+        DB::transaction(function () use ($operation, $step, $user, $validated) {
+            PodOperationCircuit::log($operation, PodOperationEtape::ACTION_SUSPENDUE, $step, $user, $validated['motif']);
+            $operation->update([
+                'statut' => PodOperation::STATUT_SUSPENDUE,
+                'motif_decision' => $validated['motif'],
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Dossier suspendu : l’initiateur doit le compléter.');
+    }
+
+    public function reprendre(Request $request, PodOperation $operation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'commentaire' => ['nullable', 'string', 'max:2000'],
+            'champs_saisis' => ['nullable', 'array'],
+            'fichiers' => ['nullable', 'array'],
+            'fichiers.*' => ['array'],
+            'fichiers.*.*' => self::FICHIER_RULES,
+        ]);
+
+        $user = $request->user();
+        if ($operation->statut !== PodOperation::STATUT_SUSPENDUE) {
+            return redirect()->back()->with('error', 'Seul un dossier suspendu peut être repris.');
+        }
+        if ((int) $operation->user_id !== (int) $user->id && ! ModuleAccess::isAdminUser($user)) {
+            return redirect()->back()->with('error', 'Seul l’initiateur du dossier peut le reprendre.');
+        }
+
+        $operation->load(['produit.ecrans', 'produit.champs.ecran', 'pieces']);
+        $steps = PodOperationCircuit::steps($operation->produit);
+        $premiere = $steps[0];
+        $fichiers = $this->fichiersParCode($request);
+
+        try {
+            $nouveaux = PodChampSaisie::validateChamps(
+                PodOperationCircuit::champsForStep($operation->produit, $premiere),
+                $validated['champs_saisis'] ?? [],
+                $fichiers,
+                $this->nomsPiecesExistantes($operation),
+            );
+        } catch (ValidationException $e) {
+            return redirect()->back()->withErrors($e->errors());
+        }
+
+        DB::transaction(function () use ($operation, $premiere, $nouveaux, $fichiers, $user, $validated) {
+            $this->storePieces($operation, $premiere['index'], $fichiers, $user);
+            PodOperationCircuit::log($operation, PodOperationEtape::ACTION_REPRISE, $premiere, $user, $validated['commentaire'] ?? null);
+            $operation->update([
+                'champs_saisis' => array_merge($operation->champs_saisis ?? [], $nouveaux),
+                'statut' => PodOperation::STATUT_EN_COURS,
+                'motif_decision' => null,
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Dossier repris : de nouveau en attente de « '.$operation->etape_libelle.' ».');
+    }
+
+    public function rejeter(Request $request, PodOperation $operation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'motif' => ['required', 'string', 'max:2000'],
+        ], ['motif.required' => 'Le motif de rejet est obligatoire.']);
+
+        $user = $request->user();
+        $operation->load(['produit.ecrans', 'etapes']);
+        $steps = PodOperationCircuit::steps($operation->produit);
+
+        if ($reason = PodOperationCircuit::blockReason($user, $operation, $steps)) {
+            return redirect()->back()->with('error', $reason);
+        }
+
+        $step = $steps[PodOperationCircuit::currentIndex($operation, $steps)];
+
+        DB::transaction(function () use ($operation, $step, $user, $validated) {
+            PodOperationCircuit::log($operation, PodOperationEtape::ACTION_REJETEE, $step, $user, $validated['motif']);
+            $operation->update([
+                'statut' => PodOperation::STATUT_REJETE,
+                'motif_decision' => $validated['motif'],
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Dossier rejeté.');
     }
 
     public function annuler(Request $request, PodOperation $operation): RedirectResponse
     {
-        if ($operation->statut === PodOperation::STATUT_ANNULE) {
-            return redirect()->back()->with('error', 'Opération déjà annulée.');
+        $user = $request->user();
+        if (! in_array($operation->statut, [PodOperation::STATUT_EN_COURS, PodOperation::STATUT_SUSPENDUE, PodOperation::STATUT_BROUILLON], true)) {
+            return redirect()->back()->with('error', 'Ce dossier ne peut plus être annulé.');
+        }
+        if ((int) $operation->user_id !== (int) $user->id && ! ModuleAccess::isAdminUser($user)) {
+            return redirect()->back()->with('error', 'Seul l’initiateur du dossier peut l’annuler.');
         }
 
         $validated = $request->validate([
             'motif_annulation' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $operation->update([
-            'statut' => PodOperation::STATUT_ANNULE,
-            'motif_annulation' => $validated['motif_annulation'] ?? null,
-        ]);
+        DB::transaction(function () use ($operation, $user, $validated) {
+            PodOperationCircuit::log($operation, PodOperationEtape::ACTION_ANNULEE, null, $user, $validated['motif_annulation'] ?? null);
+            $operation->update([
+                'statut' => PodOperation::STATUT_ANNULE,
+                'motif_annulation' => $validated['motif_annulation'] ?? null,
+            ]);
+        });
 
         return redirect()->back()->with('success', 'Opération annulée.');
+    }
+
+    public function piece(PodOperation $operation, PodOperationPiece $piece): StreamedResponse
+    {
+        abort_unless((int) $piece->pod_operation_id === (int) $operation->id, 404);
+        abort_unless(Storage::disk('local')->exists($piece->path), 404);
+
+        return Storage::disk('local')->download($piece->path, $piece->original_name);
     }
 
     public function pdf(PodOperation $operation): Response
@@ -342,30 +647,143 @@ class PodOperationController extends Controller
     }
 
     /**
+     * @return list<int>
+     */
+    private function operationIdsATraiter(?User $user): array
+    {
+        if ($user === null) {
+            return [];
+        }
+
+        return PodOperation::query()
+            ->with(['produit.ecrans', 'etapes'])
+            ->where('statut', PodOperation::STATUT_EN_COURS)
+            ->latest()
+            ->limit(500)
+            ->get()
+            ->filter(fn (PodOperation $op) => $op->produit
+                && PodOperationCircuit::blockReason($user, $op, PodOperationCircuit::steps($op->produit)) === null)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<string, list<UploadedFile>>
+     */
+    private function fichiersParCode(Request $request): array
+    {
+        $out = [];
+        foreach ((array) $request->file('fichiers', []) as $code => $files) {
+            $out[strtoupper((string) $code)] = array_values(array_filter(
+                is_array($files) ? $files : [$files],
+                fn ($f) => $f instanceof UploadedFile,
+            ));
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, list<UploadedFile>>  $fichiers
+     */
+    private function storePieces(PodOperation $operation, int $etapeIndex, array $fichiers, User $user): void
+    {
+        foreach ($fichiers as $code => $files) {
+            foreach ($files as $file) {
+                $path = $file->store('pod/operations/'.$operation->id, 'local');
+                PodOperationPiece::create([
+                    'pod_operation_id' => $operation->id,
+                    'champ_code' => $code,
+                    'etape_index' => $etapeIndex,
+                    'user_id' => $user->id,
+                    'path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime' => $file->getClientMimeType(),
+                    'size' => (int) $file->getSize(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @return array<string, list<string>>
+     */
+    private function nomsPiecesExistantes(PodOperation $operation): array
+    {
+        return $operation->pieces
+            ->groupBy('champ_code')
+            ->map(fn (Collection $pieces) => $pieces->pluck('original_name')->values()->all())
+            ->all();
+    }
+
+    /**
+     * @param  Collection<int, PodOperationPiece>  $pieces
+     * @return list<array<string, mixed>>
+     */
+    private function piecesPayload(PodOperation $operation, Collection $pieces): array
+    {
+        return $pieces->map(fn (PodOperationPiece $p) => [
+            'id' => $p->id,
+            'nom' => $p->original_name,
+            'taille' => $p->size,
+            'user_name' => $p->user?->name,
+            'url' => route('pod.operations.pieces', [$operation, $p]),
+        ])->values()->all();
+    }
+
+    private function valeurAffichee(PodProduitChamp $champ, mixed $valeur): mixed
+    {
+        if ($valeur === null || $valeur === '') {
+            return null;
+        }
+
+        return match ($champ->type) {
+            PodProduitChamp::TYPE_LISTE => collect($champ->valeursListeActives())->firstWhere('code', (string) $valeur)['libelle'] ?? $valeur,
+            PodProduitChamp::TYPE_TABLE => collect($champ->valeursTableActives())->firstWhere('code', (string) $valeur)['libelle'] ?? $valeur,
+            PodProduitChamp::TYPE_NUMERIQUE => is_numeric($valeur)
+                ? number_format((float) $valeur, (int) (($champ->options ?? [])['decimales'] ?? 2), ',', ' ')
+                : $valeur,
+            PodProduitChamp::TYPE_DATE => \Illuminate\Support\Carbon::parse((string) $valeur)->format('d/m/Y'),
+            default => $valeur,
+        };
+    }
+
+    /**
+     * @param  Collection<int, PodProduitChamp>  $champs
+     * @param  array<string, mixed>  $saisies
+     * @return list<array<string, mixed>>
+     */
+    private function champsPayload(Collection $champs, array $saisies = [], array $existants = []): array
+    {
+        return $champs->map(fn (PodProduitChamp $c) => [
+            'pieces_existantes' => $existants[$c->code] ?? [],
+            'code' => $c->code,
+            'libelle' => $c->libelle,
+            'type' => $c->type,
+            'obligatoire' => $c->obligatoire,
+            'visible' => $c->visible,
+            'gris' => $c->gris,
+            'valeur_defaut' => $c->valeur_defaut,
+            'options' => $c->options ?? [],
+            'ecran_code' => $c->ecran?->code,
+            'valeur' => $c->type === PodProduitChamp::TYPE_FICHIER ? null : ($saisies[$c->code] ?? $c->valeur_defaut),
+            'valeurs' => match ($c->type) {
+                PodProduitChamp::TYPE_LISTE => $c->valeursListeActives(),
+                PodProduitChamp::TYPE_TABLE => $c->valeursTableActives(),
+                default => [],
+            },
+        ])->values()->all();
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function produitPayload(PodProduit $p, ?User $user = null): array
     {
-        $ecrans = ($p->relationLoaded('ecrans') ? $p->ecrans : collect())
-            ->filter(fn ($e) => $e->actif)
-            ->filter(fn ($e) => ! $user || PodEcranAccess::userCanAccess($user, $e))
-            ->values();
-
-        $accessibleEcranIds = $ecrans->pluck('id')->all();
-
-        $champs = $p->champs
-            ->filter(fn ($c) => $c->visible)
-            ->filter(function ($c) use ($user, $accessibleEcranIds) {
-                if (! $c->pod_produit_ecran_id) {
-                    return true;
-                }
-                if (! $user) {
-                    return true;
-                }
-
-                return in_array((int) $c->pod_produit_ecran_id, array_map('intval', $accessibleEcranIds), true);
-            })
-            ->values();
+        $steps = PodOperationCircuit::steps($p);
+        $premiere = $steps[0];
 
         return [
             'id' => $p->id,
@@ -388,6 +806,7 @@ class PodOperationController extends Controller
                 PodProduit::MODE_MIXTE,
             ], true),
             'needs_frais_saisi' => $p->mode_frais === PodProduit::MODE_MANUEL,
+            'peut_initier' => PodOperationCircuit::userCanActOnStep($user, $premiere),
             'tranches' => $p->tranches->map(fn ($t) => [
                 'libelle' => $t->libelle,
                 'montant_min' => $t->montant_min,
@@ -395,29 +814,20 @@ class PodOperationController extends Controller
                 'frais_fixe' => $t->frais_fixe,
                 'taux' => $t->taux,
             ])->values(),
-            'ecrans' => $ecrans->map(fn ($e) => [
-                'id' => $e->id,
-                'code' => $e->code,
-                'libelle' => $e->libelle,
-                'description' => $e->description,
-                'profils' => $e->profils ?? [],
+            'circuit' => collect($steps)->map(fn (array $s) => [
+                'index' => $s['index'],
+                'code' => $s['code'],
+                'libelle' => $s['libelle'],
+                'role' => PodOperationCircuit::roleLabel($s['ecran']),
             ])->values(),
-            'champs' => $champs->map(fn ($c) => [
-                'code' => $c->code,
-                'libelle' => $c->libelle,
-                'type' => $c->type,
-                'obligatoire' => $c->obligatoire,
-                'visible' => $c->visible,
-                'gris' => $c->gris,
-                'valeur_defaut' => $c->valeur_defaut,
-                'options' => $c->options ?? [],
-                'ecran_code' => $c->ecran?->code,
-                'valeurs' => match ($c->type) {
-                    'liste' => $c->valeursListeActives(),
-                    'table' => $c->valeursTableActives(),
-                    default => [],
-                },
-            ])->values(),
+            'ecrans' => $premiere['ecran'] ? [[
+                'id' => $premiere['ecran']->id,
+                'code' => $premiere['ecran']->code,
+                'libelle' => $premiere['ecran']->libelle,
+                'description' => $premiere['ecran']->description,
+                'profils' => $premiere['ecran']->profils ?? [],
+            ]] : [],
+            'champs' => $this->champsPayload(PodOperationCircuit::champsForStep($p, $premiere)),
         ];
     }
 }

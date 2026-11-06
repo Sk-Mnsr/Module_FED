@@ -75,7 +75,7 @@ const destroyTable = () => {
     <Head :title="`Table ${table.code}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="mx-auto flex max-w-6xl flex-col gap-6 p-6">
+        <div class="flex w-full min-w-0 flex-col gap-6 p-4 sm:p-6">
             <div class="flex flex-wrap items-start justify-between gap-3">
                 <div>
                     <p class="font-mono text-xs text-muted-foreground">{{ table.code }}</p>

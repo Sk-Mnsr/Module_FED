@@ -1,10 +1,37 @@
 <script setup lang="ts">
-import { computed } from 'vue';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import DynamicFieldInput, { type ChampDef } from '@/components/Pod/DynamicFieldInput.vue';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, CheckCircle2, Download, Plus, Trash2, XCircle } from 'lucide-vue-next';
-import { labelStatutOperation, statutOperationClass } from '@/lib/podLabels';
+import { Label } from '@/components/ui/label';
+import {
+    AlertTriangle,
+    CheckCircle2,
+    Circle,
+    CirclePause,
+    Download,
+    Paperclip,
+    Plus,
+    Trash2,
+    XCircle,
+} from 'lucide-vue-next';
+import { actionEtapeLabels, labelModeFrais, labelStatutOperation, statutOperationClass } from '@/lib/podLabels';
+
+type Piece = { id: number; nom: string; taille: number; user_name: string | null; url: string };
+
+type EtapeCircuit = {
+    index: number;
+    code: string | null;
+    libelle: string;
+    role: string;
+    etat: 'fait' | 'courant' | 'a_venir' | 'suspendu' | 'rejete' | 'annule';
+    acteur: string | null;
+    date: string | null;
+    champs: Array<{ code: string; libelle: string; type: string; valeur: string | number | null; pieces: Piece[] }>;
+};
+
+type ChampAction = ChampDef & { valeur: string | number | null };
 
 type Operation = {
     id: number;
@@ -21,21 +48,16 @@ type Operation = {
     devise: string;
     libelle: string | null;
     statut: string;
+    etape_libelle: string | null;
     motif_annulation: string | null;
+    motif_decision: string | null;
     validated_at: string | null;
     validated_by_name: string | null;
     calcul_detail: Record<string, unknown> | null;
-    champs_saisis: Record<string, string | number | null>;
-    champs_labels: Record<string, { libelle: string; type: string }>;
     user_name: string | null;
     created_at: string | null;
     pdf_url: string;
-    produit: {
-        id: number | null;
-        code: string | null;
-        libelle: string | null;
-        mode_frais: string | null;
-    };
+    produit: { id: number | null; code: string | null; libelle: string | null; mode_frais: string | null };
     lignes: Array<{
         sens: string;
         compte: string;
@@ -48,6 +70,27 @@ type Operation = {
 
 const props = defineProps<{
     operation: Operation;
+    circuit: EtapeCircuit[];
+    historique: Array<{
+        id: number;
+        action: string;
+        ecran_libelle: string | null;
+        user_name: string | null;
+        commentaire: string | null;
+        created_at: string | null;
+    }>;
+    action: {
+        peut_agir: boolean;
+        motif_blocage: string | null;
+        etape: string | null;
+        dernier: boolean;
+        champs: ChampAction[];
+    };
+    reprise: {
+        peut_reprendre: boolean;
+        champs: ChampAction[];
+    };
+    peut_annuler: boolean;
 }>();
 
 const breadcrumbs = [
@@ -61,316 +104,403 @@ const fmt = (v: string | number | null | undefined) => {
     return Number(v).toLocaleString('fr-FR');
 };
 
-const modeLabels: Record<string, string> = {
-    fixe: 'Frais fixe',
-    tranche: 'Par tranche',
-    taux: 'Au pourcentage',
-    mixte: 'Fixe + taux',
-    manuel: 'Saisie manuelle',
-    gratuit: 'Gratuit',
+const fmtDate = (v: string | null) => (v ? new Date(v).toLocaleString('fr-FR') : '—');
+
+const fmtTaille = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} Mo` : `${Math.max(1, Math.round(n / 1024))} Ko`);
+
+const valeursInitiales = (champs: ChampAction[]) => {
+    const out: Record<string, string | number | null> = {};
+    for (const c of champs) {
+        if (c.type !== 'fichier') out[c.code] = c.valeur ?? null;
+    }
+    return out;
 };
 
-const placeholderComptes = computed(() =>
-    props.operation.lignes.filter((l) => /X{3,}/i.test(l.compte)),
+const etapeForm = useForm({
+    commentaire: '',
+    champs_saisis: valeursInitiales(props.action.champs),
+    fichiers: {} as Record<string, File[]>,
+});
+
+const repriseForm = useForm({
+    commentaire: '',
+    champs_saisis: valeursInitiales(props.reprise.champs),
+    fichiers: {} as Record<string, File[]>,
+});
+
+watch(
+    () => props.action.champs,
+    (champs) => {
+        etapeForm.champs_saisis = valeursInitiales(champs);
+        etapeForm.fichiers = {};
+    },
 );
 
-const totalDebit = computed(() =>
-    props.operation.lignes
-        .filter((l) => l.sens === 'D')
-        .reduce((s, l) => s + Number(l.montant || 0), 0),
+watch(
+    () => props.reprise.champs,
+    (champs) => {
+        repriseForm.champs_saisis = valeursInitiales(champs);
+        repriseForm.fichiers = {};
+    },
 );
 
-const totalCredit = computed(() =>
-    props.operation.lignes
-        .filter((l) => l.sens === 'C')
-        .reduce((s, l) => s + Number(l.montant || 0), 0),
-);
+const motif = ref('');
+const motifErreur = ref<string | null>(null);
+
+const validerEtape = () => {
+    const question = props.action.dernier ? 'Valider définitivement ce dossier ?' : 'Valider cette étape ?';
+    if (!confirm(question)) return;
+    etapeForm.post(`/pod/operations/${props.operation.id}/valider`, { forceFormData: true, preserveScroll: true });
+};
+
+const decider = (type: 'suspendre' | 'rejeter') => {
+    motifErreur.value = null;
+    if (!motif.value.trim()) {
+        motifErreur.value = type === 'rejeter' ? 'Le motif de rejet est obligatoire.' : 'Le motif de suspension est obligatoire.';
+        return;
+    }
+    if (type === 'rejeter' && !confirm('Rejeter définitivement ce dossier ?')) return;
+    router.post(`/pod/operations/${props.operation.id}/${type}`, { motif: motif.value }, { preserveScroll: true });
+};
+
+const reprendre = () => {
+    repriseForm.post(`/pod/operations/${props.operation.id}/reprendre`, { forceFormData: true, preserveScroll: true });
+};
+
+const annuler = () => {
+    const m = window.prompt('Motif d’annulation (optionnel) :');
+    if (m === null) return;
+    router.post(`/pod/operations/${props.operation.id}/annuler`, { motif_annulation: m });
+};
 
 const destroy = () => {
     if (!confirm('Supprimer ce brouillon ?')) return;
     router.delete(`/pod/operations/${props.operation.id}`);
 };
 
-const valider = () => {
-    if (!confirm('Valider cette opération ?')) return;
-    router.post(`/pod/operations/${props.operation.id}/valider`);
+const placeholderComptes = computed(() => props.operation.lignes.filter((l) => /X{3,}/i.test(l.compte)));
+const hasMontants = computed(() => Number(props.operation.total_client) > 0 || props.operation.lignes.some((l) => Number(l.montant) > 0));
+
+const etatClass: Record<EtapeCircuit['etat'], string> = {
+    fait: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    courant: 'border-sky-300 bg-sky-50 text-sky-900 ring-2 ring-sky-200',
+    a_venir: 'border-slate-200 bg-white text-slate-500',
+    suspendu: 'border-amber-300 bg-amber-50 text-amber-900',
+    rejete: 'border-rose-300 bg-rose-50 text-rose-900',
+    annule: 'border-slate-200 bg-slate-50 text-slate-500',
 };
 
-const annuler = () => {
-    const motif = window.prompt('Motif d’annulation (optionnel) :') ?? '';
-    router.post(`/pod/operations/${props.operation.id}/annuler`, { motif_annulation: motif });
+const etatLabel: Record<EtapeCircuit['etat'], string> = {
+    fait: 'Fait',
+    courant: 'En attente',
+    a_venir: 'À venir',
+    suspendu: 'Suspendu',
+    rejete: 'Rejeté',
+    annule: 'Annulé',
 };
 
-const statutClass = statutOperationClass;
+const affichage = (v: string | number | null | undefined) => (v === null || v === undefined || v === '' ? '—' : String(v));
 
-const champsEntries = computed(() => {
-    const saisies = props.operation.champs_saisis || {};
-    const labels = props.operation.champs_labels || {};
-    return Object.keys(saisies).map((code) => ({
-        code,
-        libelle: labels[code]?.libelle || code,
-        value: saisies[code],
-    }));
-});
-
-const constantesEntries = computed(() => {
-    const detail = props.operation.calcul_detail || {};
-    const raw = detail.constantes;
-    if (!raw || typeof raw !== 'object') return [] as Array<{
-        code: string;
-        libelle: string;
-        mode?: string;
-        valeur: string | number | null;
-    }>;
-    return Object.values(raw as Record<string, {
-        code: string;
-        libelle: string;
-        mode?: string;
-        valeur: string | number | null;
-    }>);
-});
-
-const displayChampValue = (v: string | number | null | undefined) => {
-    if (v === null || v === undefined || v === '') return '—';
-    return String(v);
-};
+const sectionShell = 'overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm ring-1 ring-slate-900/5';
+const sectionHead = 'flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50 px-5 py-3';
+const inputClass = 'h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm shadow-sm';
 </script>
 
 <template>
     <Head :title="`Opération #${operation.id}`" />
 
     <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white">
-            <div class="mx-auto flex max-w-5xl flex-col gap-6 p-4 sm:p-6 lg:p-8">
-                <div class="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-6">
+        <div class="flex min-h-full flex-1 flex-col bg-gradient-to-b from-slate-50 via-white to-white">
+            <div class="flex w-full flex-1 flex-col gap-5 p-4 sm:p-6">
+                <div
+                    class="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm ring-1 ring-slate-900/5"
+                >
                     <div>
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">
+                            <span class="rounded-md bg-slate-900 px-2 py-0.5 font-mono text-xs font-semibold text-white">
                                 {{ operation.produit.code }}
                             </span>
                             <span
                                 class="inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium"
-                                :class="statutClass(operation.statut)"
+                                :class="statutOperationClass(operation.statut)"
                             >
                                 {{ labelStatutOperation(operation.statut) }}
                             </span>
-                            <span class="text-xs text-slate-500">
-                                {{ modeLabels[operation.produit.mode_frais || ''] || operation.produit.mode_frais }}
+                            <span v-if="operation.statut === 'en_cours' && operation.etape_libelle" class="text-xs text-slate-500">
+                                En attente de « {{ operation.etape_libelle }} »
                             </span>
                         </div>
-                        <h1 class="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-                            {{ operation.produit.libelle }}
-                        </h1>
-                        <p class="mt-2 text-sm text-slate-600">
-                            Opération #{{ operation.id }}
-                            · {{ operation.user_name || '—' }}
+                        <h1 class="mt-2 text-2xl font-bold tracking-tight text-slate-900">{{ operation.produit.libelle }}</h1>
+                        <p class="mt-1 text-sm text-slate-500">
+                            Dossier #{{ operation.id }} · initié par {{ operation.user_name || '—' }} le {{ fmtDate(operation.created_at) }}
                             <span v-if="operation.reference"> · Réf. {{ operation.reference }}</span>
-                            <span v-if="operation.validated_by_name">
-                                · Validée par {{ operation.validated_by_name }}
-                            </span>
-                        </p>
-                        <p
-                            v-if="operation.statut === 'annule' && operation.motif_annulation"
-                            class="mt-1 text-sm text-slate-500"
-                        >
-                            Motif annulation : {{ operation.motif_annulation }}
                         </p>
                     </div>
                     <div class="flex flex-wrap gap-2">
-                        <Button as-child variant="outline" class="h-11">
+                        <Button as-child variant="outline" class="h-11 bg-white">
                             <a :href="operation.pdf_url" target="_blank" rel="noopener">
                                 <Download class="mr-2 h-4 w-4" /> PDF
                             </a>
                         </Button>
-                        <Button as-child variant="outline" class="h-11">
-                            <Link href="/pod/operations/create">
-                                <Plus class="mr-2 h-4 w-4" /> Nouvelle
-                            </Link>
+                        <Button as-child variant="outline" class="h-11 bg-white">
+                            <Link href="/pod/operations/create"><Plus class="mr-2 h-4 w-4" /> Nouvelle</Link>
                         </Button>
-                        <Button
-                            v-if="operation.statut === 'brouillon'"
-                            class="h-11"
-                            @click="valider"
-                        >
-                            <CheckCircle2 class="mr-2 h-4 w-4" /> Valider
-                        </Button>
-                        <Button
-                            v-if="operation.statut !== 'annule'"
-                            variant="outline"
-                            class="h-11 text-amber-800"
-                            @click="annuler"
-                        >
+                        <Button v-if="peut_annuler" variant="outline" class="h-11 bg-white text-amber-800" @click="annuler">
                             <XCircle class="mr-2 h-4 w-4" /> Annuler
                         </Button>
-                        <Button
-                            v-if="operation.statut === 'brouillon'"
-                            variant="destructive"
-                            class="h-11"
-                            @click="destroy"
-                        >
+                        <Button v-if="operation.statut === 'brouillon'" variant="destructive" class="h-11" @click="destroy">
                             <Trash2 class="mr-2 h-4 w-4" /> Supprimer
                         </Button>
                     </div>
                 </div>
 
                 <div
-                    v-if="placeholderComptes.length"
-                    class="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+                    v-if="operation.motif_decision && ['suspendue', 'rejete'].includes(operation.statut)"
+                    class="flex gap-3 rounded-2xl border px-4 py-3 text-sm"
+                    :class="operation.statut === 'rejete' ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-amber-200 bg-amber-50 text-amber-950'"
                 >
                     <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
-                        <p class="font-medium">Compte(s) placeholder détecté(s)</p>
-                        <p class="mt-1 text-amber-900/80">
-                            Le schéma utilise un compte non renseigné (ex. <code>7XXXXXXX</code>).
-                            Complétez le <strong>compte produit</strong> dans le paramétrage du produit
-                            <Link
-                                v-if="operation.produit.id"
-                                :href="`/pod/produits/${operation.produit.id}/edit`"
-                                class="underline"
-                            >
-                                {{ operation.produit.code }}
-                            </Link>
-                            puis recréez l’opération.
-                        </p>
+                        <p class="font-medium">{{ operation.statut === 'rejete' ? 'Motif du rejet' : 'Motif de la suspension' }}</p>
+                        <p class="mt-0.5">{{ operation.motif_decision }}</p>
                     </div>
                 </div>
 
-                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <p class="text-[11px] tracking-wide text-slate-500 uppercase">Compte client</p>
-                        <p class="mt-2 font-semibold tabular-nums text-slate-900">{{ operation.compte_client }}</p>
-                        <p class="text-xs text-slate-500">{{ operation.nom_client || '—' }}</p>
+                <section :class="sectionShell">
+                    <div :class="sectionHead">
+                        <h2 class="text-sm font-semibold text-slate-900">Circuit</h2>
+                        <p class="text-xs text-slate-500">Chaque étape est traitée par un utilisateur différent.</p>
                     </div>
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <p class="text-[11px] tracking-wide text-slate-500 uppercase">Frais HT</p>
-                        <p class="mt-2 text-xl font-bold tabular-nums text-slate-900">
-                            {{ fmt(operation.frais_ht) }}
-                            <span class="text-sm font-medium text-slate-500">{{ operation.devise }}</span>
-                        </p>
-                    </div>
-                    <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <p class="text-[11px] tracking-wide text-slate-500 uppercase">
-                            TAF ({{ Number(operation.taux_taf) }} %)
-                        </p>
-                        <p class="mt-2 text-xl font-bold tabular-nums text-slate-900">
-                            {{ fmt(operation.montant_taf) }}
-                            <span class="text-sm font-medium text-slate-500">{{ operation.devise }}</span>
-                        </p>
-                    </div>
-                    <div class="rounded-2xl bg-slate-900 p-4 text-white shadow-sm">
-                        <p class="text-[11px] tracking-wide text-slate-300 uppercase">Total débit client</p>
-                        <p class="mt-2 text-xl font-bold tabular-nums">
-                            {{ fmt(operation.total_client) }}
-                            <span class="text-sm font-medium text-slate-400">{{ operation.devise }}</span>
-                        </p>
-                    </div>
-                </div>
-
-                <dl class="grid gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:grid-cols-2">
-                    <div>
-                        <dt class="text-xs text-slate-500 uppercase">Montant demande</dt>
-                        <dd class="mt-1 font-medium text-slate-900">{{ fmt(operation.montant_demande) }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs text-slate-500 uppercase">Date valeur</dt>
-                        <dd class="mt-1 font-medium text-slate-900">{{ operation.date_valeur || '—' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs text-slate-500 uppercase">Agence</dt>
-                        <dd class="mt-1 font-medium text-slate-900">{{ operation.code_agence || '—' }}</dd>
-                    </div>
-                    <div>
-                        <dt class="text-xs text-slate-500 uppercase">Libellé</dt>
-                        <dd class="mt-1 font-medium text-slate-900">{{ operation.libelle || '—' }}</dd>
-                    </div>
-                </dl>
-
-                <section
-                    v-if="champsEntries.length"
-                    class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-                >
-                    <div class="border-b border-slate-100 px-5 py-4">
-                        <h2 class="text-sm font-semibold text-slate-900">Champs produit saisis</h2>
-                    </div>
-                    <dl class="grid gap-4 p-5 sm:grid-cols-2">
-                        <div v-for="c in champsEntries" :key="c.code">
-                            <dt class="text-xs text-slate-500 uppercase">{{ c.libelle }}</dt>
-                            <dd class="mt-1 font-medium text-slate-900">{{ displayChampValue(c.value) }}</dd>
-                        </div>
-                    </dl>
+                    <ol class="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-5">
+                        <li
+                            v-for="s in circuit"
+                            :key="s.index"
+                            class="rounded-xl border px-3 py-3"
+                            :class="etatClass[s.etat]"
+                        >
+                            <div class="flex items-center gap-2">
+                                <CheckCircle2 v-if="s.etat === 'fait'" class="h-4 w-4 shrink-0" />
+                                <CirclePause v-else-if="s.etat === 'suspendu'" class="h-4 w-4 shrink-0" />
+                                <XCircle v-else-if="s.etat === 'rejete'" class="h-4 w-4 shrink-0" />
+                                <Circle v-else class="h-4 w-4 shrink-0" />
+                                <span class="text-xs font-semibold tracking-wide uppercase">Étape {{ s.index + 1 }} · {{ etatLabel[s.etat] }}</span>
+                            </div>
+                            <p class="mt-1.5 text-sm font-semibold text-slate-900">{{ s.libelle }}</p>
+                            <p class="text-xs opacity-80">{{ s.role }}</p>
+                            <p v-if="s.acteur" class="mt-1 text-xs opacity-80">{{ s.acteur }} · {{ fmtDate(s.date) }}</p>
+                        </li>
+                    </ol>
                 </section>
 
-                <section
-                    v-if="constantesEntries.length"
-                    class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-                >
-                    <div class="border-b border-slate-100 px-5 py-4">
-                        <h2 class="text-sm font-semibold text-slate-900">Constantes résolues</h2>
-                    </div>
-                    <dl class="grid gap-4 p-5 sm:grid-cols-2">
-                        <div v-for="c in constantesEntries" :key="c.code">
-                            <dt class="text-xs text-slate-500 uppercase">
-                                {{ c.libelle }}
-                                <span v-if="c.mode" class="font-mono normal-case text-slate-400"> · {{ c.mode }}</span>
-                            </dt>
-                            <dd class="mt-1 font-medium text-slate-900">{{ displayChampValue(c.valeur) }}</dd>
-                        </div>
-                    </dl>
-                </section>
+                <div class="grid gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(340px,1fr)]">
+                    <div class="flex min-w-0 flex-col gap-5">
+                        <section v-if="operation.compte_client || operation.nom_client" :class="sectionShell">
+                            <div :class="sectionHead">
+                                <h2 class="text-sm font-semibold text-slate-900">Client</h2>
+                            </div>
+                            <dl class="grid gap-4 p-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                                <div>
+                                    <dt class="text-slate-500">Compte client</dt>
+                                    <dd class="mt-0.5 font-medium tabular-nums text-slate-900">{{ operation.compte_client }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-slate-500">Nom</dt>
+                                    <dd class="mt-0.5 font-medium text-slate-900">{{ operation.nom_client || '—' }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-slate-500">Agence</dt>
+                                    <dd class="mt-0.5 font-medium text-slate-900">{{ operation.code_agence || '—' }}</dd>
+                                </div>
+                                <div>
+                                    <dt class="text-slate-500">Date valeur</dt>
+                                    <dd class="mt-0.5 font-medium text-slate-900">{{ operation.date_valeur || '—' }}</dd>
+                                </div>
+                            </dl>
+                        </section>
 
-                <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                    <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                        <h2 class="text-sm font-semibold text-slate-900">Écritures générées</h2>
-                        <p class="text-xs text-slate-500">
-                            D {{ fmt(totalDebit) }} · C {{ fmt(totalCredit) }}
-                        </p>
-                    </div>
-                    <table class="min-w-full text-sm">
-                        <thead class="bg-slate-50 text-left text-xs tracking-wide text-slate-500 uppercase">
-                            <tr>
-                                <th class="px-5 py-3 font-medium">Sens</th>
-                                <th class="px-5 py-3 font-medium">Compte</th>
-                                <th class="px-5 py-3 font-medium">Libellé</th>
-                                <th class="px-5 py-3 font-medium">Nature</th>
-                                <th class="px-5 py-3 font-medium text-right">Montant</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr
-                                v-for="(l, i) in operation.lignes"
-                                :key="i"
-                                class="border-t border-slate-100"
+                        <section
+                            v-for="s in circuit.filter((e) => e.champs.length)"
+                            :key="`data-${s.index}`"
+                            :class="sectionShell"
+                        >
+                            <div :class="sectionHead">
+                                <h2 class="text-sm font-semibold text-slate-900">{{ s.libelle }}</h2>
+                                <p v-if="s.acteur" class="text-xs text-slate-500">{{ s.acteur }}</p>
+                            </div>
+                            <dl class="grid gap-4 p-5 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                                <div v-for="c in s.champs" :key="c.code">
+                                    <dt class="text-slate-500">{{ c.libelle }}</dt>
+                                    <dd v-if="c.type !== 'fichier'" class="mt-0.5 font-medium text-slate-900">{{ affichage(c.valeur) }}</dd>
+                                    <dd v-else class="mt-1 space-y-1">
+                                        <a
+                                            v-for="p in c.pieces"
+                                            :key="p.id"
+                                            :href="p.url"
+                                            class="flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+                                        >
+                                            <Paperclip class="h-3.5 w-3.5" /> {{ p.nom }}
+                                            <span class="text-xs font-normal text-slate-400">{{ fmtTaille(p.taille) }}</span>
+                                        </a>
+                                        <span v-if="!c.pieces.length" class="text-slate-400">Aucun fichier</span>
+                                    </dd>
+                                </div>
+                            </dl>
+                        </section>
+
+                        <section v-if="hasMontants" :class="sectionShell">
+                            <div :class="sectionHead">
+                                <h2 class="text-sm font-semibold text-slate-900">Frais et écritures</h2>
+                                <p class="text-xs text-slate-500">{{ labelModeFrais(operation.produit.mode_frais || '') }}</p>
+                            </div>
+                            <div class="grid gap-3 p-5 sm:grid-cols-3">
+                                <div class="rounded-xl border border-slate-200 p-3">
+                                    <p class="text-[11px] text-slate-500 uppercase">Frais HT</p>
+                                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(operation.frais_ht) }} {{ operation.devise }}</p>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 p-3">
+                                    <p class="text-[11px] text-slate-500 uppercase">Taxe ({{ Number(operation.taux_taf) }} %)</p>
+                                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(operation.montant_taf) }} {{ operation.devise }}</p>
+                                </div>
+                                <div class="rounded-xl bg-slate-900 p-3 text-white">
+                                    <p class="text-[11px] text-slate-300 uppercase">Total client</p>
+                                    <p class="mt-1 text-lg font-semibold tabular-nums">{{ fmt(operation.total_client) }} {{ operation.devise }}</p>
+                                </div>
+                            </div>
+                            <div
+                                v-if="placeholderComptes.length"
+                                class="mx-5 mb-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
                             >
-                                <td class="px-5 py-3">
-                                    <span
-                                        class="inline-flex min-w-7 justify-center rounded-md px-1.5 py-0.5 text-xs font-bold"
-                                        :class="l.sens === 'D'
-                                            ? 'bg-rose-100 text-rose-800'
-                                            : 'bg-emerald-100 text-emerald-800'"
-                                    >
-                                        {{ l.sens }}
-                                    </span>
-                                </td>
-                                <td
-                                    class="px-5 py-3 font-medium tabular-nums"
-                                    :class="/X{3,}/i.test(l.compte) ? 'text-amber-700' : 'text-slate-900'"
-                                >
-                                    {{ l.compte }}
-                                </td>
-                                <td class="px-5 py-3 text-slate-600">{{ l.libelle_ecriture }}</td>
-                                <td class="px-5 py-3 text-slate-500">{{ l.nature_compte }}</td>
-                                <td class="px-5 py-3 text-right font-semibold tabular-nums text-slate-900">
-                                    {{ fmt(l.montant) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </section>
+                                Compte non renseigné dans le schéma (ex. 7XXXXXXX) : la validation finale sera refusée.
+                            </div>
+                            <table class="min-w-full text-sm">
+                                <thead class="bg-slate-50 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                                    <tr>
+                                        <th class="px-5 py-2.5">Sens</th>
+                                        <th class="px-5 py-2.5">Compte</th>
+                                        <th class="px-5 py-2.5">Libellé</th>
+                                        <th class="px-5 py-2.5 text-right">Montant</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="(l, i) in operation.lignes" :key="i" class="border-t border-slate-100">
+                                        <td class="px-5 py-2.5 font-semibold">{{ l.sens }}</td>
+                                        <td class="px-5 py-2.5 font-mono tabular-nums">{{ l.compte }}</td>
+                                        <td class="px-5 py-2.5 text-slate-600">{{ l.libelle_ecriture }}</td>
+                                        <td class="px-5 py-2.5 text-right font-semibold tabular-nums">{{ fmt(l.montant) }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </section>
+                    </div>
 
-                <div class="flex justify-end">
-                    <Button as-child variant="outline">
-                        <Link href="/pod/operations">Retour à la liste</Link>
-                    </Button>
+                    <aside class="flex min-w-0 flex-col gap-5">
+                        <section v-if="action.peut_agir" class="overflow-hidden rounded-2xl border-2 border-sky-200 bg-white shadow-sm">
+                            <div class="border-b border-sky-100 bg-sky-50 px-5 py-3">
+                                <p class="text-[11px] font-semibold tracking-wide text-sky-700 uppercase">À traiter</p>
+                                <h2 class="text-sm font-semibold text-slate-900">{{ action.etape }}</h2>
+                            </div>
+                            <div class="space-y-4 p-5">
+                                <DynamicFieldInput
+                                    v-for="c in action.champs"
+                                    :key="c.code"
+                                    :champ="c"
+                                    :model-value="etapeForm.champs_saisis[c.code] ?? null"
+                                    :input-class="inputClass"
+                                    :error="(etapeForm.errors as Record<string, string>)[`champs_saisis.${c.code}`]"
+                                    @update:model-value="(v) => (etapeForm.champs_saisis[c.code] = v)"
+                                    @files="(files) => (etapeForm.fichiers[c.code] = files)"
+                                />
+                                <div class="space-y-1.5">
+                                    <Label>Commentaire</Label>
+                                    <textarea
+                                        v-model="etapeForm.commentaire"
+                                        rows="2"
+                                        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm"
+                                        placeholder="Observation (optionnel)"
+                                    />
+                                </div>
+                                <Button class="h-11 w-full" :disabled="etapeForm.processing" @click="validerEtape">
+                                    <CheckCircle2 class="mr-2 h-4 w-4" />
+                                    {{ action.dernier ? 'Valider le dossier' : 'Valider l’étape' }}
+                                </Button>
+
+                                <div class="space-y-2 border-t border-slate-100 pt-4">
+                                    <Label>Motif (suspension ou rejet)</Label>
+                                    <textarea
+                                        v-model="motif"
+                                        rows="2"
+                                        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm"
+                                        placeholder="Pièce manquante, couverture insuffisante…"
+                                    />
+                                    <p v-if="motifErreur" class="text-xs text-destructive">{{ motifErreur }}</p>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <Button variant="outline" class="h-11 bg-white text-amber-800" @click="decider('suspendre')">
+                                            <CirclePause class="mr-2 h-4 w-4" /> Suspendre
+                                        </Button>
+                                        <Button variant="outline" class="h-11 bg-white text-rose-700" @click="decider('rejeter')">
+                                            <XCircle class="mr-2 h-4 w-4" /> Rejeter
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section
+                            v-else-if="action.motif_blocage"
+                            class="rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm text-slate-600"
+                        >
+                            <p class="font-medium text-slate-900">En attente de « {{ action.etape }} »</p>
+                            <p class="mt-1">{{ action.motif_blocage }}</p>
+                        </section>
+
+                        <section v-if="reprise.peut_reprendre" class="overflow-hidden rounded-2xl border-2 border-amber-200 bg-white shadow-sm">
+                            <div class="border-b border-amber-100 bg-amber-50 px-5 py-3">
+                                <p class="text-[11px] font-semibold tracking-wide text-amber-700 uppercase">À compléter</p>
+                                <h2 class="text-sm font-semibold text-slate-900">Reprendre le dossier</h2>
+                            </div>
+                            <div class="space-y-4 p-5">
+                                <DynamicFieldInput
+                                    v-for="c in reprise.champs"
+                                    :key="c.code"
+                                    :champ="c"
+                                    :model-value="repriseForm.champs_saisis[c.code] ?? null"
+                                    :input-class="inputClass"
+                                    :error="(repriseForm.errors as Record<string, string>)[`champs_saisis.${c.code}`]"
+                                    @update:model-value="(v) => (repriseForm.champs_saisis[c.code] = v)"
+                                    @files="(files) => (repriseForm.fichiers[c.code] = files)"
+                                />
+                                <div class="space-y-1.5">
+                                    <Label>Commentaire</Label>
+                                    <textarea
+                                        v-model="repriseForm.commentaire"
+                                        rows="2"
+                                        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm"
+                                        placeholder="Ce qui a été complété"
+                                    />
+                                </div>
+                                <Button class="h-11 w-full" :disabled="repriseForm.processing" @click="reprendre">
+                                    Renvoyer dans le circuit
+                                </Button>
+                            </div>
+                        </section>
+
+                        <section :class="sectionShell">
+                            <div :class="sectionHead">
+                                <h2 class="text-sm font-semibold text-slate-900">Historique</h2>
+                            </div>
+                            <ol class="space-y-3 p-5">
+                                <li v-for="h in historique" :key="h.id" class="border-l-2 border-slate-200 pl-3">
+                                    <p class="text-sm font-medium text-slate-900">
+                                        {{ actionEtapeLabels[h.action] || h.action }}
+                                        <span v-if="h.ecran_libelle" class="font-normal text-slate-500"> · {{ h.ecran_libelle }}</span>
+                                    </p>
+                                    <p class="text-xs text-slate-500">{{ h.user_name || '—' }} · {{ fmtDate(h.created_at) }}</p>
+                                    <p v-if="h.commentaire" class="mt-1 text-sm text-slate-700">{{ h.commentaire }}</p>
+                                </li>
+                                <li v-if="!historique.length" class="text-sm text-slate-500">Aucun événement.</li>
+                            </ol>
+                        </section>
+                    </aside>
                 </div>
             </div>
         </div>

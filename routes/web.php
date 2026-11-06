@@ -325,7 +325,11 @@ Route::middleware(['auth'])->group(function () {
         Route::post('operations', [PodOperationController::class, 'store'])->name('operations.store');
         Route::get('operations/{operation}', [PodOperationController::class, 'show'])->name('operations.show');
         Route::post('operations/{operation}/valider', [PodOperationController::class, 'valider'])->name('operations.valider');
+        Route::post('operations/{operation}/suspendre', [PodOperationController::class, 'suspendre'])->name('operations.suspendre');
+        Route::post('operations/{operation}/reprendre', [PodOperationController::class, 'reprendre'])->name('operations.reprendre');
+        Route::post('operations/{operation}/rejeter', [PodOperationController::class, 'rejeter'])->name('operations.rejeter');
         Route::post('operations/{operation}/annuler', [PodOperationController::class, 'annuler'])->name('operations.annuler');
+        Route::get('operations/{operation}/pieces/{piece}', [PodOperationController::class, 'piece'])->name('operations.pieces');
         Route::get('operations/{operation}/pdf', [PodOperationController::class, 'pdf'])->name('operations.pdf');
         Route::delete('operations/{operation}', [PodOperationController::class, 'destroy'])->name('operations.destroy');
     });

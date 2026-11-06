@@ -44,7 +44,7 @@ final class PodFraisCalculator
         $produit->loadMissing(['tranches', 'lignesComptables']);
 
         $compteClient = trim((string) ($input['compte_client'] ?? ''));
-        if ($compteClient === '') {
+        if ($compteClient === '' && $produit->mode_frais !== PodProduit::MODE_GRATUIT) {
             throw new InvalidArgumentException('Le compte client est obligatoire.');
         }
 
@@ -220,6 +220,10 @@ final class PodFraisCalculator
     ): array {
         $schema = $produit->lignesComptables;
         if ($schema->isEmpty()) {
+            if ($fraisHt <= 0 && $montantTaf <= 0) {
+                return [];
+            }
+
             // Schéma minimal par défaut
             return [
                 [

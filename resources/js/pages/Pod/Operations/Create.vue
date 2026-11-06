@@ -40,6 +40,8 @@ type ProduitDetail = ProduitOption & {
     libelle_ecriture_taf: string | null;
     needs_montant_demande: boolean;
     needs_frais_saisi: boolean;
+    peut_initier: boolean;
+    circuit: Array<{ index: number; code: string | null; libelle: string; role: string }>;
     tranches: Array<{
         libelle: string | null;
         montant_min: string | number;
@@ -112,6 +114,7 @@ const form = useForm({
     reference: '',
     libelle: props.produit?.libelle_ecriture_produit || props.produit?.libelle || '',
     champs_saisis: {} as Record<string, string | number | null>,
+    fichiers: {} as Record<string, File[]>,
 });
 
 const produitSearch = ref('');
@@ -120,10 +123,11 @@ const showProductPicker = ref(!props.produit);
 const initChampsSaisis = (p: ProduitDetail | null) => {
     const next: Record<string, string | number | null> = {};
     for (const c of p?.champs ?? []) {
-        if (c.visible === false) continue;
+        if (c.visible === false || c.type === 'fichier') continue;
         next[c.code] = c.valeur_defaut ?? null;
     }
     form.champs_saisis = next;
+    form.fichiers = {};
 };
 
 if (props.produit) {
@@ -208,11 +212,15 @@ const needsFraisSaisi = computed(() => activeProduit.value?.mode_frais === 'manu
 
 const stepProduitOk = computed(() => selectedId.value !== null);
 const stepSaisieOk = computed(() => {
-    if (!form.compte_client.trim()) return false;
+    if (activeProduit.value?.mode_frais !== 'gratuit' && !form.compte_client.trim()) return false;
     if (needsMontant.value && (form.montant_demande === '' || Number(form.montant_demande) < 0)) return false;
     if (needsFraisSaisi.value && (form.frais_saisi === '' || Number(form.frais_saisi) < 0)) return false;
     for (const c of dynamiquesChamps.value) {
         if (!c.obligatoire || c.gris) continue;
+        if (c.type === 'fichier') {
+            if (!(form.fichiers[c.code]?.length)) return false;
+            continue;
+        }
         const v = form.champs_saisis[c.code];
         if (v === null || v === undefined || v === '') return false;
     }
@@ -331,7 +339,26 @@ const fmt = (v: number | string | null | undefined) => {
     return Number(v).toLocaleString('fr-FR');
 };
 
-const canSubmit = computed(() => !!preview.value?.equilibre && !form.processing && stepSaisieOk.value);
+const sansFrais = computed(() => activeProduit.value?.mode_frais === 'gratuit');
+
+const canSubmit = computed(
+    () =>
+        (sansFrais.value || !!preview.value?.equilibre)
+        && !form.processing
+        && stepSaisieOk.value
+        && props.produit?.peut_initier !== false,
+);
+
+const champsManquants = computed(() =>
+    dynamiquesChamps.value
+        .filter((c) => c.obligatoire && !c.gris)
+        .filter((c) =>
+            c.type === 'fichier'
+                ? !(form.fichiers[c.code]?.length)
+                : [null, undefined, ''].includes(form.champs_saisis[c.code] as null),
+        )
+        .map((c) => c.libelle),
+);
 
 const submit = () => {
     form.transform((data) => ({
@@ -339,8 +366,11 @@ const submit = () => {
         pod_produit_id: selectedId.value,
         montant_demande: data.montant_demande === '' ? null : data.montant_demande,
         frais_saisi: data.frais_saisi === '' ? null : data.frais_saisi,
+        compte_client: sansFrais.value ? null : data.compte_client,
+        libelle: sansFrais.value ? null : data.libelle,
         champs_saisis: data.champs_saisis ?? {},
-    })).post('/pod/operations');
+        fichiers: data.fichiers ?? {},
+    })).post('/pod/operations', { forceFormData: true });
 };
 </script>
 
@@ -349,15 +379,18 @@ const submit = () => {
 
     <AppLayout :breadcrumbs="breadcrumbs">
         <div class="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-slate-50 via-white to-white">
-            <form class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8" @submit.prevent="submit">
+            <form class="w-full p-4 sm:p-6" @submit.prevent="submit">
                 <!-- En-tête -->
                 <div class="mb-6 flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <p class="text-xs font-semibold tracking-[0.2em] text-primary uppercase">Produits divers</p>
                         <h1 class="mt-1 text-3xl font-bold tracking-tight text-slate-900">Nouvelle opération</h1>
                         <p class="mt-2 max-w-xl text-sm text-slate-600">
-                            Le produit pilote les règles. Vous ne saisissez que les informations client et les
-                            montants demandés — frais, TAF et écritures se calculent seuls.
+                            {{
+                                sansFrais
+                                    ? 'Vous remplissez le premier écran. Le dossier passe ensuite aux étapes suivantes du circuit.'
+                                    : 'Vous saisissez les informations client et les montants. Frais, taxe et écritures se calculent seuls.'
+                            }}
                         </p>
                     </div>
 
@@ -379,15 +412,17 @@ const submit = () => {
                             <span v-else class="flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-[10px] text-white">2</span>
                             Saisie
                         </span>
-                        <ArrowRight class="h-3.5 w-3.5 text-slate-400" />
-                        <span
-                            class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium"
-                            :class="preview?.equilibre ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'"
-                        >
-                            <CheckCircle2 v-if="preview?.equilibre" class="h-3.5 w-3.5" />
-                            <span v-else class="flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-[10px] text-white">3</span>
-                            Calcul
-                        </span>
+                        <template v-if="!sansFrais">
+                            <ArrowRight class="h-3.5 w-3.5 text-slate-400" />
+                            <span
+                                class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 font-medium"
+                                :class="preview?.equilibre ? 'bg-emerald-50 text-emerald-800' : 'bg-slate-100 text-slate-600'"
+                            >
+                                <CheckCircle2 v-if="preview?.equilibre" class="h-3.5 w-3.5" />
+                                <span v-else class="flex h-4 w-4 items-center justify-center rounded-full bg-slate-300 text-[10px] text-white">3</span>
+                                Calcul
+                            </span>
+                        </template>
                     </div>
                 </div>
 
@@ -430,11 +465,8 @@ const submit = () => {
                                                 <span v-if="activeProduit.frais_fixe != null">
                                                     · {{ fmt(activeProduit.frais_fixe) }} {{ activeProduit.devise }}
                                                 </span>
-                                                <span v-if="'taux_taf' in activeProduit">
-                                                    · TAF {{ (activeProduit as ProduitDetail).taux_taf }} %
-                                                </span>
-                                                <span v-if="activeProduit.initiateur">
-                                                    · Initiateur {{ activeProduit.initiateur }}
+                                                <span v-if="!sansFrais && 'taux_taf' in activeProduit">
+                                                    · Taxe {{ (activeProduit as ProduitDetail).taux_taf }} %
                                                 </span>
                                             </p>
                                             <p
@@ -445,6 +477,39 @@ const submit = () => {
                                             </p>
                                         </div>
                                     </div>
+
+                                    <div
+                                        v-if="!sansFrais && produit?.circuit?.length && Number(produit.id) === selectedId"
+                                        class="mt-4 rounded-lg border border-slate-200 bg-white p-3"
+                                    >
+                                        <p class="text-xs font-medium text-slate-500">Circuit de traitement</p>
+                                        <ol class="mt-2 space-y-1.5">
+                                            <li
+                                                v-for="s in produit.circuit"
+                                                :key="s.index"
+                                                class="flex items-start gap-2 text-xs"
+                                            >
+                                                <span
+                                                    class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold"
+                                                    :class="s.index === 0 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'"
+                                                >
+                                                    {{ s.index + 1 }}
+                                                </span>
+                                                <span>
+                                                    <span class="font-medium text-slate-900">{{ s.libelle }}</span>
+                                                    <span class="text-slate-500"> · {{ s.role }}</span>
+                                                    <span v-if="s.index === 0" class="text-primary"> · cette saisie</span>
+                                                </span>
+                                            </li>
+                                        </ol>
+                                    </div>
+
+                                    <p
+                                        v-if="!sansFrais && produit && Number(produit.id) === selectedId && !produit.peut_initier"
+                                        class="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900"
+                                    >
+                                        Votre rôle ne permet pas d’initier ce produit.
+                                    </p>
 
                                     <div
                                         v-if="produit?.tranches?.length"
@@ -524,35 +589,39 @@ const submit = () => {
                         >
                             <div class="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
                                 <Calculator class="h-4 w-4 text-primary" />
-                                <h2 class="text-sm font-semibold text-slate-900">2. Compléter la saisie</h2>
+                                <h2 class="text-sm font-semibold text-slate-900">
+                                    2. {{ sansFrais && produit?.circuit?.length ? produit.circuit[0].libelle : 'Compléter la saisie' }}
+                                </h2>
                             </div>
 
                             <div class="grid gap-4 p-5 sm:grid-cols-2">
-                                <div class="space-y-1.5 sm:col-span-2">
-                                    <Label class="text-slate-700">Compte client *</Label>
-                                    <Input
-                                        v-model="form.compte_client"
-                                        required
-                                        :class="fieldClass"
-                                        :placeholder="produit?.compte_client_mask || '251………'"
-                                    />
-                                </div>
-                                <div class="space-y-1.5">
-                                    <Label class="text-slate-700">Nom client</Label>
-                                    <Input v-model="form.nom_client" :class="fieldClass" />
-                                </div>
-                                <div class="space-y-1.5">
-                                    <Label class="text-slate-700">Code agence</Label>
-                                    <Input v-model="form.code_agence" :class="fieldClass" />
-                                </div>
-                                <div class="space-y-1.5">
-                                    <Label class="text-slate-700">Date valeur</Label>
-                                    <Input v-model="form.date_valeur" type="date" :class="fieldClass" />
-                                </div>
-                                <div class="space-y-1.5">
-                                    <Label class="text-slate-700">Référence</Label>
-                                    <Input v-model="form.reference" :class="fieldClass" placeholder="Optionnel" />
-                                </div>
+                                <template v-if="!sansFrais">
+                                    <div class="space-y-1.5 sm:col-span-2">
+                                        <Label class="text-slate-700">Compte client *</Label>
+                                        <Input
+                                            v-model="form.compte_client"
+                                            required
+                                            :class="fieldClass"
+                                            :placeholder="produit?.compte_client_mask || '251………'"
+                                        />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <Label class="text-slate-700">Nom client</Label>
+                                        <Input v-model="form.nom_client" :class="fieldClass" />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <Label class="text-slate-700">Code agence</Label>
+                                        <Input v-model="form.code_agence" :class="fieldClass" />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <Label class="text-slate-700">Date valeur</Label>
+                                        <Input v-model="form.date_valeur" type="date" :class="fieldClass" />
+                                    </div>
+                                    <div class="space-y-1.5">
+                                        <Label class="text-slate-700">Référence</Label>
+                                        <Input v-model="form.reference" :class="fieldClass" placeholder="Optionnel" />
+                                    </div>
+                                </template>
 
                                 <div
                                     v-if="needsMontant"
@@ -595,9 +664,10 @@ const submit = () => {
                                     <div
                                         v-for="group in champsParEcran"
                                         :key="group.code"
-                                        class="sm:col-span-2 space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4"
+                                        class="sm:col-span-2 space-y-3"
+                                        :class="sansFrais ? '' : 'rounded-xl border border-slate-200 bg-slate-50/60 p-4'"
                                     >
-                                        <div>
+                                        <div v-if="!sansFrais">
                                             <p class="text-xs font-semibold tracking-wide text-slate-500 uppercase">
                                                 <span v-if="group.code !== '_general'" class="font-mono text-primary">
                                                     {{ group.code }}
@@ -618,15 +688,23 @@ const submit = () => {
                                                 :input-class="fieldClass"
                                                 :error="(form.errors as Record<string, string>)[`champs_saisis.${c.code}`]"
                                                 @update:model-value="(v) => (form.champs_saisis[c.code] = v)"
+                                                @files="(files) => (form.fichiers[c.code] = files)"
                                             />
                                         </div>
                                     </div>
                                 </template>
 
-                                <div class="space-y-1.5 sm:col-span-2">
+                                <div v-if="!sansFrais" class="space-y-1.5 sm:col-span-2">
                                     <Label class="text-slate-700">Libellé</Label>
                                     <Input v-model="form.libelle" :class="fieldClass" />
                                 </div>
+
+                                <p
+                                    v-if="sansFrais && !champsParEcran.length"
+                                    class="sm:col-span-2 text-sm text-slate-500"
+                                >
+                                    Aucun champ n’est paramétré sur le premier écran de ce produit.
+                                </p>
 
                                 <p v-if="form.errors.calcul" class="sm:col-span-2 text-sm text-destructive">
                                     {{ form.errors.calcul }}
@@ -637,7 +715,65 @@ const submit = () => {
 
                     <!-- Colonne droite : calcul sticky -->
                     <aside class="lg:sticky lg:top-6 lg:self-start">
-                        <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <section
+                            v-if="sansFrais"
+                            class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+                        >
+                            <div class="flex items-center gap-2 border-b border-slate-100 px-5 py-4">
+                                <CheckCircle2 class="h-4 w-4 text-primary" />
+                                <h2 class="text-sm font-semibold text-slate-900">3. Soumettre</h2>
+                            </div>
+                            <div class="space-y-4 p-5">
+                                <ol v-if="produit?.circuit?.length" class="space-y-2">
+                                    <li
+                                        v-for="s in produit.circuit"
+                                        :key="s.index"
+                                        class="flex items-start gap-2.5 text-sm"
+                                    >
+                                        <span
+                                            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+                                            :class="s.index === 0 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'"
+                                        >
+                                            {{ s.index + 1 }}
+                                        </span>
+                                        <span class="min-w-0">
+                                            <span class="block font-medium text-slate-900">{{ s.libelle }}</span>
+                                            <span class="block text-xs text-slate-500">
+                                                {{ s.role }}<span v-if="s.index === 0" class="text-primary"> · votre saisie</span>
+                                            </span>
+                                        </span>
+                                    </li>
+                                </ol>
+
+                                <div
+                                    v-if="stepProduitOk && champsManquants.length"
+                                    class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900"
+                                >
+                                    <p class="font-medium">À compléter avant de soumettre</p>
+                                    <ul class="mt-1 list-disc pl-4">
+                                        <li v-for="m in champsManquants" :key="m">{{ m }}</li>
+                                    </ul>
+                                </div>
+
+                                <p
+                                    v-if="produit && Number(produit.id) === selectedId && !produit.peut_initier"
+                                    class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900"
+                                >
+                                    Votre rôle ne permet pas d’initier ce produit.
+                                </p>
+
+                                <div class="flex flex-col gap-2 border-t border-slate-100 pt-4">
+                                    <Button type="submit" class="h-11 w-full" :disabled="!canSubmit">
+                                        {{ form.processing ? 'Envoi…' : 'Soumettre la demande' }}
+                                    </Button>
+                                    <Button as-child type="button" variant="outline" class="h-11 w-full">
+                                        <Link href="/pod/operations">Annuler</Link>
+                                    </Button>
+                                </div>
+                            </div>
+                        </section>
+
+                        <section v-else class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                             <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
                                 <div class="flex items-center gap-2">
                                     <Scale class="h-4 w-4 text-primary" />
@@ -748,8 +884,14 @@ const submit = () => {
 
                                 <div class="flex flex-col gap-2 border-t border-slate-100 pt-4">
                                     <Button type="submit" class="h-11 w-full" :disabled="!canSubmit">
-                                        Enregistrer l’opération
+                                        {{ form.processing ? 'Envoi…' : 'Soumettre la demande' }}
                                     </Button>
+                                    <p
+                                        v-if="produit?.circuit && produit.circuit.length > 1"
+                                        class="text-center text-xs text-slate-500"
+                                    >
+                                        Ensuite : {{ produit.circuit[1].libelle }} ({{ produit.circuit[1].role }})
+                                    </p>
                                     <Button as-child type="button" variant="outline" class="h-11 w-full">
                                         <Link href="/pod/operations">Annuler</Link>
                                     </Button>

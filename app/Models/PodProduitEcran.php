@@ -84,7 +84,11 @@ class PodProduitEcran extends Model
 
         $roles = [];
         foreach ($profils as $key) {
-            $roles = array_merge($roles, self::PROFILS[$key]['roles'] ?? []);
+            if (isset(self::PROFILS[$key])) {
+                $roles = array_merge($roles, self::PROFILS[$key]['roles']);
+                continue;
+            }
+            $roles[] = (string) $key;
         }
 
         return array_values(array_unique($roles));

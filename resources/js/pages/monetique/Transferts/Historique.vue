@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import AppLayout from '@/layouts/AppLayout.vue';
 import DataTable from '@/components/DataTable.vue';
 import { Button } from '@/components/ui/button';
@@ -33,9 +33,19 @@ type Paginated<T> = {
     total: number;
 };
 
+type Filters = {
+    q?: string;
+    initiateur?: number | null;
+    receptionniste?: string;
+    statut?: string;
+    per_page?: number;
+};
+
 const props = withDefaults(
     defineProps<{
         transfers?: Paginated<TransferRow>;
+        filters?: Filters;
+        options?: { initiateurs: Array<{ id: number; nom: string }>; receptionnistes: string[] };
     }>(),
     {
         transfers: () => ({
@@ -44,40 +54,42 @@ const props = withDefaults(
             per_page: 15,
             total: 0,
         }),
+        filters: () => ({}),
+        options: () => ({ initiateurs: [], receptionnistes: [] }),
     },
 );
 
-const initiateur = ref('');
-const receptionniste = ref('');
-const statut = ref<'' | TransferStatus>('');
-const search = ref('');
+const initiateur = ref(props.filters.initiateur ? String(props.filters.initiateur) : '');
+const receptionniste = ref(props.filters.receptionniste ?? '');
+const statut = ref(props.filters.statut ?? '');
+const search = ref(props.filters.q ?? '');
 
 const rows = computed(() => props.transfers?.data ?? []);
 
-const initiateurs = computed(() => {
-    const unique = Array.from(new Set(rows.value.map((r) => r.initiateur))).filter(Boolean);
-    return unique.sort((a, b) => a.localeCompare(b));
-});
+const visit = (extra: Record<string, unknown> = {}) => {
+    router.get(
+        '/monetique/transferts/historique',
+        {
+            q: search.value.trim() || undefined,
+            initiateur: initiateur.value || undefined,
+            receptionniste: receptionniste.value || undefined,
+            statut: statut.value || undefined,
+            per_page: props.transfers.per_page !== 15 ? props.transfers.per_page : undefined,
+            ...extra,
+        },
+        { preserveState: true, preserveScroll: true, replace: true, only: ['transfers', 'filters', 'options'] },
+    );
+};
 
-const receptionnistes = computed(() => {
-    const unique = Array.from(new Set(rows.value.map((r) => r.receptionniste))).filter(Boolean);
-    return unique.sort((a, b) => a.localeCompare(b));
+let searchTimer: ReturnType<typeof setTimeout> | null = null;
+watch(search, () => {
+    if (searchTimer) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => visit(), 350);
 });
+watch([initiateur, receptionniste, statut], () => visit());
 
-const filteredRows = computed(() => {
-    const q = search.value.trim().toLowerCase();
-    return rows.value.filter((r) => {
-        const byInit = initiateur.value ? r.initiateur === initiateur.value : true;
-        const byRec = receptionniste.value ? r.receptionniste === receptionniste.value : true;
-        const byStatus = statut.value ? r.statut === statut.value : true;
-        const bySearch = !q
-            ? true
-            : [r.initiateur, r.receptionniste, r.commentaire, r.date_transfert, r.statut].some((x) =>
-                  x.toLowerCase().includes(q),
-              );
-        return byInit && byRec && byStatus && bySearch;
-    });
-});
+const onPageChange = (page: number) => visit({ page });
+const onItemsPerPageChange = (perPage: number) => visit({ per_page: perPage });
 
 const columns = [
     { key: 'initiateur', title: 'Initiateur' },
@@ -115,7 +127,7 @@ const statusClass = (s: TransferStatus) => {
 };
 
 const goToNew = () => router.visit('/monetique/transferts/nouveau');
-const reload = () => router.reload({ only: ['transfers'] });
+const reload = () => router.reload({ only: ['transfers', 'filters', 'options'] });
 
 const voirDetail = (row: TransferRow) => {
     if (!row.id) {
@@ -153,7 +165,7 @@ const voirDetail = (row: TransferRow) => {
                             class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
                         >
                             <option value="">-- Tous --</option>
-                            <option v-for="i in initiateurs" :key="i" :value="i">{{ i }}</option>
+                            <option v-for="i in options.initiateurs" :key="i.id" :value="String(i.id)">{{ i.nom }}</option>
                         </select>
                     </div>
                     <div class="space-y-2">
@@ -164,7 +176,7 @@ const voirDetail = (row: TransferRow) => {
                             class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
                         >
                             <option value="">-- Tous --</option>
-                            <option v-for="r in receptionnistes" :key="r" :value="r">{{ r }}</option>
+                            <option v-for="r in options.receptionnistes" :key="r" :value="r">{{ r }}</option>
                         </select>
                     </div>
                     <div class="space-y-2">
@@ -175,10 +187,10 @@ const voirDetail = (row: TransferRow) => {
                             class="mt-1.5 flex h-9 w-full rounded-md border border-gray-300 bg-white px-3 py-1 text-sm text-gray-900"
                         >
                             <option value="">-- Tous --</option>
-                            <option value="validé">Validé</option>
-                            <option value="en attente">En attente</option>
-                            <option value="rejeté">Rejeté</option>
-                            <option value="annulé">Annulé</option>
+                            <option value="valide">Validé</option>
+                            <option value="en_attente">En attente</option>
+                            <option value="rejete">Rejeté</option>
+                            <option value="annule">Annulé</option>
                         </select>
                     </div>
                 </div>
@@ -207,11 +219,13 @@ const voirDetail = (row: TransferRow) => {
 
             <DataTable
                 :headers="columns"
-                :items="filteredRows"
+                :items="rows"
                 :show-select="false"
                 :current-page="transfers.current_page"
                 :items-per-page="transfers.per_page"
                 :total-items="transfers.total"
+                :on-page-change="onPageChange"
+                :on-items-per-page-change="onItemsPerPageChange"
             >
                 <template #item.statut="{ item }">
                     <span

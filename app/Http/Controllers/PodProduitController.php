@@ -141,6 +141,7 @@ class PodProduitController extends Controller
             'produit' => $this->detailPayload($produit),
             'tauxTafDefaut' => (float) AppSetting::get('pod.taux_taf_defaut', 10),
             'profilsEcran' => PodProduitEcran::profilOptions(),
+            'initiateurs' => $this->roleOptions(),
             'audits' => $produit->audits->map(fn ($a) => [
                 'id' => $a->id,
                 'action' => $a->action,
@@ -197,6 +198,10 @@ class PodProduitController extends Controller
     {
         if ($produit->statut === PodProduit::STATUT_PRODUCTION) {
             return redirect()->back()->with('error', 'Impossible de supprimer un produit en production (repassez-le en valide).');
+        }
+
+        if ($produit->operations()->exists()) {
+            return redirect()->back()->with('error', 'Impossible de supprimer ce produit : des opérations y sont rattachées.');
         }
 
         $produit->delete();
@@ -315,6 +320,50 @@ class PodProduitController extends Controller
 
                         return $c;
                     })
+                    ->filter(function ($c) {
+                        if (! is_array($c)) {
+                            return false;
+                        }
+
+                        return trim((string) ($c['code'] ?? '')) !== '' || trim((string) ($c['libelle'] ?? '')) !== '';
+                    })
+                    ->values()
+                    ->all(),
+            ]);
+        }
+
+        if ($request->has('lignes') && is_array($request->input('lignes'))) {
+            $request->merge([
+                'lignes' => collect($request->input('lignes'))
+                    ->filter(fn ($l) => is_array($l) && trim((string) ($l['compte'] ?? '')) !== '')
+                    ->values()
+                    ->all(),
+            ]);
+        }
+
+        if ($request->has('scripts') && is_array($request->input('scripts'))) {
+            $request->merge([
+                'scripts' => collect($request->input('scripts'))
+                    ->filter(function ($s) {
+                        if (! is_array($s)) {
+                            return false;
+                        }
+                        $requete = trim((string) ($s['parametres']['requete'] ?? ''));
+
+                        return trim((string) ($s['code'] ?? '')) !== ''
+                            || trim((string) ($s['libelle'] ?? '')) !== ''
+                            || $requete !== '';
+                    })
+                    ->values()
+                    ->all(),
+            ]);
+        }
+
+        if ($request->has('constantes') && is_array($request->input('constantes'))) {
+            $request->merge([
+                'constantes' => collect($request->input('constantes'))
+                    ->filter(fn ($c) => is_array($c) && (trim((string) ($c['code'] ?? '')) !== '' || trim((string) ($c['libelle'] ?? '')) !== ''))
+                    ->values()
                     ->all(),
             ]);
         }
@@ -411,7 +460,7 @@ class PodProduitController extends Controller
             'ecrans.*.libelle' => ['required_with:ecrans', 'string', 'max:255'],
             'ecrans.*.description' => ['nullable', 'string'],
             'ecrans.*.profils' => ['nullable', 'array'],
-            'ecrans.*.profils.*' => ['string', Rule::in(array_keys(PodProduitEcran::PROFILS))],
+            'ecrans.*.profils.*' => ['string', 'max:50'],
             'ecrans.*.actif' => ['nullable', 'boolean'],
             'constantes' => ['nullable', 'array'],
             'constantes.*.code' => ['required_with:constantes', 'string', 'max:80', 'regex:/^[A-Za-z][A-Za-z0-9_]*$/'],
@@ -425,6 +474,7 @@ class PodProduitController extends Controller
             'scripts.*.libelle' => ['required_with:scripts', 'string', 'max:255'],
             'scripts.*.moteur' => ['required_with:scripts', Rule::in(array_keys(PodScriptRegistry::MOTEURS))],
             'scripts.*.parametres' => ['nullable', 'array'],
+            'scripts.*.parametres.requete' => ['nullable', 'string', 'max:20000'],
             'scripts.*.description' => ['nullable', 'string'],
             'scripts.*.actif' => ['nullable', 'boolean'],
         ]);

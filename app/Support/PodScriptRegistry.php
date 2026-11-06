@@ -32,6 +32,10 @@ final class PodScriptRegistry
             'label' => 'Montant demande + frais HT',
             'description' => 'Somme montant_demande + frais_ht.',
         ],
+        'requete' => [
+            'label' => 'Requête SQL',
+            'description' => 'Texte SQL saisi sur le produit. Il est conservé, sans exécution.',
+        ],
     ];
 
     /**
@@ -80,6 +84,9 @@ final class PodScriptRegistry
             'montant_plus_frais' => round(
                 (float) ($context['montant_demande'] ?? 0) + (float) ($context['frais_ht'] ?? 0),
                 2
+            ),
+            'requete' => throw new InvalidArgumentException(
+                "Le script « {$script->code} » contient une requête SQL. Elle est enregistrée et n’est pas exécutée."
             ),
             default => throw new InvalidArgumentException("Moteur non implémenté : {$moteur}."),
         };

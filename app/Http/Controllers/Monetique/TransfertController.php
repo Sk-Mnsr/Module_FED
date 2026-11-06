@@ -546,15 +546,10 @@ class TransfertController extends Controller
         ]);
     }
 
-    public function enAttente()
+    public function enAttente(Request $request)
     {
-        $transfers = CoficarteTransfer::query()
-            ->where('status', CoficarteTransfer::STATUS_EN_ATTENTE);
-        CoficarteAgenceAccess::applyTransferScope($transfers, auth()->user());
+        [$transfers, $filters, $options] = $this->listeTransferts($request, CoficarteTransfer::STATUS_EN_ATTENTE);
         $transfers = $transfers
-            ->with('user:id,name')
-            ->latest()
-            ->paginate(15)
             ->through(function (CoficarteTransfer $t) {
                 $user = auth()->user();
 
@@ -576,17 +571,15 @@ class TransfertController extends Controller
 
         return Inertia::render('monetique/Transferts/EnAttente', [
             'transfers' => $transfers,
+            'filters' => $filters,
+            'options' => $options,
         ]);
     }
 
-    public function historique()
+    public function historique(Request $request)
     {
-        $transfers = CoficarteTransfer::query();
-        CoficarteAgenceAccess::applyTransferScope($transfers, auth()->user());
+        [$transfers, $filters, $options] = $this->listeTransferts($request, null);
         $transfers = $transfers
-            ->with('user:id,name')
-            ->latest()
-            ->paginate(15)
             ->through(function (CoficarteTransfer $t) {
                 return [
                     'id' => $t->id,
@@ -606,7 +599,90 @@ class TransfertController extends Controller
 
         return Inertia::render('monetique/Transferts/Historique', [
             'transfers' => $transfers,
+            'filters' => $filters,
+            'options' => $options,
         ]);
+    }
+
+    /**
+     * Liste paginée des transferts visibles, filtrée sur l’ensemble des transferts (pas seulement la page affichée).
+     *
+     * @return array{0: \Illuminate\Pagination\LengthAwarePaginator, 1: array<string, mixed>, 2: array<string, mixed>}
+     */
+    private function listeTransferts(Request $request, ?string $statutFixe): array
+    {
+        $user = $request->user();
+        $statuts = [
+            CoficarteTransfer::STATUS_EN_ATTENTE,
+            CoficarteTransfer::STATUS_VALIDE,
+            CoficarteTransfer::STATUS_REJETE,
+            CoficarteTransfer::STATUS_ANNULE,
+        ];
+
+        $perPage = (int) $request->integer('per_page', 15);
+        if (! in_array($perPage, [5, 10, 15, 25, 50], true)) {
+            $perPage = 15;
+        }
+
+        $filters = [
+            'q' => trim((string) $request->input('q', '')),
+            'initiateur' => $request->filled('initiateur') ? (int) $request->input('initiateur') : null,
+            'receptionniste' => trim((string) $request->input('receptionniste', '')),
+            'statut' => $statutFixe === null && in_array($request->input('statut'), $statuts, true)
+                ? (string) $request->input('statut')
+                : '',
+            'per_page' => $perPage,
+        ];
+
+        $base = CoficarteTransfer::query();
+        if ($statutFixe !== null) {
+            $base->where('status', $statutFixe);
+        }
+        CoficarteAgenceAccess::applyTransferScope($base, $user);
+
+        $initiateurIds = (clone $base)->whereNotNull('user_id')->distinct()->pluck('user_id');
+        $options = [
+            'initiateurs' => User::query()
+                ->whereIn('id', $initiateurIds)
+                ->orderBy('name')
+                ->get(['id', 'name'])
+                ->map(fn (User $u) => ['id' => $u->id, 'nom' => $u->name])
+                ->values()
+                ->all(),
+            'receptionnistes' => (clone $base)
+                ->whereNotNull('receveur')
+                ->where('receveur', '!=', '')
+                ->distinct()
+                ->orderBy('receveur')
+                ->pluck('receveur')
+                ->values()
+                ->all(),
+        ];
+
+        $query = (clone $base)->with('user:id,name');
+
+        if ($filters['initiateur']) {
+            $query->where('user_id', $filters['initiateur']);
+        }
+        if ($filters['receptionniste'] !== '') {
+            $query->where('receveur', $filters['receptionniste']);
+        }
+        if ($filters['statut'] !== '') {
+            $query->where('status', $filters['statut']);
+        }
+        if ($filters['q'] !== '') {
+            $term = '%'.mb_strtolower($filters['q']).'%';
+            $query->where(function ($w) use ($term) {
+                $w->whereRaw('lower(coalesce(receveur, \'\')) like ?', [$term])
+                    ->orWhereRaw('lower(coalesce(commentaire, \'\')) like ?', [$term])
+                    ->orWhereRaw('lower(coalesce(bon_numero, \'\')) like ?', [$term])
+                    ->orWhereHas('user', fn ($u) => $u->whereRaw('lower(name) like ?', [$term]));
+            });
+        }
+
+        $transfers = $query->latest()->paginate($perPage)->withQueryString();
+
+        return [$transfers, $filters, $options];
     }
 
     /**

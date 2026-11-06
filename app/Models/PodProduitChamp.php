@@ -17,12 +17,15 @@ class PodProduitChamp extends Model
 
     public const TYPE_TABLE = 'table';
 
+    public const TYPE_FICHIER = 'fichier';
+
     public const TYPES = [
         self::TYPE_TEXTE,
         self::TYPE_LISTE,
         self::TYPE_NUMERIQUE,
         self::TYPE_DATE,
         self::TYPE_TABLE,
+        self::TYPE_FICHIER,
     ];
 
     /** Codes réservés (champs système de l’opération). */

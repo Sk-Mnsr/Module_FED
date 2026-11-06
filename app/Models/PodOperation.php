@@ -10,6 +10,12 @@ class PodOperation extends Model
 {
     public const STATUT_BROUILLON = 'brouillon';
 
+    public const STATUT_EN_COURS = 'en_cours';
+
+    public const STATUT_SUSPENDUE = 'suspendue';
+
+    public const STATUT_REJETE = 'rejete';
+
     public const STATUT_VALIDE = 'valide';
 
     public const STATUT_ANNULE = 'annule';
@@ -35,8 +41,12 @@ class PodOperation extends Model
         'calcul_detail',
         'champs_saisis',
         'statut',
+        'etape_index',
+        'etape_code',
+        'etape_libelle',
         'validated_at',
         'motif_annulation',
+        'motif_decision',
     ];
 
     protected function casts(): array
@@ -51,7 +61,18 @@ class PodOperation extends Model
             'calcul_detail' => 'array',
             'champs_saisis' => 'array',
             'validated_at' => 'datetime',
+            'etape_index' => 'integer',
         ];
+    }
+
+    public function etapes(): HasMany
+    {
+        return $this->hasMany(PodOperationEtape::class, 'pod_operation_id')->orderBy('created_at')->orderBy('id');
+    }
+
+    public function pieces(): HasMany
+    {
+        return $this->hasMany(PodOperationPiece::class, 'pod_operation_id')->orderBy('id');
     }
 
     public function produit(): BelongsTo
