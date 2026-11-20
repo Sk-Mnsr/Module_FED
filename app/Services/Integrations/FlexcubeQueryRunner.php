@@ -143,7 +143,8 @@ class FlexcubeQueryRunner
             }
 
             $rows = [];
-            while (count($rows) < $maxRows && ($row = oci_fetch_assoc($stid, OCI_RETURN_NULLS)) !== false) {
+            // oci_fetch_assoc() n'accepte qu'un argument : oci_fetch_array() permet de garder les colonnes NULL.
+            while (count($rows) < $maxRows && ($row = oci_fetch_array($stid, OCI_ASSOC + OCI_RETURN_NULLS)) !== false) {
                 $rows[] = array_change_key_case($row, CASE_UPPER);
             }
             oci_free_statement($stid);
