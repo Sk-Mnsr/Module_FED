@@ -127,6 +127,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('zones/{zone}', [ZoneController::class, 'destroy'])->name('zones.destroy');
         Route::get('apporteurs-affaires/export-template', [ApporteurAffaireController::class, 'exportTemplate'])->name('apporteurs-affaires.export-template');
         Route::post('apporteurs-affaires/import', [ApporteurAffaireController::class, 'import'])->name('apporteurs-affaires.import');
+        Route::post('apporteurs-affaires/sync-flexcube', [ApporteurAffaireController::class, 'syncFlexcube'])->name('apporteurs-affaires.sync-flexcube');
         Route::get('apporteurs-affaires', [ApporteurAffaireController::class, 'index'])->name('apporteurs-affaires.index');
         Route::post('apporteurs-affaires', [ApporteurAffaireController::class, 'store'])->name('apporteurs-affaires.store');
         Route::put('apporteurs-affaires/{coficarteApporteur}', [ApporteurAffaireController::class, 'update'])->name('apporteurs-affaires.update');
@@ -274,6 +275,7 @@ Route::middleware(['auth'])->group(function () {
         Route::post('operations-diverses/piece-comptable/{classeur}/integrer', [OperationDiverseController::class, 'pieceComptableIntegrer'])->name('operations-diverses.piece-comptable.integrer');
         Route::post('operations-diverses/piece-comptable/{classeur}/valider-checker', [OperationDiverseController::class, 'pieceComptableValiderChecker'])->name('operations-diverses.piece-comptable.valider-checker');
         Route::post('operations-diverses/piece-comptable/{classeur}/rejeter-checker', [OperationDiverseController::class, 'pieceComptableRejeterChecker'])->name('operations-diverses.piece-comptable.rejeter-checker');
+        Route::post('operations-diverses/piece-comptable/{classeur}/reaffecter-checker', [OperationDiverseController::class, 'pieceComptableReaffecterChecker'])->name('operations-diverses.piece-comptable.reaffecter-checker');
         Route::post('operations-diverses/piece-comptable/{classeur}/controle', [OperationDiverseController::class, 'pieceComptableControle'])->name('operations-diverses.piece-comptable.controle');
         Route::post('operations-diverses/piece-comptable/{classeur}/controle-anomalie', [OperationDiverseController::class, 'pieceComptableControleAnomalie'])->name('operations-diverses.piece-comptable.controle-anomalie');
         Route::post('operations-diverses/piece-comptable/{classeur}/ack-correction', [OperationDiverseController::class, 'pieceComptableAckCorrection'])->name('operations-diverses.piece-comptable.ack-correction');
@@ -322,6 +324,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('operations', [PodOperationController::class, 'index'])->name('operations.index');
         Route::get('operations/create', [PodOperationController::class, 'create'])->name('operations.create');
         Route::post('operations/preview', [PodOperationController::class, 'preview'])->name('operations.preview');
+        Route::post('operations/recherche', [PodOperationController::class, 'recherche'])
+            ->middleware('throttle:30,1')
+            ->name('operations.recherche');
         Route::post('operations', [PodOperationController::class, 'store'])->name('operations.store');
         Route::get('operations/{operation}', [PodOperationController::class, 'show'])->name('operations.show');
         Route::post('operations/{operation}/valider', [PodOperationController::class, 'valider'])->name('operations.valider');

@@ -12,6 +12,7 @@ class PodTrancheFrais extends Model
     protected $fillable = [
         'pod_produit_id',
         'libelle',
+        'critere',
         'montant_min',
         'montant_max',
         'frais_fixe',

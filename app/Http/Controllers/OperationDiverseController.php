@@ -623,6 +623,51 @@ class OperationDiverseController extends Controller
         );
     }
 
+    public function pieceComptableReaffecterChecker(Request $request, OdClasseur $classeur): RedirectResponse
+    {
+        $this->authorizeClasseur($classeur);
+        $user = auth()->user();
+
+        abort_unless($classeur->canBeReassignedBy($user), 403, 'Vous ne pouvez pas réaffecter le validateur de ce classeur.');
+
+        $redirect = redirect()->route('operations-diverses.attente-validation');
+
+        if (! $classeur->isAttenteValidation()) {
+            return $redirect->with('error', FlashDialog::error(
+                'Ce classeur n’est pas en attente de validation.',
+                title: 'Réaffectation impossible',
+            ));
+        }
+
+        $validated = $request->validate([
+            'assigned_checker_user_id' => ['required', 'integer', 'exists:users,id'],
+        ], [
+            'assigned_checker_user_id.required' => 'Veuillez désigner un nouveau validateur.',
+            'assigned_checker_user_id.exists' => 'Le validateur sélectionné est invalide.',
+        ]);
+
+        $classeur->loadMissing('user', 'integratedBy', 'assignedChecker');
+        $maker = $classeur->integratedBy ?? $classeur->user;
+        $newChecker = \App\Models\User::query()->findOrFail((int) $validated['assigned_checker_user_id']);
+        $previousChecker = $classeur->assignedChecker;
+
+        if ($previousChecker !== null && (int) $previousChecker->id === (int) $newChecker->id) {
+            return $redirect->with('warning', $newChecker->name.' est déjà le validateur de ce classeur.');
+        }
+
+        if ($maker === null || ! OdChecker::isEligibleChecker($maker, $newChecker)) {
+            return $redirect->withErrors([
+                'assigned_checker_user_id' => 'Le validateur doit être un agent '.($maker ? OdChecker::departmentLabelForUser($maker) : '').' autre que le maker.',
+            ]);
+        }
+
+        $classeur->forceFill(['assigned_checker_user_id' => $newChecker->id])->save();
+
+        OdWorkflowMail::checkerReassigned($classeur->fresh(['user', 'integratedBy']), $newChecker, $user, $previousChecker);
+
+        return $redirect->with('success', 'Validateur réaffecté. En attente de validation par '.$newChecker->name.'.');
+    }
+
     public function pieceComptableDestroy(OdClasseur $classeur): RedirectResponse
     {
         $this->authorizeClasseur($classeur);
@@ -1505,7 +1550,23 @@ class OperationDiverseController extends Controller
         $isChecker = (int) ($classeur->assigned_checker_user_id ?? 0) === (int) $viewer->id;
         $isMaker = (int) ($classeur->integrated_by_user_id ?? $classeur->user_id ?? 0) === (int) $viewer->id;
 
+        $canReassign = $classeur->canBeReassignedBy($viewer);
+        $eligibleCheckers = [];
+        if ($canReassign) {
+            $maker = $classeur->integratedBy ?? $classeur->user;
+            if ($maker !== null) {
+                $eligibleCheckers = OdChecker::eligibleFor($maker)
+                    ->reject(fn ($u) => (int) $u->id === (int) $classeur->assigned_checker_user_id)
+                    ->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])
+                    ->values()
+                    ->all();
+            }
+        }
+
         return [
+            'can_reassign' => $canReassign && $eligibleCheckers !== [],
+            'eligible_checkers' => $eligibleCheckers,
+            'reaffecter_url' => route('operations-diverses.piece-comptable.reaffecter-checker', $classeur),
             'id' => $classeur->id,
             'nom_classeur' => $classeur->nom_classeur,
             'numero_batch' => $classeur->numero_batch,

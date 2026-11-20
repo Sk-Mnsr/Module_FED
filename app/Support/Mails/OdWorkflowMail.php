@@ -32,6 +32,39 @@ final class OdWorkflowMail
         ]);
     }
 
+    public static function checkerReassigned(
+        OdClasseur $classeur,
+        User $newChecker,
+        User $actor,
+        ?User $previousChecker = null,
+    ): void {
+        $details = array_filter([
+            'Classeur' => $classeur->nom_classeur,
+            'Batch' => $classeur->numero_batch,
+            'Date valeur' => $classeur->date_valeur?->format('d/m/Y'),
+        ]);
+
+        AppMail::notify($newChecker, 'OD réaffectée à votre validation', [
+            'title' => 'Réaffectation du validateur',
+            'content' => $actor->name.' vous a désigné comme validateur d’une opération diverse'
+                .($previousChecker ? ' (précédemment : '.$previousChecker->name.').' : '.'),
+            'action_required' => 'Contrôler puis valider ou rejeter le classeur.',
+            'details' => $details,
+            'action_url' => url('/operations-diverses/attente-validation'),
+            'action_text' => 'Ouvrir la file',
+        ]);
+
+        if ($previousChecker !== null && $previousChecker->id !== $newChecker->id) {
+            AppMail::notify($previousChecker, 'OD retirée de votre file de validation', [
+                'title' => 'Réaffectation du validateur',
+                'content' => $actor->name.' a réaffecté cette opération diverse à '.$newChecker->name.'. Vous n’avez plus d’action à mener dessus.',
+                'details' => $details,
+                'action_url' => url('/operations-diverses/attente-validation'),
+                'action_text' => 'Ouvrir la file',
+            ]);
+        }
+    }
+
     public static function rejectedByChecker(
         OdClasseur $classeur,
         User $checker,

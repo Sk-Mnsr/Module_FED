@@ -20,6 +20,7 @@ import {
     Trash2,
     User,
     UserCheck,
+    UserCog,
     X,
     XCircle,
 } from 'lucide-vue-next';
@@ -39,14 +40,17 @@ type ClasseurRow = {
     can_reject?: boolean;
     can_delete?: boolean;
     can_add_justificatifs?: boolean;
+    can_reassign?: boolean;
+    eligible_checkers?: { id: number; name: string }[];
     is_mine_as_checker?: boolean;
     is_mine_as_maker?: boolean;
     valider_checker_url: string;
     rejeter_url?: string;
+    reaffecter_url?: string;
     supprimer_url?: string;
 };
 
-type ConfirmKind = 'valider' | 'rejeter' | 'supprimer' | null;
+type ConfirmKind = 'valider' | 'rejeter' | 'supprimer' | 'reaffecter' | null;
 
 const props = defineProps<{
     classeurs?: ClasseurRow[];
@@ -68,6 +72,7 @@ const showFilters = ref(false);
 const confirmKind = ref<ConfirmKind>(null);
 const confirmTarget = ref<ClasseurRow | null>(null);
 const rejectMotif = ref('');
+const newCheckerId = ref('');
 const confirmOpen = computed({
     get: () => confirmKind.value !== null && confirmTarget.value !== null,
     set: (open: boolean) => {
@@ -77,6 +82,9 @@ const confirmOpen = computed({
 
 const fieldClass =
     'h-10 border-slate-300 bg-white text-slate-900 shadow-sm placeholder:text-slate-400 focus-visible:border-primary focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground dark:placeholder:text-slate-500';
+
+const selectClass =
+    'flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/30 dark:border-slate-600 dark:bg-card dark:text-foreground';
 
 const searchForm = ref({
     q: props.filters?.q ?? '',
@@ -152,6 +160,8 @@ const confirmTitle = computed(() => {
             return 'Rejeter l’intégration';
         case 'supprimer':
             return 'Supprimer';
+        case 'reaffecter':
+            return 'Réaffecter le checker';
         default:
             return '';
     }
@@ -166,6 +176,8 @@ const confirmDescription = computed(() => {
             return `Voulez-vous vraiment rejeter « ${name} » ?`;
         case 'supprimer':
             return `Voulez-vous vraiment supprimer « ${name} » ?`;
+        case 'reaffecter':
+            return `Choisissez le nouveau validateur de « ${name} ». Checker actuel : ${confirmTarget.value?.checker_name ?? '—'}.`;
         default:
             return '';
     }
@@ -179,6 +191,8 @@ const confirmLabel = computed(() => {
             return 'Rejeter';
         case 'supprimer':
             return 'Supprimer';
+        case 'reaffecter':
+            return 'Réaffecter';
         default:
             return 'Confirmer';
     }
@@ -217,6 +231,7 @@ function closeConfirm() {
     confirmKind.value = null;
     confirmTarget.value = null;
     rejectMotif.value = '';
+    newCheckerId.value = '';
 }
 
 function openConfirm(kind: ConfirmKind, c: ClasseurRow) {
@@ -224,6 +239,12 @@ function openConfirm(kind: ConfirmKind, c: ClasseurRow) {
     confirmKind.value = kind;
     confirmTarget.value = c;
     rejectMotif.value = '';
+    newCheckerId.value = '';
+}
+
+function reaffecter(c: ClasseurRow) {
+    if (!c.can_reassign || !c.reaffecter_url) return;
+    openConfirm('reaffecter', c);
 }
 
 function valider(c: ClasseurRow) {
@@ -271,6 +292,23 @@ function executerConfirm() {
         router.post(
             c.rejeter_url,
             { motif: rejectMotif.value.trim() },
+            {
+                preserveScroll: true,
+                onFinish: () => {
+                    actionEnCours.value = null;
+                    closeConfirm();
+                },
+            },
+        );
+        return;
+    }
+
+    if (kind === 'reaffecter' && c.reaffecter_url) {
+        if (!newCheckerId.value) return;
+        actionEnCours.value = c.id;
+        router.post(
+            c.reaffecter_url,
+            { assigned_checker_user_id: Number(newCheckerId.value) },
             {
                 preserveScroll: true,
                 onFinish: () => {
@@ -596,6 +634,19 @@ function horodatage(iso: string | null): string {
                                     variant="primary"
                                 />
                                 <OdActionIcon
+                                    v-if="c.can_reassign"
+                                    :icon="UserCog"
+                                    label="Réaffecter le checker"
+                                    variant="primary"
+                                    :disabled="
+                                        actionEnCours === c.id || validerEnCours === c.id
+                                    "
+                                    :loading="
+                                        actionEnCours === c.id && confirmKind === 'reaffecter'
+                                    "
+                                    @click="reaffecter(c)"
+                                />
+                                <OdActionIcon
                                     v-if="c.can_reject"
                                     :icon="XCircle"
                                     label="Rejeter"
@@ -684,6 +735,16 @@ function horodatage(iso: string | null): string {
                                         variant="neutral"
                                     />
                                     <OdActionIcon
+                                        v-if="c.can_reassign"
+                                        :icon="UserCog"
+                                        label="Réaffecter le checker"
+                                        variant="primary"
+                                        :disabled="
+                                            actionEnCours === c.id || validerEnCours === c.id
+                                        "
+                                        @click="reaffecter(c)"
+                                    />
+                                    <OdActionIcon
                                         v-if="c.can_delete"
                                         :icon="Trash2"
                                         label="Supprimer"
@@ -711,9 +772,30 @@ function horodatage(iso: string | null): string {
                 :confirm-label="confirmLabel"
                 :variant="confirmVariant"
                 :loading="confirmBusy"
-                :disabled="confirmKind === 'rejeter' && !rejectMotif.trim()"
+                :disabled="
+                    (confirmKind === 'rejeter' && !rejectMotif.trim()) ||
+                    (confirmKind === 'reaffecter' && !newCheckerId)
+                "
                 @confirm="executerConfirm"
             >
+                <div v-if="confirmKind === 'reaffecter'" class="space-y-2">
+                    <Label for="reassign-checker" class="text-sm font-medium text-foreground">
+                        Nouveau validateur (checker) <span class="text-rose-600">*</span>
+                    </Label>
+                    <select id="reassign-checker" v-model="newCheckerId" :class="selectClass">
+                        <option value="">Choisir un agent…</option>
+                        <option
+                            v-for="u in confirmTarget?.eligible_checkers ?? []"
+                            :key="u.id"
+                            :value="String(u.id)"
+                        >
+                            {{ u.name }}
+                        </option>
+                    </select>
+                    <p class="text-xs text-muted-foreground">
+                        Le nouveau checker sera notifié par e-mail.
+                    </p>
+                </div>
                 <div v-if="confirmKind === 'rejeter'" class="space-y-2">
                     <Label for="reject-motif" class="text-sm font-medium text-foreground">
                         Motif du rejet <span class="text-rose-600">*</span>

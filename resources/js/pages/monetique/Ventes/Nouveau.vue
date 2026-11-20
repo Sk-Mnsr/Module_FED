@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ApporteurCombobox from '@/components/ApporteurCombobox.vue';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -406,16 +407,11 @@ const submit = () => {
                                         Apporteur d’affaires
                                         <span v-if="apporteurRequis" class="text-rose-600">*</span>
                                     </Label>
-                                    <select
+                                    <ApporteurCombobox
                                         id="apporteur"
                                         v-model="form.coficarte_apporteur_id"
-                                        class="flex h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
-                                    >
-                                        <option value="">— Sélectionner —</option>
-                                        <option v-for="a in apporteurs" :key="a.id" :value="a.id">
-                                            {{ a.code ? `${a.nom} (${a.code})` : a.nom }}
-                                        </option>
-                                    </select>
+                                        :options="apporteurs"
+                                    />
                                     <p v-if="apporteurs.length === 0" class="text-xs text-gray-500">Aucun apporteur configuré.</p>
                                     <InputError :message="form.errors.coficarte_apporteur_id" />
                                 </div>

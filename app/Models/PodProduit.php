@@ -42,6 +42,8 @@ class PodProduit extends Model
         'initiateur',
         'validateur',
         'mode_frais',
+        'bareme_champ',
+        'taxe_champ',
         'frais_fixe',
         'taux_frais',
         'frais_min',

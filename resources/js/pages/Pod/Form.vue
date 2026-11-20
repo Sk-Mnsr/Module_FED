@@ -21,6 +21,7 @@ import {
 
 type Tranche = {
     libelle?: string | null;
+    critere?: string | null;
     montant_min?: number | string | null;
     montant_max?: number | string | null;
     frais_fixe?: number | string | null;
@@ -101,6 +102,8 @@ type Produit = {
     frais_min?: number | string | null;
     frais_max?: number | string | null;
     taux_taf?: number | string | null;
+    bareme_champ?: string | null;
+    taxe_champ?: string | null;
     base_calcul?: string | null;
     notes?: string | null;
     statut: string;
@@ -151,6 +154,7 @@ const emptyLigne = (): Ligne => ({
 
 const emptyTranche = (): Tranche => ({
     libelle: '',
+    critere: '',
     montant_min: 0,
     montant_max: null,
     frais_fixe: null,
@@ -170,6 +174,7 @@ const emptyChamp = (): ChampForm => ({
     ecran_code: '',
     options: {
         max_length: 255,
+        recherche: null,
         min: null,
         max: null,
         decimales: 2,
@@ -256,12 +261,21 @@ const form = useForm({
         if (n === 18) return '18';
         return '0';
     })(),
+    bareme_champ: props.produit?.bareme_champ ?? '',
+    taxe_champ: props.produit?.taxe_champ ?? '',
     base_calcul: props.produit?.base_calcul ?? '',
     notes: props.produit?.notes ?? '',
     statut: props.produit?.statut ?? 'brouillon',
     actif: props.produit?.actif ?? true,
-    tranches: (props.produit?.tranches?.length ? props.produit.tranches : []) as Tranche[],
-    lignes: (props.produit?.lignes?.length ? props.produit.lignes : [emptyLigne(), emptyLigne()]) as Ligne[],
+    tranches: (props.produit?.tranches ?? []).map((t) => ({
+        ...t,
+        critere: t.critere ?? '',
+        montant_min: t.montant_min != null && t.montant_min !== '' ? Number(t.montant_min) : null,
+        montant_max: t.montant_max != null && t.montant_max !== '' ? Number(t.montant_max) : null,
+        frais_fixe: t.frais_fixe != null && t.frais_fixe !== '' ? Number(t.frais_fixe) : null,
+        taux: t.taux != null && t.taux !== '' ? Number(t.taux) : null,
+    })) as Tranche[],
+    lignes: (props.produit?.lignes?.length ? props.produit.lignes : []) as Ligne[],
     ecrans: (props.produit?.ecrans?.length
         ? props.produit.ecrans.map(normalizeEcran)
         : []) as EcranForm[],
@@ -482,10 +496,16 @@ const submit = () => {
         form.initiateur = firstRole;
     }
     form.validateur = '';
+    const options = {
+        preserveScroll: true,
+        onError: () => {
+            document.getElementById('pod-form-erreurs')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        },
+    };
     if (editing.value) {
-        form.put(`/pod/produits/${props.produit!.id}`);
+        form.put(`/pod/produits/${props.produit!.id}`, options);
     } else {
-        form.post('/pod/produits');
+        form.post('/pod/produits', options);
     }
 };
 
@@ -632,16 +652,79 @@ const showTranches = computed(() => mode.value === 'tranche');
 const showMinMax = computed(() => ['manuel'].includes(mode.value));
 const showTauxTaf = computed(() => mode.value !== 'gratuit');
 
+const champsListe = computed(() => form.champs.filter((c) => c.type === 'liste' && c.code));
+
+const valeursBareme = computed(() => {
+    const champ = form.champs.find((c) => c.code && c.code === form.bareme_champ);
+    return (champ?.options.valeurs ?? []).filter((v) => v.code);
+});
+
+/** Une seule liste « Taxe » : taux fixe (0 / 10 / 18) ou choix de l’agent via un champ liste. */
+const taxeChoix = computed({
+    get: () => (form.taxe_champ ? `champ:${form.taxe_champ}` : `fixe:${Number(form.taux_taf || 0)}`),
+    set: (v: string) => {
+        if (v.startsWith('champ:')) {
+            form.taxe_champ = v.slice(6);
+            return;
+        }
+        form.taxe_champ = '';
+        form.taux_taf = v.slice(5);
+    },
+});
+
+const avecTaxe = computed(() => mode.value !== 'gratuit' && (!!form.taxe_champ || Number(form.taux_taf || 0) > 0));
+
+const groupesTranches = computed(() => {
+    const groupes: Array<{ critere: string; titre: string; lignes: Array<{ t: Tranche; index: number }> }> = [];
+    const cles = form.bareme_champ ? [...valeursBareme.value.map((v) => v.code), ''] : [''];
+    for (const cle of cles) {
+        const lignes = form.tranches
+            .map((t, index) => ({ t, index }))
+            .filter(({ t }) => (form.bareme_champ ? (t.critere || '') === cle : true));
+        if (!lignes.length && cle === '' && form.bareme_champ) continue;
+        const valeur = valeursBareme.value.find((v) => v.code === cle);
+        groupes.push({
+            critere: cle,
+            titre: form.bareme_champ ? (valeur?.libelle || (cle ? cle : 'Tous les types')) : 'Barème',
+            lignes,
+        });
+    }
+    return groupes;
+});
+
+const ajouterTranche = (critere: string) => {
+    form.tranches.push({ ...emptyTranche(), critere, montant_min: null });
+};
+
+const natureLabels: Record<string, string> = {
+    client: 'Compte client',
+    produit: 'Compte produit',
+    taf: 'Compte TAF',
+    contrepartie: 'Contrepartie',
+    autre: 'Autre',
+};
+
+const typeMontantLabels: Record<string, string> = {
+    frais_ht: 'Frais HT',
+    taf: 'Taxe',
+    frais_plus_taf: 'Frais + taxe',
+    montant_operation: 'Montant de l’opération',
+    fixe: 'Montant fixe',
+    pourcentage: 'Pourcentage des frais',
+};
+
 const modeHint = computed(() => {
     switch (mode.value) {
         case 'fixe':
-            return 'Les frais sont le montant du champ Frais fixe. La taxe choisie s’ajoute ensuite.';
+            return 'Les frais sont un montant fixe.';
         case 'tranche':
-            return 'Le montant de la demande choisit une tranche par son libellé. La taxe choisie s’ajoute ensuite.';
+            return form.bareme_champ
+                ? 'Le montant demandé et le type choisi par l’agent déterminent la tranche.'
+                : 'Le montant demandé détermine la tranche.';
         case 'mixte':
-            return 'Frais hors taxe = montant fixe + (montant de la demande × taux client). Puis TAF 10 % ou TVA 18 %.';
+            return 'Frais = montant fixe + montant demandé × taux client.';
         case 'taux':
-            return 'Frais hors taxe = montant de la demande × taux client. Puis TAF 10 % ou TVA 18 % sur ces frais.';
+            return 'Frais = montant demandé × taux client.';
         case 'manuel':
             return 'Les frais sont saisis à l’opération (éventuellement bornés par min / plafond).';
         case 'gratuit':
@@ -659,11 +742,13 @@ const modeHint = computed(() => {
     <AppLayout :breadcrumbs="breadcrumbs">
         <form
             class="relative flex min-h-full flex-1 flex-col bg-gradient-to-b from-slate-50 via-white to-white"
+            novalidate
             @submit.prevent="submit"
         >
             <div class="flex w-full flex-1 flex-col gap-6 p-4 sm:p-6">
             <div
                 v-if="Object.keys(form.errors).length"
+                id="pod-form-erreurs"
                 class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
             >
                 <p class="font-medium">L’enregistrement n’a pas abouti.</p>
@@ -1064,6 +1149,10 @@ const modeHint = computed(() => {
                             class="min-h-56 w-full resize-y rounded-lg border border-slate-200 bg-slate-50/70 px-4 py-3 font-mono text-[13px] leading-6 text-slate-800 outline-none focus:border-slate-300 focus:ring-2 focus:ring-primary/20"
                             @input="onScriptRequete(s, ($event.target as HTMLTextAreaElement).value)"
                         />
+                        <p class="text-xs text-slate-500">
+                            Requête SELECT sur Flexcube, en lecture seule. Écrivez <code>:CODE_CHAMP</code> pour
+                            utiliser la valeur saisie d’un champ ; chaque colonne renvoyée remplit le champ de même code.
+                        </p>
                         <p v-if="fieldError(`scripts.${index}.code`)" class="text-xs text-destructive">
                             {{ fieldError(`scripts.${index}.code`) }}
                         </p>
@@ -1159,10 +1248,9 @@ const modeHint = computed(() => {
                                 :class="selectClass"
                                 :value="c.gris ? 'grise' : 'saisie'"
                                 @change="
-                                    () => {
-                                        const v = ($event.target as HTMLSelectElement).value;
+                                    (e: Event) => {
                                         c.visible = true;
-                                        c.gris = v === 'grise';
+                                        c.gris = (e.target as HTMLSelectElement).value === 'grise';
                                     }
                                 "
                             >
@@ -1177,6 +1265,23 @@ const modeHint = computed(() => {
                         <div v-if="c.type === 'texte'" class="space-y-1">
                             <Label>Taille max.</Label>
                             <Input v-model="c.options.max_length" class="h-11" type="number" min="1" placeholder="255" />
+                        </div>
+                        <div v-if="c.type === 'texte'" class="space-y-1">
+                            <Label>Recherche Flexcube</Label>
+                            <select
+                                :value="c.options.recherche ?? ''"
+                                :class="selectClass"
+                                @change="c.options.recherche = ($event.target as HTMLSelectElement).value || null"
+                            >
+                                <option value="">Aucune</option>
+                                <option
+                                    v-for="s in form.scripts.filter((x) => x.moteur === 'requete' && x.code)"
+                                    :key="s.code"
+                                    :value="s.code.toUpperCase()"
+                                >
+                                    {{ s.code.toUpperCase() }}{{ s.libelle ? ` — ${s.libelle}` : '' }}
+                                </option>
+                            </select>
                         </div>
                         <div v-else-if="c.type === 'numerique'" class="space-y-1">
                             <Label>Décimales</Label>
@@ -1310,62 +1415,157 @@ const modeHint = computed(() => {
             </div>
 
             <div v-show="activeTab === 'schema'" class="space-y-6">
+            <!-- Calcul des frais -->
             <section :class="sectionShell">
                 <div :class="sectionHead">
                     <div>
-                        <h2 :class="sectionTitle">Règles de frais</h2>
-                        <p :class="sectionSub">Choisissez un mode — seuls les champs utiles s’affichent.</p>
+                        <h2 :class="sectionTitle">Calcul des frais</h2>
+                        <p :class="sectionSub">{{ modeHint || 'Choisissez comment les frais sont calculés.' }}</p>
                     </div>
                 </div>
                 <div :class="sectionBody">
-                    <div class="max-w-sm" :class="fieldClass">
-                        <Label>Mode de frais</Label>
-                        <select v-model="form.mode_frais" :class="selectClass">
-                            <option v-for="m in modesFrais" :key="m" :value="m">
-                                {{ labelModeFrais(m) }}
-                            </option>
-                        </select>
+                    <div class="grid gap-4 md:grid-cols-3">
+                        <div :class="fieldClass">
+                            <Label>Mode de frais</Label>
+                            <select v-model="form.mode_frais" :class="selectClass">
+                                <option v-for="m in modesFrais" :key="m" :value="m">{{ labelModeFrais(m) }}</option>
+                            </select>
+                        </div>
+                        <div v-if="showTauxTaf" :class="fieldClass">
+                            <Label>Taxe</Label>
+                            <select v-model="taxeChoix" :class="selectClass">
+                                <option value="fixe:0">Aucune</option>
+                                <option value="fixe:10">TAF 10 %</option>
+                                <option value="fixe:18">TVA 18 %</option>
+                                <option v-for="c in champsListe" :key="c.code" :value="`champ:${c.code}`">
+                                    Au choix de l’agent : {{ c.libelle || c.code }}
+                                </option>
+                            </select>
+                        </div>
+                        <div v-if="showTranches" :class="fieldClass">
+                            <Label>Barème selon</Label>
+                            <select v-model="form.bareme_champ" :class="selectClass">
+                                <option value="">Un seul barème</option>
+                                <option v-for="c in champsListe" :key="c.code" :value="c.code">{{ c.libelle || c.code }}</option>
+                            </select>
+                        </div>
                     </div>
 
-                    <div
-                        v-if="showFraisFixe || showTauxFrais || showTauxTaf || showMinMax"
-                        class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 sm:grid-cols-2 lg:grid-cols-3"
-                    >
+                    <div v-if="showFraisFixe || showTauxFrais || showMinMax" class="grid gap-4 md:grid-cols-3">
                         <div v-if="showFraisFixe" :class="fieldClass">
-                            <Label>Frais fixe</Label>
-                            <Input v-model="form.frais_fixe" class="h-11" type="number" step="0.01" min="0" />
+                            <Label>Frais fixe ({{ form.devise || 'XOF' }})</Label>
+                            <Input v-model="form.frais_fixe" class="h-11" type="number" step="1" min="0" />
                         </div>
                         <div v-if="showTauxFrais" :class="fieldClass">
                             <Label>Taux client (%)</Label>
                             <Input v-model="form.taux_frais" class="h-11" type="number" step="0.01" min="0" />
-                            <p class="text-[11px] text-slate-500">Appliqué au montant de la demande pour obtenir les frais hors taxe.</p>
-                        </div>
-                        <div v-if="showTauxTaf" :class="fieldClass">
-                            <Label>Taxe sur les frais</Label>
-                            <select v-model="form.taux_taf" :class="selectClass">
-                                <option value="0">Aucune</option>
-                                <option value="10">TAF 10 %</option>
-                                <option value="18">TVA 18 %</option>
-                            </select>
-                            <p class="text-[11px] text-slate-500">Calculée sur les frais hors taxe, à part du taux client.</p>
                         </div>
                         <div v-if="showMinMax" :class="fieldClass">
-                            <Label>Minimum frais</Label>
-                            <Input v-model="form.frais_min" class="h-11" type="number" step="0.01" min="0" />
+                            <Label>Frais minimum</Label>
+                            <Input v-model="form.frais_min" class="h-11" type="number" step="1" min="0" />
                         </div>
                         <div v-if="showMinMax" :class="fieldClass">
-                            <Label>Plafond frais</Label>
-                            <Input v-model="form.frais_max" class="h-11" type="number" step="0.01" min="0" />
+                            <Label>Frais plafond</Label>
+                            <Input v-model="form.frais_max" class="h-11" type="number" step="1" min="0" />
                         </div>
                     </div>
 
-                    <p
-                        v-if="modeHint"
-                        class="rounded-xl border border-primary/10 bg-primary/5 px-3.5 py-2.5 text-sm text-slate-700"
-                    >
-                        {{ modeHint }}
+                    <p v-if="form.taxe_champ" class="text-xs text-slate-500">
+                        Les codes de la liste choisie doivent être les taux : 0, 10, 18…
                     </p>
+                </div>
+            </section>
 
+            <!-- Barème -->
+            <section v-if="showTranches" :class="sectionShell">
+                <div :class="sectionHead">
+                    <div>
+                        <h2 :class="sectionTitle">Barème</h2>
+                        <p :class="sectionSub">Laissez « À » vide pour la dernière tranche (au-delà).</p>
+                    </div>
+                    <Button v-if="!form.bareme_champ" type="button" size="sm" @click="ajouterTranche('')">
+                        <Plus class="mr-1 h-4 w-4" /> Tranche
+                    </Button>
+                </div>
+                <div class="grid gap-4 p-5 sm:p-6" :class="form.bareme_champ ? 'xl:grid-cols-2' : ''">
+                    <div v-for="g in groupesTranches" :key="g.critere" class="overflow-hidden rounded-xl border border-slate-200">
+                        <div class="flex items-center justify-between gap-2 bg-slate-50 px-4 py-2.5">
+                            <p class="text-sm font-semibold text-slate-900">{{ g.titre }}</p>
+                            <Button v-if="form.bareme_champ" type="button" size="sm" variant="outline" class="h-8 bg-white" @click="ajouterTranche(g.critere)">
+                                <Plus class="mr-1 h-3.5 w-3.5" /> Tranche
+                            </Button>
+                        </div>
+                        <div
+                            v-if="g.lignes.length"
+                            class="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] gap-2 border-t border-slate-100 px-4 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase"
+                        >
+                            <span>Libellé</span>
+                            <span>De</span>
+                            <span>À</span>
+                            <span>Frais</span>
+                            <span />
+                        </div>
+                        <div
+                            v-for="{ t, index } in g.lignes"
+                            :key="index"
+                            class="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-2 border-t border-slate-100 px-4 py-2"
+                        >
+                            <Input v-model="t.libelle" class="h-10" placeholder="Ex. De 100 000 à 500 000" />
+                            <Input v-model="t.montant_min" class="h-10 tabular-nums" type="number" min="0" placeholder="Min" />
+                            <Input v-model="t.montant_max" class="h-10 tabular-nums" type="number" min="0" placeholder="Au-delà" />
+                            <Input v-model="t.frais_fixe" class="h-10 tabular-nums" type="number" min="0" placeholder="Montant" />
+                            <Button type="button" variant="ghost" size="icon" class="h-8 w-8" @click="form.tranches.splice(index, 1)">
+                                <Trash2 class="h-4 w-4 text-destructive" />
+                            </Button>
+                        </div>
+                        <p v-if="!g.lignes.length" class="border-t border-slate-100 px-4 py-4 text-sm text-slate-500">Aucune tranche.</p>
+                    </div>
+                    <p v-if="form.bareme_champ && !groupesTranches.length" class="text-sm text-slate-500">
+                        La liste choisie n’a pas encore de valeurs : ajoutez-les dans l’onglet Champs.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Comptabilité -->
+            <section :class="sectionShell">
+                <div :class="sectionHead">
+                    <div>
+                        <h2 :class="sectionTitle">Comptes et libellés</h2>
+                        <p :class="sectionSub">Utilisés pour générer les écritures de chaque opération.</p>
+                    </div>
+                </div>
+                <div :class="sectionBody">
+                    <div class="grid gap-4 md:grid-cols-3">
+                        <div :class="fieldClass">
+                            <Label>Compte produit (crédit des frais)</Label>
+                            <Input v-model="form.compte_produit" class="h-11 font-mono" placeholder="Ex. 706100000" />
+                            <p v-if="!form.compte_produit && form.mode_frais !== 'gratuit'" class="text-xs text-amber-700">
+                                Obligatoire pour valider les dossiers.
+                            </p>
+                        </div>
+                        <div :class="fieldClass">
+                            <Label>Libellé de l’écriture</Label>
+                            <Input v-model="form.libelle_ecriture_produit" class="h-11" :placeholder="form.libelle || 'Libellé'" />
+                        </div>
+                        <div :class="fieldClass">
+                            <Label>Masque du compte client</Label>
+                            <Input v-model="form.compte_client_mask" class="h-11 font-mono" placeholder="251XXXXXX" />
+                        </div>
+                    </div>
+                    <div v-if="avecTaxe" class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/50 p-4 md:grid-cols-3">
+                        <div :class="fieldClass">
+                            <Label>Compte TAF</Label>
+                            <Input v-model="form.compte_taf" class="h-11 font-mono" />
+                        </div>
+                        <div :class="fieldClass">
+                            <Label>Code TAF</Label>
+                            <Input v-model="form.code_taf" class="h-11 font-mono" />
+                        </div>
+                        <div :class="fieldClass">
+                            <Label>Libellé de l’écriture de taxe</Label>
+                            <Input v-model="form.libelle_ecriture_taf" class="h-11" />
+                        </div>
+                    </div>
                     <div :class="fieldClass">
                         <Label>Notes</Label>
                         <textarea
@@ -1378,142 +1578,59 @@ const modeHint = computed(() => {
                 </div>
             </section>
 
-            <section
-                v-if="showTranches"
-                :class="sectionShell"
-            >
-                <div :class="sectionHead">
-                    <div>
-                        <h2 :class="sectionTitle">Tranches de montant</h2>
-                        <p :class="sectionSub">Chaque tranche a un libellé. Le montant de la demande choisit la tranche.</p>
-                    </div>
-                    <Button type="button" size="sm" @click="form.tranches.push(emptyTranche())">
-                        <Plus class="mr-1 h-4 w-4" /> Ajouter
-                    </Button>
-                </div>
-                <div :class="sectionBody">
-                    <div
-                        v-if="form.tranches.length"
-                        class="hidden grid-cols-[2fr_1fr_1fr_1fr_1fr_2.5rem] gap-2 px-1 text-xs font-medium text-slate-500 sm:grid"
-                    >
-                        <span>Libellé</span>
-                        <span>Min</span>
-                        <span>Max</span>
-                        <span>Frais</span>
-                        <span>Taux %</span>
-                        <span />
-                    </div>
-                    <div
-                        v-for="(t, index) in form.tranches"
-                        :key="index"
-                        class="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_2.5rem] sm:items-center"
-                    >
-                        <Input v-model="t.libelle" class="h-11" placeholder="Libellé" />
-                        <Input v-model="t.montant_min" class="h-11" type="number" placeholder="Min" />
-                        <Input v-model="t.montant_max" class="h-11" type="number" placeholder="Max" />
-                        <Input v-model="t.frais_fixe" class="h-11" type="number" placeholder="Frais" />
-                        <Input v-model="t.taux" class="h-11" type="number" placeholder="Taux %" />
-                        <Button type="button" variant="ghost" size="icon" @click="form.tranches.splice(index, 1)">
-                            <Trash2 class="h-4 w-4 text-destructive" />
-                        </Button>
-                    </div>
-                    <p v-if="form.tranches.length === 0" class="text-sm text-slate-500">
-                        Aucune tranche — ajoutez-en au moins une.
-                    </p>
-                </div>
-            </section>
-
+            <!-- Écritures -->
             <section :class="sectionShell">
                 <div :class="sectionHead">
                     <div>
-                        <h2 :class="sectionTitle">Comptes & libellés d’écriture</h2>
-                        <p :class="sectionSub">Comptes comptables et libellés générés.</p>
+                        <h2 :class="sectionTitle">Écritures</h2>
+                        <p :class="sectionSub">Facultatif : sans ligne, le schéma par défaut s’applique.</p>
                     </div>
-                </div>
-                <div class="grid gap-6 p-5 sm:p-6 lg:grid-cols-2">
-                    <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
-                        <p class="text-[11px] font-semibold tracking-[0.14em] text-slate-500 uppercase">Comptes</p>
-                        <div class="grid gap-3 sm:grid-cols-2">
-                            <div :class="fieldClass">
-                                <Label>Compte produit</Label>
-                                <Input v-model="form.compte_produit" class="h-11 font-mono" />
-                            </div>
-                            <div :class="fieldClass">
-                                <Label>Compte TAF</Label>
-                                <Input v-model="form.compte_taf" class="h-11 font-mono" />
-                            </div>
-                            <div :class="fieldClass">
-                                <Label>Masque compte client</Label>
-                                <Input v-model="form.compte_client_mask" class="h-11 font-mono" />
-                            </div>
-                            <div :class="fieldClass">
-                                <Label>Code TAF</Label>
-                                <Input v-model="form.code_taf" class="h-11 font-mono" />
-                            </div>
-                        </div>
-                    </div>
-                    <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
-                        <p class="text-[11px] font-semibold tracking-[0.14em] text-slate-500 uppercase">Libellés</p>
-                        <div class="space-y-3">
-                            <div :class="fieldClass">
-                                <Label>Libellé écriture produit</Label>
-                                <Input v-model="form.libelle_ecriture_produit" class="h-11" />
-                            </div>
-                            <div :class="fieldClass">
-                                <Label>Libellé écriture TAF</Label>
-                                <Input v-model="form.libelle_ecriture_taf" class="h-11" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <section :class="sectionShell">
-                <div :class="sectionHead">
-                    <div>
-                        <h2 :class="sectionTitle">Lignes du schéma comptable</h2>
-                        <p :class="sectionSub">Écritures générées à la saisie d’opération.</p>
-                    </div>
-                    <Button type="button" size="sm" @click="form.lignes.push(emptyLigne())">
+                    <Button type="button" size="sm" variant="outline" class="bg-white" @click="form.lignes.push(emptyLigne())">
                         <Plus class="mr-1 h-4 w-4" /> Ligne
                     </Button>
                 </div>
                 <div :class="sectionBody">
-                    <div
-                        v-if="form.lignes.length"
-                        class="hidden grid-cols-[7rem_10rem_minmax(12rem,2fr)_9rem_minmax(9rem,1fr)_2.5rem] gap-2 px-1 text-xs font-medium text-slate-500 lg:grid"
-                    >
-                        <span>Sens</span>
-                        <span>Compte</span>
-                        <span>Libellé</span>
-                        <span>Nature</span>
-                        <span>Type montant</span>
-                        <span />
+                    <div v-if="!form.lignes.length" class="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                        <p class="font-medium text-slate-800">Schéma par défaut</p>
+                        <ul class="mt-2 space-y-1 font-mono text-xs">
+                            <li><span class="font-bold text-rose-700">D</span> Compte client — frais<template v-if="avecTaxe"> + taxe</template></li>
+                            <li><span class="font-bold text-emerald-700">C</span> {{ form.compte_produit || 'Compte produit' }} — frais</li>
+                            <li v-if="avecTaxe"><span class="font-bold text-emerald-700">C</span> {{ form.compte_taf || 'Compte TAF' }} — taxe</li>
+                        </ul>
                     </div>
-                    <div
-                        v-for="(l, index) in form.lignes"
-                        :key="index"
-                        class="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 lg:grid-cols-[7rem_10rem_minmax(12rem,2fr)_9rem_minmax(9rem,1fr)_2.5rem] lg:items-center"
-                    >
-                        <select v-model="l.sens" :class="selectClass">
-                            <option value="D">Débit</option>
-                            <option value="C">Crédit</option>
-                        </select>
-                        <Input v-model="l.compte" class="h-11 font-mono" placeholder="Compte" />
-                        <Input v-model="l.libelle_ecriture" class="h-11" placeholder="Libellé" />
-                        <select v-model="l.nature_compte" :class="selectClass">
-                            <option v-for="n in naturesCompte" :key="n" :value="n">{{ n }}</option>
-                        </select>
-                        <select v-model="l.type_montant" :class="selectClass">
-                            <option v-for="t in typesMontant" :key="t" :value="t">{{ t }}</option>
-                        </select>
-                        <Button type="button" variant="ghost" size="icon" @click="form.lignes.splice(index, 1)">
-                            <Trash2 class="h-4 w-4 text-destructive" />
-                        </Button>
-                    </div>
-                    <p v-if="form.lignes.length === 0" class="text-sm text-slate-500">
-                        Aucune ligne — ajoutez le schéma débit / crédit.
-                    </p>
+                    <template v-else>
+                        <div
+                            class="hidden grid-cols-[7rem_10rem_minmax(12rem,2fr)_10rem_minmax(9rem,1fr)_2.5rem] gap-2 px-1 text-[11px] font-semibold tracking-wide text-slate-500 uppercase lg:grid"
+                        >
+                            <span>Sens</span>
+                            <span>Compte</span>
+                            <span>Libellé</span>
+                            <span>Nature</span>
+                            <span>Montant</span>
+                            <span />
+                        </div>
+                        <div
+                            v-for="(l, index) in form.lignes"
+                            :key="index"
+                            class="grid gap-2 rounded-xl border border-slate-200 bg-slate-50/40 p-3 lg:grid-cols-[7rem_10rem_minmax(12rem,2fr)_10rem_minmax(9rem,1fr)_2.5rem] lg:items-center"
+                        >
+                            <select v-model="l.sens" :class="selectClass">
+                                <option value="D">Débit</option>
+                                <option value="C">Crédit</option>
+                            </select>
+                            <Input v-model="l.compte" class="h-11 font-mono" :placeholder="l.nature_compte === 'client' ? 'Compte client' : 'Compte'" />
+                            <Input v-model="l.libelle_ecriture" class="h-11" placeholder="Libellé" />
+                            <select v-model="l.nature_compte" :class="selectClass">
+                                <option v-for="n in naturesCompte" :key="n" :value="n">{{ natureLabels[n] || n }}</option>
+                            </select>
+                            <select v-model="l.type_montant" :class="selectClass">
+                                <option v-for="t in typesMontant" :key="t" :value="t">{{ typeMontantLabels[t] || t }}</option>
+                            </select>
+                            <Button type="button" variant="ghost" size="icon" @click="form.lignes.splice(index, 1)">
+                                <Trash2 class="h-4 w-4 text-destructive" />
+                            </Button>
+                        </div>
+                    </template>
                 </div>
             </section>
             </div>

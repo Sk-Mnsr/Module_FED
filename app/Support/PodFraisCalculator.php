@@ -58,13 +58,14 @@ final class PodFraisCalculator
         $trancheUsed = null;
         $message = null;
         $mode = $produit->mode_frais;
+        $saisies = array_change_key_case((array) ($input['champs_saisis'] ?? []), CASE_UPPER);
 
         if ($mode === PodProduit::MODE_GRATUIT) {
             $fraisHt = 0.0;
         } elseif ($mode === PodProduit::MODE_FIXE) {
             $fraisHt = (float) ($produit->frais_fixe ?? 0);
         } elseif ($mode === PodProduit::MODE_TRANCHE) {
-            $fraisHt = self::fraisFromTranche($produit, $montantDemande, $trancheUsed);
+            $fraisHt = self::fraisFromTranche($produit, $montantDemande, $trancheUsed, self::critereBareme($produit, $saisies));
         } elseif ($mode === PodProduit::MODE_TAUX) {
             $fraisHt = self::fraisFromTaux($produit, $montantDemande);
         } elseif ($mode === PodProduit::MODE_MIXTE) {
@@ -78,7 +79,7 @@ final class PodFraisCalculator
         $fraisHt = self::applyMinMax($produit, $fraisHt);
         $fraisHt = round($fraisHt, 2);
 
-        $tauxTaf = $produit->tauxTafEffectif();
+        $tauxTaf = self::tauxTaxe($produit, $saisies);
         $montantTaf = round($fraisHt * ($tauxTaf / 100), 2);
         $totalClient = round($fraisHt + $montantTaf, 2);
 
@@ -112,15 +113,65 @@ final class PodFraisCalculator
         ];
     }
 
-    private static function fraisFromTranche(PodProduit $produit, ?float $montantDemande, ?array &$trancheUsed): float
+    /**
+     * Valeur du champ qui choisit le barème (ex. TYPE_CREDIT = PRET), ou null si le produit n’en a pas.
+     *
+     * @param  array<string, mixed>  $saisies
+     */
+    private static function critereBareme(PodProduit $produit, array $saisies): ?string
+    {
+        $champ = strtoupper(trim((string) $produit->bareme_champ));
+        if ($champ === '') {
+            return null;
+        }
+
+        $valeur = trim((string) ($saisies[$champ] ?? ''));
+        if ($valeur === '') {
+            throw new InvalidArgumentException('Choisissez d’abord le type qui détermine le barème des frais.');
+        }
+
+        return $valeur;
+    }
+
+    /**
+     * Taux de taxe : valeur du champ choisi par l’agent (0, 10, 18…) si le produit en définit un.
+     *
+     * @param  array<string, mixed>  $saisies
+     */
+    private static function tauxTaxe(PodProduit $produit, array $saisies): float
+    {
+        $champ = strtoupper(trim((string) $produit->taxe_champ));
+        if ($champ === '') {
+            return $produit->tauxTafEffectif();
+        }
+
+        $valeur = $saisies[$champ] ?? null;
+        if ($valeur === null || $valeur === '') {
+            throw new InvalidArgumentException('Choisissez la taxe à appliquer.');
+        }
+        if (! is_numeric($valeur)) {
+            throw new InvalidArgumentException('Taxe invalide : la valeur doit être un taux (0, 10, 18…).');
+        }
+
+        return (float) $valeur;
+    }
+
+    private static function fraisFromTranche(PodProduit $produit, ?float $montantDemande, ?array &$trancheUsed, ?string $critere = null): float
     {
         if ($montantDemande === null || $montantDemande < 0) {
             throw new InvalidArgumentException('Le montant de la demande est obligatoire pour ce produit (tranches).');
         }
 
+        $tranches = $produit->tranches->filter(
+            fn (PodTrancheFrais $t) => $critere === null
+                || $t->critere === null
+                || $t->critere === ''
+                || strtoupper($t->critere) === strtoupper($critere)
+        );
+
         /** @var PodTrancheFrais|null $match */
         $match = null;
-        foreach ($produit->tranches as $tranche) {
+        foreach ($tranches as $tranche) {
             $min = (float) $tranche->montant_min;
             $max = $tranche->montant_max !== null ? (float) $tranche->montant_max : null;
             if ($montantDemande >= $min && ($max === null || $montantDemande <= $max)) {
@@ -135,6 +186,7 @@ final class PodFraisCalculator
 
         $trancheUsed = [
             'libelle' => $match->libelle,
+            'critere' => $match->critere,
             'montant_min' => $match->montant_min,
             'montant_max' => $match->montant_max,
             'frais_fixe' => $match->frais_fixe,
@@ -224,8 +276,8 @@ final class PodFraisCalculator
                 return [];
             }
 
-            // Schéma minimal par défaut
-            return [
+            // Schéma minimal par défaut ; les lignes à 0 (ex. TAF d’un produit sans taxe) sont omises.
+            return array_values(array_filter([
                 [
                     'sens' => 'D',
                     'compte' => $compteClient,
@@ -258,7 +310,7 @@ final class PodFraisCalculator
                     'type_montant' => 'taf',
                     'montant' => $montantTaf,
                 ],
-            ];
+            ], fn (array $ligne) => $ligne['montant'] > 0));
         }
 
         $lignes = [];

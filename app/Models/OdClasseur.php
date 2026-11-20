@@ -163,6 +163,14 @@ class OdClasseur extends Model
     }
 
     /**
+     * Réaffectation du checker : dossier en attente, par le maker ou un admin.
+     */
+    public function canBeReassignedBy(User $user): bool
+    {
+        return $this->isAttenteValidation() && $this->isMakerOrAdmin($user);
+    }
+
+    /**
      * Suppression : brouillon (créateur / admin) ; en attente : admin ;
      * archivé : SuperAdmin uniquement (mise en corbeille).
      */

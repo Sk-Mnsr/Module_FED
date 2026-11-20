@@ -15,6 +15,7 @@ use App\Support\PodConstanteResolver;
 use App\Support\PodFraisCalculator;
 use App\Support\PodOperationCircuit;
 use App\Support\PodProduitWorkflow;
+use App\Support\PodRechercheFlexcube;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -33,6 +34,38 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class PodOperationController extends Controller
 {
     private const FICHIER_RULES = ['file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx,csv,txt'];
+
+    public function __construct(private readonly PodRechercheFlexcube $recherches) {}
+
+    public function recherche(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'pod_produit_id' => ['required', 'integer', 'exists:pod_produits,id'],
+            'champ' => ['required', 'string', 'max:80'],
+            'champs_saisis' => ['nullable', 'array'],
+        ]);
+
+        $produit = PodProduit::query()->with(['champs.ecran', 'scripts'])->findOrFail((int) $validated['pod_produit_id']);
+        $champ = $produit->champs->first(fn (PodProduitChamp $c) => strtoupper($c->code) === strtoupper($validated['champ']));
+        if (! $champ) {
+            return response()->json(['error' => 'Champ inconnu sur ce produit.'], 422);
+        }
+        if ($champ->ecran && ! PodOperationCircuit::userCanActOnStep($request->user(), [
+            'index' => 0, 'code' => $champ->ecran->code, 'libelle' => $champ->ecran->libelle, 'ecran' => $champ->ecran,
+        ])) {
+            return response()->json(['error' => 'Vous n’avez pas accès à cet écran.'], 403);
+        }
+
+        $saisies = array_change_key_case($validated['champs_saisis'] ?? [], CASE_UPPER);
+
+        try {
+            $resultat = $this->recherches->rechercher($produit, $champ, $saisies);
+        } catch (\RuntimeException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+
+        return response()->json($resultat);
+    }
 
     public function index(Request $request): InertiaResponse
     {
@@ -137,6 +170,7 @@ class PodOperationController extends Controller
             'compte_client' => ['required', 'string', 'max:50'],
             'montant_demande' => ['nullable', 'numeric', 'min:0'],
             'frais_saisi' => ['nullable', 'numeric', 'min:0'],
+            'champs_saisis' => ['nullable', 'array'],
         ]);
 
         $produit = PodProduit::query()->findOrFail((int) $validated['pod_produit_id']);
@@ -179,10 +213,6 @@ class PodOperationController extends Controller
             return redirect()->back()->withInput()->withErrors($e->errors());
         }
 
-        if (trim((string) ($validated['compte_client'] ?? '')) === '' && $produit->mode_frais !== PodProduit::MODE_GRATUIT) {
-            return redirect()->back()->withInput()->withErrors(['compte_client' => 'Le compte client est obligatoire.']);
-        }
-
         $steps = PodOperationCircuit::steps($produit);
         $premiere = $steps[0];
         if (! PodOperationCircuit::userCanActOnStep($user, $premiere)) {
@@ -195,17 +225,26 @@ class PodOperationController extends Controller
         $fichiers = $this->fichiersParCode($request);
 
         try {
+            $champsPremiere = PodOperationCircuit::champsForStep($produit, $premiere);
             $champsSaisis = PodChampSaisie::validateChamps(
-                PodOperationCircuit::champsForStep($produit, $premiere),
+                $champsPremiere,
                 $validated['champs_saisis'] ?? [],
                 $fichiers,
             );
+            $recherche = $this->recherches->appliquer($produit, $champsPremiere, $champsSaisis);
         } catch (ValidationException $e) {
             return redirect()->back()->withInput()->withErrors($e->errors());
         }
 
+        $champsSaisis = $recherche['saisies'];
+        $validated = array_merge($validated, $recherche['systeme']);
+
+        if (trim((string) ($validated['compte_client'] ?? '')) === '' && $produit->mode_frais !== PodProduit::MODE_GRATUIT) {
+            return redirect()->back()->withInput()->withErrors(['compte_client' => 'Le compte client est obligatoire.']);
+        }
+
         try {
-            $calc = PodFraisCalculator::compute($produit, $validated);
+            $calc = PodFraisCalculator::compute($produit, [...$validated, 'champs_saisis' => $champsSaisis]);
         } catch (\InvalidArgumentException $e) {
             return redirect()->back()->withInput()->withErrors(['calcul' => $e->getMessage()]);
         }
@@ -245,6 +284,7 @@ class PodOperationController extends Controller
                     'message' => $calc['message'],
                     'frais_saisi' => $validated['frais_saisi'] ?? null,
                     'constantes' => $constantes,
+                    'solde_apres_frais' => $this->soldeApresFrais($champsSaisis, (float) $calc['total_client']),
                 ],
                 'champs_saisis' => $champsSaisis,
                 'statut' => PodOperation::STATUT_EN_COURS,
@@ -431,17 +471,23 @@ class PodOperationController extends Controller
         $fichiers = $this->fichiersParCode($request);
 
         try {
+            $champsEtape = PodOperationCircuit::champsForStep($produit, $step);
             $nouveaux = PodChampSaisie::validateChamps(
-                PodOperationCircuit::champsForStep($produit, $step),
+                $champsEtape,
                 $validated['champs_saisis'] ?? [],
                 $fichiers,
                 $this->nomsPiecesExistantes($operation),
+            );
+            $recherche = $this->recherches->appliquer(
+                $produit,
+                $champsEtape,
+                array_merge($operation->champs_saisis ?? [], $nouveaux),
             );
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors());
         }
 
-        $champsSaisis = array_merge($operation->champs_saisis ?? [], $nouveaux);
+        $champsSaisis = $recherche['saisies'];
         $detail = $operation->calcul_detail ?? [];
 
         if ($dernier) {
@@ -539,12 +585,18 @@ class PodOperationController extends Controller
         $fichiers = $this->fichiersParCode($request);
 
         try {
+            $champsPremiere = PodOperationCircuit::champsForStep($operation->produit, $premiere);
             $nouveaux = PodChampSaisie::validateChamps(
-                PodOperationCircuit::champsForStep($operation->produit, $premiere),
+                $champsPremiere,
                 $validated['champs_saisis'] ?? [],
                 $fichiers,
                 $this->nomsPiecesExistantes($operation),
             );
+            $nouveaux = $this->recherches->appliquer(
+                $operation->produit,
+                $champsPremiere,
+                array_merge($operation->champs_saisis ?? [], $nouveaux),
+            )['saisies'];
         } catch (ValidationException $e) {
             return redirect()->back()->withErrors($e->errors());
         }
@@ -733,6 +785,21 @@ class PodOperationController extends Controller
         ])->values()->all();
     }
 
+    /**
+     * Solde net − (encours global dû + frais TTC), pour les produits qui récupèrent ces deux montants.
+     * Un résultat négatif est le montant que le client doit compléter.
+     *
+     * @param  array<string, mixed>  $saisies
+     */
+    private function soldeApresFrais(array $saisies, float $fraisTtc): ?float
+    {
+        if (! isset($saisies['SOLDE_NET']) || ! is_numeric($saisies['SOLDE_NET'])) {
+            return null;
+        }
+
+        return round((float) $saisies['SOLDE_NET'] - ((float) ($saisies['ENCOURS_GLOBAL_DUE'] ?? 0) + $fraisTtc), 2);
+    }
+
     private function valeurAffichee(PodProduitChamp $champ, mixed $valeur): mixed
     {
         if ($valeur === null || $valeur === '') {
@@ -806,9 +873,12 @@ class PodOperationController extends Controller
                 PodProduit::MODE_MIXTE,
             ], true),
             'needs_frais_saisi' => $p->mode_frais === PodProduit::MODE_MANUEL,
+            'bareme_champ' => $p->bareme_champ,
+            'taxe_champ' => $p->taxe_champ,
             'peut_initier' => PodOperationCircuit::userCanActOnStep($user, $premiere),
             'tranches' => $p->tranches->map(fn ($t) => [
                 'libelle' => $t->libelle,
+                'critere' => $t->critere,
                 'montant_min' => $t->montant_min,
                 'montant_max' => $t->montant_max,
                 'frais_fixe' => $t->frais_fixe,

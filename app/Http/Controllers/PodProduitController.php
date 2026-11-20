@@ -12,6 +12,7 @@ use App\Models\PodProduitEcran;
 use App\Models\PodProduitScript;
 use App\Models\PodTrancheFrais;
 use App\Models\Role;
+use App\Services\Integrations\FlexcubeQueryRunner;
 use App\Support\PodFicheParametrageImport;
 use App\Support\PodProduitAuditor;
 use App\Support\PodProduitWorkflow;
@@ -35,7 +36,7 @@ class PodProduitController extends Controller
             'actif' => $request->input('actif'),
         ], static fn ($v) => $v !== null && $v !== '');
 
-        $query = PodProduit::query()->withCount(['tranches', 'lignesComptables']);
+        $query = PodProduit::query()->withCount(['tranches', 'lignesComptables', 'ecrans', 'champs', 'operations']);
 
         if (! empty($filters['q'])) {
             $term = '%'.trim((string) $filters['q']).'%';
@@ -65,9 +66,20 @@ class PodProduitController extends Controller
             ->withQueryString()
             ->through(fn (PodProduit $p) => $this->listPayload($p));
 
+        $parStatut = PodProduit::query()
+            ->selectRaw('statut, count(*) as total')
+            ->groupBy('statut')
+            ->pluck('total', 'statut');
+
         return Inertia::render('Pod/Index', [
             'produits' => $produits,
             'filters' => $filters,
+            'compteurs' => [
+                'tous' => (int) $parStatut->sum(),
+                PodProduit::STATUT_PRODUCTION => (int) ($parStatut[PodProduit::STATUT_PRODUCTION] ?? 0),
+                PodProduit::STATUT_VALIDE => (int) ($parStatut[PodProduit::STATUT_VALIDE] ?? 0),
+                PodProduit::STATUT_BROUILLON => (int) ($parStatut[PodProduit::STATUT_BROUILLON] ?? 0),
+            ],
             'tauxTafDefaut' => (float) AppSetting::get('pod.taux_taf_defaut', 10),
             'statuts' => [
                 PodProduit::STATUT_BROUILLON,
@@ -404,12 +416,15 @@ class PodProduitController extends Controller
             'frais_min' => ['nullable', 'numeric', 'min:0'],
             'frais_max' => ['nullable', 'numeric', 'min:0'],
             'taux_taf' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'bareme_champ' => ['nullable', 'string', 'max:80'],
+            'taxe_champ' => ['nullable', 'string', 'max:80'],
             'base_calcul' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
             'statut' => ['required', 'in:brouillon,valide,production'],
             'actif' => ['boolean'],
             'tranches' => ['nullable', 'array'],
             'tranches.*.libelle' => ['nullable', 'string', 'max:255'],
+            'tranches.*.critere' => ['nullable', 'string', 'max:80'],
             'tranches.*.montant_min' => ['nullable', 'numeric', 'min:0'],
             'tranches.*.montant_max' => ['nullable', 'numeric', 'min:0'],
             'tranches.*.frais_fixe' => ['nullable', 'numeric', 'min:0'],
@@ -441,6 +456,7 @@ class PodProduitController extends Controller
             'champs.*.valeur_defaut' => ['nullable', 'string', 'max:255'],
             'champs.*.options' => ['nullable', 'array'],
             'champs.*.options.max_length' => ['nullable', 'integer', 'min:1', 'max:5000'],
+            'champs.*.options.recherche' => ['nullable', 'string', 'max:80'],
             'champs.*.options.min' => ['nullable', 'numeric'],
             'champs.*.options.max' => ['nullable', 'numeric'],
             'champs.*.options.decimales' => ['nullable', 'integer', 'min:0', 'max:6'],
@@ -527,6 +543,29 @@ class PodProduitController extends Controller
             ]);
         }
 
+        foreach ($validated['scripts'] ?? [] as $i => $script) {
+            $requete = trim((string) ($script['parametres']['requete'] ?? ''));
+            if (($script['moteur'] ?? '') !== 'requete' || $requete === '') {
+                continue;
+            }
+            try {
+                FlexcubeQueryRunner::assertLectureSeule($requete);
+            } catch (\RuntimeException $e) {
+                throw ValidationException::withMessages([
+                    "scripts.{$i}.code" => 'Script « '.($script['code'] ?? '').' » : '.$e->getMessage(),
+                ]);
+            }
+        }
+
+        foreach ($validated['champs'] ?? [] as $i => $champ) {
+            $recherche = strtoupper(trim((string) ($champ['options']['recherche'] ?? '')));
+            if ($recherche !== '' && ! $scriptCodes->contains($recherche)) {
+                throw ValidationException::withMessages([
+                    "champs.{$i}.code" => "La recherche du champ « {$champ['libelle']} » utilise le script « {$recherche} », absent du produit.",
+                ]);
+            }
+        }
+
         $constanteCodes = collect($validated['constantes'] ?? [])
             ->map(fn ($c) => strtoupper(trim((string) ($c['code'] ?? ''))))
             ->filter();
@@ -579,6 +618,8 @@ class PodProduitController extends Controller
             'frais_min' => $validated['frais_min'] ?? null,
             'frais_max' => $validated['frais_max'] ?? null,
             'taux_taf' => $validated['taux_taf'] ?? null,
+            'bareme_champ' => filled($validated['bareme_champ'] ?? null) ? strtoupper(trim((string) $validated['bareme_champ'])) : null,
+            'taxe_champ' => filled($validated['taxe_champ'] ?? null) ? strtoupper(trim((string) $validated['taxe_champ'])) : null,
             'base_calcul' => $validated['base_calcul'] ?? null,
             'notes' => $validated['notes'] ?? null,
             'statut' => $validated['statut'],
@@ -598,6 +639,7 @@ class PodProduitController extends Controller
             PodTrancheFrais::create([
                 'pod_produit_id' => $produit->id,
                 'libelle' => $tranche['libelle'] ?? null,
+                'critere' => filled($tranche['critere'] ?? null) ? trim((string) $tranche['critere']) : null,
                 'montant_min' => $tranche['montant_min'] ?? 0,
                 'montant_max' => $tranche['montant_max'] ?? null,
                 'frais_fixe' => $tranche['frais_fixe'] ?? null,
@@ -699,6 +741,7 @@ class PodProduitController extends Controller
         return match ($type) {
             PodProduitChamp::TYPE_TEXTE => [
                 'max_length' => isset($options['max_length']) ? (int) $options['max_length'] : null,
+                'recherche' => filled($options['recherche'] ?? null) ? strtoupper(trim((string) $options['recherche'])) : null,
             ],
             PodProduitChamp::TYPE_NUMERIQUE => [
                 'min' => $options['min'] ?? null,
@@ -743,15 +786,23 @@ class PodProduitController extends Controller
             'id' => $p->id,
             'code' => $p->code,
             'libelle' => $p->libelle,
+            'type_operation' => $p->type_operation,
             'code_taf' => $p->code_taf,
             'compte_produit' => $p->compte_produit,
             'initiateur' => $p->initiateur,
             'mode_frais' => $p->mode_frais,
             'frais_fixe' => $p->frais_fixe,
+            'taux_frais' => $p->taux_frais,
+            'taux_taf_effectif' => $p->tauxTafEffectif(),
+            'taxe_champ' => $p->taxe_champ,
+            'bareme_champ' => $p->bareme_champ,
             'statut' => $p->statut,
             'actif' => $p->actif,
             'tranches_count' => $p->tranches_count ?? 0,
             'lignes_count' => $p->lignes_comptables_count ?? 0,
+            'ecrans_count' => $p->ecrans_count ?? 0,
+            'champs_count' => $p->champs_count ?? 0,
+            'operations_count' => $p->operations_count ?? 0,
             'show_url' => route('pod.produits.show', $p),
             'edit_url' => route('pod.produits.edit', $p),
         ];
@@ -783,6 +834,8 @@ class PodProduitController extends Controller
             'frais_max' => $p->frais_max,
             'taux_taf' => $p->taux_taf,
             'taux_taf_effectif' => $p->tauxTafEffectif(),
+            'bareme_champ' => $p->bareme_champ,
+            'taxe_champ' => $p->taxe_champ,
             'base_calcul' => $p->base_calcul,
             'notes' => $p->notes,
             'statut' => $p->statut,
@@ -792,6 +845,7 @@ class PodProduitController extends Controller
             'tranches' => $p->tranches->map(fn (PodTrancheFrais $t) => [
                 'id' => $t->id,
                 'libelle' => $t->libelle,
+                'critere' => $t->critere,
                 'montant_min' => $t->montant_min,
                 'montant_max' => $t->montant_max,
                 'frais_fixe' => $t->frais_fixe,

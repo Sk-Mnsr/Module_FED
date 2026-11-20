@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import DataTable from '@/components/DataTable.vue';
 import { Label } from '@/components/ui/label';
-import { Pencil, Trash2, Plus, Upload } from 'lucide-vue-next';
+import { Pencil, Trash2, Plus, Upload, RefreshCw } from 'lucide-vue-next';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
 type ApporteurRow = {
@@ -116,6 +116,21 @@ const submitImport = () => {
     });
 };
 
+const syncProcessing = ref(false);
+
+const syncFlexcube = () => {
+    if (syncProcessing.value) {
+        return;
+    }
+    syncProcessing.value = true;
+    router.post('/apporteurs-affaires/sync-flexcube', {}, {
+        preserveScroll: true,
+        onFinish: () => {
+            syncProcessing.value = false;
+        },
+    });
+};
+
 const submitForm = () => {
     const code = form.value.code.trim();
     const nom = form.value.nom.trim();
@@ -168,6 +183,10 @@ const submitForm = () => {
             <div class="flex items-center justify-between flex-wrap gap-3">
                 <h1 class="text-3xl font-bold text-gray-900">Apporteurs d’affaires</h1>
                 <div class="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" :disabled="syncProcessing" @click="syncFlexcube">
+                        <RefreshCw class="mr-2 h-4 w-4" :class="{ 'animate-spin': syncProcessing }" />
+                        {{ syncProcessing ? 'Synchronisation…' : 'Synchroniser Flexcube' }}
+                    </Button>
                     <Button type="button" variant="outline" @click="openImportModal">
                         <Upload class="mr-2 h-4 w-4" />
                         Importer

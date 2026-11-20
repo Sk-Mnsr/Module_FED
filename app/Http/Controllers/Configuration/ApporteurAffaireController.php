@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Configuration;
 
 use App\Http\Controllers\Controller;
 use App\Models\CoficarteApporteur;
+use App\Services\Integrations\FlexcubeApporteurSync;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -237,6 +238,32 @@ class ApporteurAffaireController extends Controller
         $redirect = back()->with('success', $message);
         if ($errors !== []) {
             $redirect->with('warning', implode(' ', array_slice($errors, 0, 5)));
+        }
+
+        return $redirect;
+    }
+
+    public function syncFlexcube(FlexcubeApporteurSync $sync)
+    {
+        try {
+            $resultat = $sync->synchroniser();
+        } catch (\RuntimeException $e) {
+            return back()->with('error', 'Synchronisation Flexcube impossible : '.$e->getMessage());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'Synchronisation Flexcube échouée. Contactez le support.');
+        }
+
+        $message = "Synchronisation Flexcube : {$resultat['crees']} créé(s), {$resultat['mis_a_jour']} mis à jour, {$resultat['inchanges']} inchangé(s)";
+        if ($resultat['ignores'] > 0) {
+            $message .= ", {$resultat['ignores']} ignoré(s)";
+        }
+        $message .= " sur {$resultat['total_flexcube']} lu(s) dans Flexcube.";
+
+        $redirect = back()->with('success', $message);
+        if ($resultat['erreurs'] !== []) {
+            $redirect->with('warning', implode(' ', array_slice($resultat['erreurs'], 0, 5)));
         }
 
         return $redirect;

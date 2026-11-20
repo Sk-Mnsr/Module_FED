@@ -14,6 +14,7 @@ export type ChampDef = {
     ecran_code?: string | null;
     options?: {
         max_length?: number | null;
+        recherche?: string | null;
         min?: number | string | null;
         max?: number | string | null;
         decimales?: number | null;

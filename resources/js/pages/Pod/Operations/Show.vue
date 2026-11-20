@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
 import DynamicFieldInput, { type ChampDef } from '@/components/Pod/DynamicFieldInput.vue';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -147,10 +148,50 @@ watch(
 const motif = ref('');
 const motifErreur = ref<string | null>(null);
 
+type Confirmation = {
+    title: string;
+    description: string;
+    label: string;
+    variant: 'default' | 'danger' | 'warning' | 'success';
+    avecMotif?: boolean;
+    run: (finish: () => void) => void;
+};
+
+const confirmation = ref<Confirmation | null>(null);
+const confirmationOuverte = ref(false);
+const confirmationEnCours = ref(false);
+const motifAnnulation = ref('');
+
+const demander = (c: Confirmation) => {
+    confirmation.value = c;
+    confirmationOuverte.value = true;
+};
+
+const confirmer = () => {
+    const c = confirmation.value;
+    if (!c) return;
+    confirmationEnCours.value = true;
+    c.run(() => {
+        confirmationEnCours.value = false;
+        confirmationOuverte.value = false;
+    });
+};
+
 const validerEtape = () => {
-    const question = props.action.dernier ? 'Valider définitivement ce dossier ?' : 'Valider cette étape ?';
-    if (!confirm(question)) return;
-    etapeForm.post(`/pod/operations/${props.operation.id}/valider`, { forceFormData: true, preserveScroll: true });
+    demander({
+        title: props.action.dernier ? 'Valider le dossier' : 'Valider l’étape',
+        description: props.action.dernier
+            ? 'Le circuit sera terminé et le dossier passera au statut Validé.'
+            : `L’étape « ${props.action.etape} » sera validée et le dossier passera à l’étape suivante.`,
+        label: props.action.dernier ? 'Valider le dossier' : 'Valider l’étape',
+        variant: 'success',
+        run: (finish) =>
+            etapeForm.post(`/pod/operations/${props.operation.id}/valider`, {
+                forceFormData: true,
+                preserveScroll: true,
+                onFinish: finish,
+            }),
+    });
 };
 
 const decider = (type: 'suspendre' | 'rejeter') => {
@@ -159,8 +200,29 @@ const decider = (type: 'suspendre' | 'rejeter') => {
         motifErreur.value = type === 'rejeter' ? 'Le motif de rejet est obligatoire.' : 'Le motif de suspension est obligatoire.';
         return;
     }
-    if (type === 'rejeter' && !confirm('Rejeter définitivement ce dossier ?')) return;
-    router.post(`/pod/operations/${props.operation.id}/${type}`, { motif: motif.value }, { preserveScroll: true });
+    const envoyer = (finish: () => void) =>
+        router.post(
+            `/pod/operations/${props.operation.id}/${type}`,
+            { motif: motif.value },
+            { preserveScroll: true, onFinish: finish },
+        );
+    demander(
+        type === 'rejeter'
+            ? {
+                  title: 'Rejeter le dossier',
+                  description: `Le dossier sera rejeté définitivement.\nMotif : ${motif.value.trim()}`,
+                  label: 'Rejeter',
+                  variant: 'danger',
+                  run: envoyer,
+              }
+            : {
+                  title: 'Suspendre le dossier',
+                  description: `Le dossier retournera à l’initiateur pour être complété.\nMotif : ${motif.value.trim()}`,
+                  label: 'Suspendre',
+                  variant: 'warning',
+                  run: envoyer,
+              },
+    );
 };
 
 const reprendre = () => {
@@ -168,15 +230,36 @@ const reprendre = () => {
 };
 
 const annuler = () => {
-    const m = window.prompt('Motif d’annulation (optionnel) :');
-    if (m === null) return;
-    router.post(`/pod/operations/${props.operation.id}/annuler`, { motif_annulation: m });
+    motifAnnulation.value = '';
+    demander({
+        title: 'Annuler le dossier',
+        description: 'Le dossier sortira du circuit et ne pourra plus être traité.',
+        label: 'Annuler le dossier',
+        variant: 'warning',
+        avecMotif: true,
+        run: (finish) =>
+            router.post(
+                `/pod/operations/${props.operation.id}/annuler`,
+                { motif_annulation: motifAnnulation.value },
+                { onFinish: finish },
+            ),
+    });
 };
 
 const destroy = () => {
-    if (!confirm('Supprimer ce brouillon ?')) return;
-    router.delete(`/pod/operations/${props.operation.id}`);
+    demander({
+        title: 'Supprimer ce brouillon',
+        description: 'Le brouillon sera supprimé définitivement.',
+        label: 'Supprimer',
+        variant: 'danger',
+        run: (finish) => router.delete(`/pod/operations/${props.operation.id}`, { onFinish: finish }),
+    });
 };
+
+const soldeApresFrais = computed(() => {
+    const v = (props.operation.calcul_detail as { solde_apres_frais?: number | null } | null)?.solde_apres_frais;
+    return v === null || v === undefined ? null : Number(v);
+});
 
 const placeholderComptes = computed(() => props.operation.lignes.filter((l) => /X{3,}/i.test(l.compte)));
 const hasMontants = computed(() => Number(props.operation.total_client) > 0 || props.operation.lignes.some((l) => Number(l.montant) > 0));
@@ -317,6 +400,28 @@ const inputClass = 'h-11 w-full rounded-lg border border-slate-200 bg-white px-3
                                 </div>
                             </dl>
                         </section>
+
+                        <div
+                            v-if="soldeApresFrais !== null"
+                            class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4"
+                            :class="soldeApresFrais < 0 ? 'border-rose-200 bg-rose-50' : 'border-emerald-200 bg-emerald-50'"
+                        >
+                            <div>
+                                <p
+                                    class="text-[11px] font-semibold tracking-wide uppercase"
+                                    :class="soldeApresFrais < 0 ? 'text-rose-700' : 'text-emerald-700'"
+                                >
+                                    {{ soldeApresFrais < 0 ? 'Montant à compléter par le client' : 'Solde après frais' }}
+                                </p>
+                                <p class="text-xs text-slate-500">Solde net − (encours global dû + frais TTC), au moment de la demande</p>
+                            </div>
+                            <p
+                                class="text-2xl font-bold tabular-nums"
+                                :class="soldeApresFrais < 0 ? 'text-rose-700' : 'text-emerald-700'"
+                            >
+                                {{ fmt(Math.abs(soldeApresFrais)) }} {{ operation.devise }}
+                            </p>
+                        </div>
 
                         <section
                             v-for="s in circuit.filter((e) => e.champs.length)"
@@ -504,5 +609,25 @@ const inputClass = 'h-11 w-full rounded-lg border border-slate-200 bg-white px-3
                 </div>
             </div>
         </div>
+
+        <OdConfirmDialog
+            v-model:open="confirmationOuverte"
+            :title="confirmation?.title ?? ''"
+            :description="confirmation?.description ?? ''"
+            :confirm-label="confirmation?.label"
+            :variant="confirmation?.variant"
+            :loading="confirmationEnCours"
+            @confirm="confirmer"
+        >
+            <div v-if="confirmation?.avecMotif" class="space-y-1.5">
+                <Label>Motif (facultatif)</Label>
+                <textarea
+                    v-model="motifAnnulation"
+                    rows="2"
+                    class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm"
+                    placeholder="Raison de l’annulation"
+                />
+            </div>
+        </OdConfirmDialog>
     </AppLayout>
 </template>

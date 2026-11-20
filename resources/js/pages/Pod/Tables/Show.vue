@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/layouts/AppLayout.vue';
+import OdConfirmDialog from '@/components/OdConfirmDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -60,14 +61,36 @@ const addRow = () => {
     });
 };
 
+type Suppression = { type: 'ligne'; id: number } | { type: 'table' };
+
+const suppression = ref<Suppression | null>(null);
+const suppressionOuverte = ref(false);
+const suppressionEnCours = ref(false);
+
 const destroyRow = (id: number) => {
-    if (!confirm('Supprimer cette ligne ?')) return;
-    router.delete(`/pod/tables/${props.table.id}/rows/${id}`);
+    suppression.value = { type: 'ligne', id };
+    suppressionOuverte.value = true;
 };
 
 const destroyTable = () => {
-    if (!confirm(`Supprimer la table ${props.table.code} ?`)) return;
-    router.delete(`/pod/tables/${props.table.id}`);
+    suppression.value = { type: 'table' };
+    suppressionOuverte.value = true;
+};
+
+const confirmerSuppression = () => {
+    const cible = suppression.value;
+    if (!cible) return;
+    const url = cible.type === 'ligne'
+        ? `/pod/tables/${props.table.id}/rows/${cible.id}`
+        : `/pod/tables/${props.table.id}`;
+    suppressionEnCours.value = true;
+    router.delete(url, {
+        preserveScroll: cible.type === 'ligne',
+        onFinish: () => {
+            suppressionEnCours.value = false;
+            suppressionOuverte.value = false;
+        },
+    });
 };
 </script>
 
@@ -195,5 +218,19 @@ const destroyTable = () => {
                 </div>
             </section>
         </div>
+
+        <OdConfirmDialog
+            v-model:open="suppressionOuverte"
+            :title="suppression?.type === 'table' ? `Supprimer la table ${table.code}` : 'Supprimer cette ligne'"
+            :description="
+                suppression?.type === 'table'
+                    ? `La table « ${table.libelle} », ses colonnes et ses lignes seront supprimées. Cette action est définitive.`
+                    : 'Cette ligne ne sera plus proposée dans les champs de type Table.'
+            "
+            confirm-label="Supprimer"
+            variant="danger"
+            :loading="suppressionEnCours"
+            @confirm="confirmerSuppression"
+        />
     </AppLayout>
 </template>
